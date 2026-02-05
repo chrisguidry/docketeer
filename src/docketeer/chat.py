@@ -81,10 +81,12 @@ class RocketClient:
                 "stream-notify-user", [f"{self._user_id}/notification", False]
             )
 
-    def send_message(self, room_id: str, text: str) -> None:
+    def send_message(
+        self, room_id: str, text: str, attachments: list[dict[str, Any]] | None = None
+    ) -> None:
         """Send a message to a room via REST API."""
         if self._rest:
-            self._rest.chat_post_message(text, room_id=room_id)
+            self._rest.chat_post_message(text, room_id=room_id, attachments=attachments)
 
     def fetch_attachment(self, url: str) -> bytes:
         """Fetch an attachment from Rocket Chat."""

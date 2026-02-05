@@ -5,9 +5,10 @@ import asyncio
 import logging
 from pathlib import Path
 
-from docketeer.brain import Brain, HistoryMessage, MessageContent
+from docketeer.brain import Brain, BrainResponse, HistoryMessage, MessageContent
 from docketeer.chat import RocketClient, IncomingMessage
 from docketeer.config import Config
+from docketeer.tools import ToolExecutor
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger(__name__)
@@ -15,10 +16,18 @@ log = logging.getLogger(__name__)
 
 async def main() -> None:
     config = Config.from_env()
+
+    # Ensure workspace directory exists
+    config.workspace_path.mkdir(parents=True, exist_ok=True)
+    log.info("Workspace directory: %s", config.workspace_path.resolve())
+
+    # Create tool executor
+    tool_executor = ToolExecutor(config.workspace_path)
+
     client = RocketClient(
         config.rocketchat_url, config.rocketchat_username, config.rocketchat_password
     )
-    brain = Brain(config)
+    brain = Brain(config, tool_executor)
 
     log.info("Connecting to Rocket Chat at %s...", config.rocketchat_url)
     await client.connect()
@@ -50,7 +59,6 @@ async def load_all_history(client: RocketClient, brain: Brain) -> None:
         if not room_id:
             continue
 
-        # Figure out who we're talking to
         usernames = room.get("usernames", [])
         other_users = [u for u in usernames if u != client.username]
         room_label = ", ".join(other_users) if other_users else room_id
@@ -67,7 +75,7 @@ def fetch_history_for_brain(client: RocketClient, room_id: str) -> list[HistoryM
     messages = []
 
     for msg in raw_history:
-        if msg.get("t"):  # Skip system messages
+        if msg.get("t"):
             continue
 
         text = msg.get("msg", "")
@@ -86,7 +94,7 @@ def fetch_history_for_brain(client: RocketClient, room_id: str) -> list[HistoryM
 
 async def handle_message(client: RocketClient, brain: Brain, msg: IncomingMessage) -> None:
     """Handle an incoming message."""
-    log.info("Message from %s in %s", msg.username, msg.room_id)
+    log.info("Message from %s in %s: %s", msg.username, msg.room_id, msg.text[:50])
 
     # Load history if this is a new room
     if not brain.has_history(msg.room_id):
@@ -102,10 +110,10 @@ async def handle_message(client: RocketClient, brain: Brain, msg: IncomingMessag
     content = build_content(client, msg)
 
     # Get response from Brain
-    reply = brain.process(msg.room_id, content)
+    response = await brain.process(msg.room_id, content)
 
-    # Send response
-    client.send_message(msg.room_id, reply)
+    # Send response with tool call attachments
+    send_response(client, msg.room_id, response)
 
 
 def build_content(client: RocketClient, msg: IncomingMessage) -> MessageContent:
@@ -121,6 +129,32 @@ def build_content(client: RocketClient, msg: IncomingMessage) -> MessageContent:
                 log.warning("Failed to fetch attachment %s: %s", att.url, e)
 
     return MessageContent(username=msg.username, text=msg.text, images=images)
+
+
+def send_response(client: RocketClient, room_id: str, response: BrainResponse) -> None:
+    """Send response to Rocket Chat, with tool calls as attachments."""
+    attachments = []
+
+    for tool_call in response.tool_calls:
+        # Format args nicely
+        args_str = ", ".join(f"{k}={v!r}" for k, v in tool_call.args.items())
+
+        # Truncate long results
+        result_preview = tool_call.result
+        if len(result_preview) > 200:
+            result_preview = result_preview[:200] + "..."
+
+        attachments.append({
+            "color": "#dc3545" if tool_call.is_error else "#28a745",
+            "title": f"🔧 {tool_call.name}({args_str})",
+            "text": result_preview,
+            "collapsed": True,
+        })
+
+    if attachments:
+        client.send_message(room_id, response.text, attachments=attachments)
+    else:
+        client.send_message(room_id, response.text)
 
 
 def run() -> None:

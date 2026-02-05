@@ -27,7 +27,7 @@ A headless agent using Claude for reasoning, pydocket for temporal awareness, an
               │    ┌─────┴─────┐        │
               │    │           │        │
               │    v           v        │
-              │ memory/    scripts/     │
+              │ memory/     docket      │
               └─────────────────────────┘
                            │
                       (Redis)
@@ -70,8 +70,7 @@ docketeer/
 │   ├── memory.py        # Markdown memory read/write
 │   ├── tasks.py         # Built-in docket tasks
 │   ├── ddp.py           # Minimal DDP client for subscriptions
-│   ├── chat.py          # Rocket Chat client (DDP + REST)
-│   └── loader.py        # Dynamic script loading with safety checks
+│   └── chat.py          # Rocket Chat client (DDP + REST)
 └── workspace/           # Writeable area (gitignored)
     ├── memory/
     │   ├── users/{user_id}/
@@ -79,21 +78,20 @@ docketeer/
     │   │   └── history.md    # Time-anchored conversation log
     │   └── notes/
     │       └── {topic}.md    # Freeform markdown notes
-    └── scripts/
-        └── {task_name}.py    # Agent-created tasks
+    └── scripts/              # Future: agent-created tasks
 ```
 
 ## Core Components
 
 ### 1. config.py (~40 lines)
 Dataclass loading from environment:
-- `ANTHROPIC_API_KEY`, `CLAUDE_MODEL`
+- `ANTHROPIC_API_KEY`, `CLAUDE_MODEL` (default: `claude-opus-4-6`)
 - `REDIS_URL`, `DOCKET_NAME`
 - `ROCKETCHAT_URL` (websocket: `wss://server/websocket`)
 - `ROCKETCHAT_USERNAME`, `ROCKETCHAT_PASSWORD` (or token-based auth)
 - `WORKSPACE_PATH`
 
-### 2. chat.py (~150 lines)
+### 2. chat.py (~200 lines)
 Hybrid Rocket Chat client: minimal DDP for subscriptions + REST for actions.
 
 **ddp.py (~100 lines) - Minimal DDP client using `websockets` library:**
@@ -111,16 +109,18 @@ class DDPClient:
 The client wraps raw websocket messages into the DDP format and handles the
 connection lifecycle. Subscription events are yielded as they arrive.
 
-**chat.py (~50 lines) - High-level wrapper:**
+**chat.py - High-level wrapper:**
 - `RocketClient.connect()` - DDP connect + REST auth
-- `RocketClient.send_message(room_id, text)` - Via REST API
-- `RocketClient.set_presence(status)` - Via REST API
-- `RocketClient.send_typing(room_id)` - Via REST API (or DDP method)
+- `RocketClient.send_message(room_id, text, attachments)` - Via REST API
+- `RocketClient.send_typing(room_id)` - Via DDP method
 - `async for msg in client.incoming_messages()` - From DDP subscription
+- `RocketClient.fetch_attachment(url)` - Download attachment bytes
+- `RocketClient.fetch_room_history(room_id)` - Load older messages
+- `RocketClient.list_dm_rooms()` - List DM rooms
 
 Uses `rocketchat-API` (maintained) for REST calls, own code for DDP subscriptions.
 
-`IncomingMessage` dataclass: `user_id`, `username`, `display_name`, `text`, `room_id`, `is_direct`
+`IncomingMessage` dataclass: `user_id`, `username`, `display_name`, `text`, `room_id`, `is_direct`, `attachments`
 
 ### 3. memory.py (~120 lines)
 Markdown-based memory with timecoded logs:
@@ -151,8 +151,15 @@ Chris's lightweight agent system using pydocket.
 
 Timestamps use ISO8601 format (`YYYY-MM-DDTHHMM`) - real dates, not relative.
 
-### 4. tools.py (~150 lines)
-Claude tool definitions and execution:
+### 4. tools.py (~200 lines)
+Claude tool definitions and execution via `anthropic` SDK tool_use.
+
+**Workspace Tools:**
+| Tool | Purpose |
+|------|---------|
+| `list_files` | List files/dirs in workspace |
+| `read_file` | Read a text file |
+| `write_file` | Write a text file |
 
 **Memory Tools:**
 | Tool | Purpose |
@@ -167,28 +174,26 @@ Claude tool definitions and execution:
 | `schedule_task` | Schedule work for later |
 | `cancel_task` | Cancel by key |
 | `list_scheduled` | Show pending tasks via `docket.snapshot()` |
-| `create_script` | Write new Python task (sandboxed) |
 
 **Rocket Chat Tools:**
 | Tool | Purpose |
 |------|---------|
 | `send_message` | Send to user (@username) or room |
-| `fetch_history` | Load older messages from current or specified room |
-| `fetch_attachment` | Download an attachment by URL (for re-examining images) |
-| `list_rooms` | List rooms the agent has access to |
-| `search_messages` | Search messages across rooms by keyword |
 
-The Rocket Chat toolset gives the agent agency over its communication channel -
-it can proactively look up context, re-examine attachments, and navigate the
-chat history beyond what's automatically loaded.
+Tool calls are surfaced to users as collapsed Rocket Chat attachments with
+color coding (green for success, red for errors).
 
-### 5. brain.py (~120 lines)
-Claude reasoning loop:
+### 5. brain.py (~150 lines)
+Claude reasoning loop using `anthropic` SDK with tool_use:
 1. Load user context from memory
 2. Build system prompt with context + current time
 3. Log incoming message to history
-4. Agentic loop: Claude → tool calls → results → Claude
-5. Send final response, log to history
+4. Agentic loop: Claude → tool calls → results → Claude (up to 10 rounds)
+5. Return `BrainResponse` with text + list of `ToolCall` records
+6. Caller sends response and logs to history
+
+Returns `BrainResponse(text, tool_calls)` so main.py can format tool calls
+as Rocket Chat attachments.
 
 System prompt emphasizes:
 - Multi-user awareness (always check WHO is talking)
@@ -203,26 +208,22 @@ Built-in docket tasks:
 
 Helper: `parse_when(str)` - Parse "in 1 hour", "tomorrow 9am", ISO format
 
-### 7. loader.py (~80 lines)
-Dynamic script loading with safety:
-- AST validation: only allowed imports (datetime, json, re, pathlib, typing)
-- Pattern blocklist: no os, subprocess, eval, exec, open
-- Scripts must define `async def run(ctx: TaskContext)`
-- Save to `workspace/scripts/{name}.py`
-- Load via `importlib.util`
-
-### 8. main.py (~100 lines)
+### 7. main.py (~150 lines)
 Entry point running two concurrent async loops:
-1. Load config, create Memory, RocketClient, Brain
+1. Load config, create ToolExecutor, RocketClient, Brain
 2. Start Docket context manager
 3. Register built-in tasks
 4. Start Worker in background (`worker.run_forever()`)
-5. Connect to Rocket Chat, set presence to "online"
-6. Message loop: `async for msg in client.messages()`
+5. Connect to Rocket Chat
+6. Load conversation history for existing DM rooms
+7. Message loop: `async for msg in client.incoming_messages()`
    - Show typing indicator
+   - Build content (fetch images if attached)
    - Process with Brain
-   - Send response
-7. Graceful shutdown: set presence "away", disconnect
+   - Send response with tool call attachments
+8. Graceful shutdown: disconnect
+
+Dev mode: `docketeer --dev` uses watchfiles for live reload.
 
 No web server - purely outbound connections to Rocket Chat and Redis.
 
@@ -231,13 +232,13 @@ No web server - purely outbound connections to Rocket Chat and Redis.
 ### Message Flow
 ```
 1. Websocket subscription receives message event
-2. Parse to IncomingMessage (user_id, username, text, room_id)
+2. Parse to IncomingMessage (user_id, username, text, room_id, attachments)
 3. Send typing indicator to room
-4. Load user's profile.md and recent history.md
-5. Build system prompt with user context
-6. Claude processes with tools available
-7. Tool calls execute against memory/docket/chat
-8. Send response to same room (typing stops automatically)
+4. Fetch any image attachments
+5. Build system prompt with user context + current time
+6. Claude processes with tools available (agentic loop, up to 10 rounds)
+7. Tool calls execute against workspace/memory/docket/chat
+8. Send response to same room with tool call attachments
 9. Conversation logged to user's history.md
 ```
 
@@ -255,11 +256,13 @@ The agent schedules itself via:
 - Proactive: Agent notices deadline, offers to schedule check-in
 - Learning from patterns: Notes in user profile inform future behavior
 
-### Safety
-- Script sandboxing: allowlist imports, blocklist patterns, AST validation
-- Task limits via config: max runtime, max pending
-- Docket's built-in Timeout dependency
-- No network access in scripts (no requests, urllib)
+### Tool Visibility
+Tool calls are surfaced as Rocket Chat message attachments:
+- Green (#28a745) for successful calls
+- Red (#dc3545) for errors
+- Collapsed by default so they don't clutter the chat
+- Title shows tool name and arguments
+- Body shows result (truncated to 200 chars)
 
 ## Dependencies
 
@@ -271,6 +274,7 @@ dependencies = [
     "rocketchat-API",    # REST API wrapper (maintained)
     "websockets",        # For our minimal DDP client
     "pyyaml",
+    "watchfiles",        # Dev mode live reload
 ]
 ```
 
@@ -278,58 +282,46 @@ No web framework needed - agent is a pure client.
 
 ## Implementation Order
 
-### Phase 0: Documentation First
-1. **plans/initial-mvp.md** - This plan as project documentation
+### Phase 1: Foundation ✅
+1. **pyproject.toml** - Project setup
+2. **config.py** - Settings from environment
+3. **ddp.py** - Minimal DDP client
+4. **chat.py** - Rocket Chat wrapper (DDP + REST)
 
-### Phase 1: Foundation
-2. **pyproject.toml** - Project setup
-3. **config.py** - Settings foundation
+### Phase 2: Agent Core ✅
+5. **brain.py** - Claude reasoning loop with tool_use agentic loop
+6. **tools.py** - Workspace file tools (list_files, read_file, write_file)
+7. **main.py** - Wire it all together with tool call attachments
 
-### Phase 2: Rocket Chat Connection
-4. **ddp.py** - Minimal DDP client (can test against RC directly)
-5. **chat.py** - Rocket Chat wrapper (DDP + REST)
+### Phase 3: Memory
+8. **memory.py** - Markdown memory system
+9. Add memory tools to tools.py (recall, remember, note_about_user)
+10. Wire memory into brain.py system prompt
 
-### Phase 3: Agent Core
-6. **memory.py** - Markdown memory system
-7. **tools.py** - Tool definitions (memory + scheduling)
-8. **brain.py** - Claude reasoning loop with tool calling
+### Phase 4: Scheduling
+11. **tasks.py** - Built-in docket tasks (remind, check-in)
+12. Add scheduling tools to tools.py (schedule_task, cancel_task, list_scheduled)
+13. Wire docket worker into main.py
 
-### Phase 4: Rocket Chat Toolset
-9. **chat_tools.py** - Rocket Chat tools for agent (fetch_history, fetch_attachment, etc.)
-10. Wire chat tools into brain.py
+### Phase 5: Polish
+14. More tools (send_message, etc.)
+15. Integration tests with in-memory docket
 
-### Phase 5: Scheduling
-11. **tasks.py** - Built-in tasks
-12. **loader.py** - Script validation/loading
-
-### Phase 6: Integration
-13. **main.py** - Wire it all together
-14. **Tests** - Integration tests with in-memory docket
+### Future (post-MVP)
+- **loader.py** - Dynamic script loading with AST safety checks
+- Script sandboxing (allowlist imports, blocklist patterns)
+- Agent-created Python tasks saved to workspace/scripts/
 
 ## Verification
 
-1. **Unit tests**: memory.py parsing, loader.py validation, tasks.py time parsing
+1. **Unit tests**: memory.py parsing, tasks.py time parsing
 2. **Integration test**: Full message flow with mocked Rocket Chat + in-memory docket
 3. **Manual test**:
-   - Create bot user in Rocket Chat
-   - Start with `python -m docketeer`
-   - Agent should show as "online" in Rocket Chat
+   - Start with `docketeer --dev`
+   - Agent should connect and load history
    - Send DM to bot, verify typing indicator and response
+   - Ask bot to write/read files in workspace
    - Schedule a reminder, wait for it
-   - Create a script, schedule it
-
-## Estimated Size
-
-~900 lines of Python total (excluding tests)
-- ddp.py: ~100 lines
-- chat.py: ~50 lines
-- memory.py: ~120 lines
-- tools.py: ~150 lines
-- brain.py: ~120 lines
-- tasks.py: ~100 lines
-- loader.py: ~80 lines
-- config.py: ~40 lines
-- main.py: ~100 lines
 
 ## Reference Files
 

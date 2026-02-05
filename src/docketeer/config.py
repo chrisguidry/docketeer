@@ -2,6 +2,7 @@
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass
@@ -10,7 +11,8 @@ class Config:
     rocketchat_username: str
     rocketchat_password: str
     anthropic_api_key: str
-    claude_model: str = "claude-sonnet-4-20250514"
+    workspace_path: Path
+    claude_model: str = "claude-opus-4-6"
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -19,7 +21,8 @@ class Config:
             rocketchat_username=os.environ["DOCKETEER_ROCKETCHAT_USERNAME"],
             rocketchat_password=os.environ["DOCKETEER_ROCKETCHAT_PASSWORD"],
             anthropic_api_key=os.environ["DOCKETEER_ANTHROPIC_API_KEY"],
-            claude_model=os.environ.get("DOCKETEER_CLAUDE_MODEL", "claude-sonnet-4-20250514"),
+            workspace_path=Path(os.environ.get("DOCKETEER_WORKSPACE_PATH", "workspace")),
+            claude_model=os.environ.get("DOCKETEER_CLAUDE_MODEL", "claude-opus-4-6"),
         )
 
     @property
