@@ -1,0 +1,9 @@
+.venv/
+.envrc.private
+.claude/
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+workspace/
