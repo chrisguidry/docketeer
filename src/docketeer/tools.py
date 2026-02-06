@@ -4,10 +4,12 @@ import asyncio
 import inspect
 import json
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, get_type_hints
+from types import FunctionType
+from typing import Any, get_type_hints
 
 import httpx
 
@@ -24,18 +26,18 @@ class ToolContext:
 
 
 class ToolRegistry:
-    def __init__(self):
+    def __init__(self) -> None:
         self._tools: dict[str, Callable] = {}
         self._schemas: dict[str, dict] = {}
 
-    def tool(self, fn: Callable) -> Callable:
+    def tool[F: FunctionType](self, fn: F) -> F:
         """Decorator that registers a tool and derives its schema."""
         name = fn.__name__
         schema = _schema_from_hints(fn)
         self._tools[name] = fn
         self._schemas[name] = {
             "name": name,
-            "description": fn.__doc__.strip().split("\n")[0],
+            "description": (fn.__doc__ or "").strip().split("\n")[0],
             "input_schema": schema,
         }
         return fn
@@ -226,6 +228,7 @@ async def search_files(ctx: ToolContext, query: str, path: str = "") -> str:
 # Journal tools
 # ---------------------------------------------------------------------------
 
+
 def _journal_dir(workspace: Path) -> Path:
     return workspace / "journal"
 
@@ -256,7 +259,9 @@ async def journal_add(ctx: ToolContext, entry: str) -> str:
 
 
 @registry.tool
-async def journal_read(ctx: ToolContext, date: str = "", start: str = "", end: str = "") -> str:
+async def journal_read(
+    ctx: ToolContext, date: str = "", start: str = "", end: str = ""
+) -> str:
     """Read journal entries. Defaults to today. Use date for a single day, or start/end for a range.
 
     date: read a specific day (ISO format, e.g. 2026-02-05)
@@ -327,6 +332,7 @@ async def journal_search(ctx: ToolContext, query: str) -> str:
 # Web tools
 # ---------------------------------------------------------------------------
 
+
 @registry.tool
 async def web_search(ctx: ToolContext, query: str, count: int = 5) -> str:
     """Search the web using Brave Search.
@@ -336,7 +342,9 @@ async def web_search(ctx: ToolContext, query: str, count: int = 5) -> str:
     """
     api_key = ctx.config.brave_api_key
     if not api_key:
-        return "Error: Brave Search API key not configured (set DOCKETEER_BRAVE_API_KEY)"
+        return (
+            "Error: Brave Search API key not configured (set DOCKETEER_BRAVE_API_KEY)"
+        )
 
     max_retries = 3
     async with httpx.AsyncClient() as client:
@@ -349,8 +357,12 @@ async def web_search(ctx: ToolContext, query: str, count: int = 5) -> str:
             )
             if response.status_code == 429:
                 retry_after = int(response.headers.get("retry-after", 1))
-                log.info("Brave rate limited, retrying in %ds (attempt %d/%d)",
-                         retry_after, attempt + 1, max_retries)
+                log.info(
+                    "Brave rate limited, retrying in %ds (attempt %d/%d)",
+                    retry_after,
+                    attempt + 1,
+                    max_retries,
+                )
                 await asyncio.sleep(retry_after)
                 continue
             if response.status_code == 401:
@@ -377,7 +389,9 @@ async def web_search(ctx: ToolContext, query: str, count: int = 5) -> str:
 
 
 @registry.tool
-async def web_request(ctx: ToolContext, url: str, method: str = "GET", headers: str = "", body: str = "") -> str:
+async def web_request(
+    ctx: ToolContext, url: str, method: str = "GET", headers: str = "", body: str = ""
+) -> str:
     """Make an HTTP request to a URL.
 
     url: the URL to request

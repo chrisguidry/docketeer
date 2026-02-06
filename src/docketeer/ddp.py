@@ -1,6 +1,7 @@
 """Minimal DDP (Distributed Data Protocol) client for Rocket Chat subscriptions."""
 
 import asyncio
+import contextlib
 import json
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
@@ -75,10 +76,14 @@ class DDPClient:
     async def call(self, method: str, params: list[Any]) -> dict[str, Any]:
         """Call a DDP method and wait for result."""
         msg_id = self._next_id()
-        future: asyncio.Future[dict[str, Any]] = asyncio.get_event_loop().create_future()
+        future: asyncio.Future[dict[str, Any]] = (
+            asyncio.get_event_loop().create_future()
+        )
         self._pending[msg_id] = future
 
-        await self._send({"msg": "method", "method": method, "params": params, "id": msg_id})
+        await self._send(
+            {"msg": "method", "method": method, "params": params, "id": msg_id}
+        )
         return await future
 
     async def subscribe(self, name: str, params: list[Any]) -> str:
@@ -103,9 +108,7 @@ class DDPClient:
         """Close the connection."""
         if self._receiver_task:
             self._receiver_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._receiver_task
-            except asyncio.CancelledError:
-                pass
         if self._ws:
             await self._ws.close()

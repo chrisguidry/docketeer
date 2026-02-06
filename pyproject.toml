@@ -2,23 +2,33 @@
 name = "docketeer"
 version = "0.1.0"
 description = "Lightweight agentic system using Claude, pydocket, and Rocket Chat"
+readme = "README.md"
+authors = [
+    { name = "Chris Guidry", email = "chris@theguidrys.us" }
+]
 requires-python = ">=3.12"
 dependencies = [
-    "pydocket",
     "anthropic",
-    "websockets",
+    "httpx",
+    "pydocket",
     "pyyaml",
     "watchfiles",
-    "httpx",
+    "websockets",
 ]
 
 [project.scripts]
 docketeer = "docketeer.main:run"
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
+    "codespell",
+    "prek",
     "pytest",
     "pytest-asyncio",
+    "pytest-cov",
+    "pytest-xdist",
+    "ruff",
+    "ty",
 ]
 
 [build-system]
@@ -28,6 +38,99 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/docketeer"]
 
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "F",        # Pyflakes
+    "E",        # pycodestyle errors
+    "W",        # pycodestyle warnings
+    "I",        # isort
+    "ANN001",   # missing-type-function-argument
+    "ANN002",   # missing-type-args
+    "ANN003",   # missing-type-kwargs
+    "ANN201",   # missing-return-type-undocumented-public-function
+    "ANN202",   # missing-return-type-private-function
+    "ANN204",   # missing-return-type-special-method
+    "ANN205",   # missing-return-type-staticmethod
+    "ANN206",   # missing-return-type-classmethod
+    "PGH003",   # blanket-type-ignore
+    "TRY",      # tryceratops
+    "S110",     # try-except-pass
+    "S112",     # try-except-continue
+    "PT",       # flake8-pytest-style
+    "B",        # flake8-bugbear
+    "SIM",      # flake8-simplify
+    "UP",       # pyupgrade
+    "PGH",      # pygrep-hooks
+]
+
+ignore = [
+    "E501",     # line-too-long - using ruff format
+    "TRY003",   # raise-vanilla-args
+    "TRY002",   # raise-vanilla-class
+    "TRY300",   # try-consider-else
+    "TRY401",   # verbose-log-message
+    "SIM117",   # multiple-with-statements
+    "PT011",    # pytest-raises-too-broad
+    "BLE001",   # blind-except
+    "B904",     # raise-without-from-inside-except
+    "B008",     # function-call-in-default-argument - Docket uses this
+    "ANN401",   # any-type
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["ANN201"]
+
+[tool.ruff.lint.flake8-annotations]
+suppress-dummy-args = true
+allow-star-arg-any = false
+
+[tool.ruff.lint.flake8-pytest-style]
+fixture-parentheses = true
+parametrize-names-type = "tuple"
+parametrize-values-type = "list"
+parametrize-values-row-type = "tuple"
+
 [tool.pytest.ini_options]
+minversion = "7.0"
+addopts = [
+    "--import-mode=importlib",
+    "--cov=src/docketeer",
+    "--cov=tests",
+    "--cov-branch",
+    "--cov-report=term-missing",
+]
 asyncio_mode = "auto"
-testpaths = ["tests"]
+filterwarnings = [
+    "error",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["src/docketeer", "tests"]
+
+[tool.coverage.report]
+fail_under = 5
+precision = 2
+skip_empty = true
+skip_covered = true
+exclude_also = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+    "@overload",
+    "@abstractmethod",
+]
+
+[tool.ty.rules]
+unused-ignore-comment = "error"
+invalid-ignore-comment = "error"
+ignore-comment-unknown-rule = "error"
+possibly-missing-attribute = "error"
+possibly-missing-import = "error"
+redundant-cast = "error"

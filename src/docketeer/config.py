@@ -29,7 +29,9 @@ class Config:
             ).expanduser(),
             brave_api_key=os.environ.get("DOCKETEER_BRAVE_API_KEY", ""),
             claude_model=os.environ.get("DOCKETEER_CLAUDE_MODEL", "claude-opus-4-6"),
-            docket_url=os.environ.get("DOCKETEER_DOCKET_URL", "redis://localhost:6379/0"),
+            docket_url=os.environ.get(
+                "DOCKETEER_DOCKET_URL", "redis://localhost:6379/0"
+            ),
             docket_name=os.environ.get("DOCKETEER_DOCKET_NAME", "docketeer"),
         )
 

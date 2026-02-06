@@ -2,6 +2,7 @@
 
 import argparse
 import asyncio
+import contextlib
 import fcntl
 import logging
 import sys
@@ -13,27 +14,32 @@ from docket import Docket, Worker
 
 from docketeer import tasks
 from docketeer.brain import Brain, BrainResponse, HistoryMessage, MessageContent
-from docketeer.chat import RocketClient, IncomingMessage, _parse_rc_timestamp
+from docketeer.chat import IncomingMessage, RocketClient, _parse_rc_timestamp
 from docketeer.config import Config
 from docketeer.tools import ToolContext, _safe_path, registry
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s"
+)
 log = logging.getLogger(__name__)
+
+_lock_file: Any = None
 
 
 def _acquire_lock(data_dir: Path) -> None:
     """Acquire an exclusive lock file, or exit if another instance is running."""
+    global _lock_file
     data_dir.mkdir(parents=True, exist_ok=True)
     lock_path = data_dir / "docketeer.lock"
     # Keep the file open for the lifetime of the process; flock is released on exit.
-    lock_file = lock_path.open("w")
+    _lock_file = lock_path.open("w")
     try:
-        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(_lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
-        log.error("Another docketeer instance is already running (lock: %s)", lock_path)
+        log.warning(
+            "Another docketeer instance is already running (lock: %s)", lock_path
+        )
         sys.exit(1)
-    # Stash on the module so the GC doesn't close it.
-    _acquire_lock._lock_file = lock_file
 
 
 def _register_chat_tools(client: RocketClient, tool_context: ToolContext) -> None:
@@ -61,7 +67,11 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
 
     @registry.tool
     async def schedule(
-        ctx: ToolContext, prompt: str, when: str, key: str = "", silent: bool = False,
+        ctx: ToolContext,
+        prompt: str,
+        when: str,
+        key: str = "",
+        silent: bool = False,
     ) -> str:
         """Schedule a future task — reminder, follow-up, or background work. The time must be in the future — add the delay to the current time shown in your system prompt.
 
@@ -79,17 +89,19 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
 
         if key:
             await docket.replace(tasks.nudge, when=fire_at, key=key)(
-                prompt=prompt, room_id=room_id,
+                prompt=prompt,
+                room_id=room_id,
             )
         else:
             key = f"task-{fire_at.strftime('%Y%m%d-%H%M%S')}"
             await docket.add(tasks.nudge, when=fire_at, key=key)(
-                prompt=prompt, room_id=room_id,
+                prompt=prompt,
+                room_id=room_id,
             )
 
         local = fire_at.astimezone().strftime("%Y-%m-%d %H:%M %Z")
-        mode = "silently" if silent else f"in this room"
-        return f"Scheduled \"{key}\" for {local} ({mode})"
+        mode = "silently" if silent else "in this room"
+        return f'Scheduled "{key}" for {local} ({mode})'
 
     @registry.tool
     async def cancel_task(ctx: ToolContext, key: str) -> str:
@@ -98,7 +110,7 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
         key: the task key to cancel
         """
         await docket.cancel(key)
-        return f"Cancelled \"{key}\""
+        return f'Cancelled "{key}"'
 
     @registry.tool
     async def list_scheduled(ctx: ToolContext) -> str:
@@ -174,10 +186,8 @@ async def main() -> None:
                 pass
             finally:
                 worker_task.cancel()
-                try:
+                with contextlib.suppress(asyncio.CancelledError):
                     await worker_task
-                except asyncio.CancelledError:
-                    pass
                 await client.close()
                 log.info("Disconnected.")
 
@@ -210,7 +220,9 @@ def _format_timestamp(ts: Any) -> str:
     return dt.astimezone().strftime("%Y-%m-%d %H:%M")
 
 
-async def fetch_history_for_brain(client: RocketClient, room_id: str) -> list[HistoryMessage]:
+async def fetch_history_for_brain(
+    client: RocketClient, room_id: str
+) -> list[HistoryMessage]:
     """Fetch room history and convert to Brain's format."""
     raw_history = await client.fetch_room_history(room_id, count=20)
     messages = []
@@ -229,14 +241,21 @@ async def fetch_history_for_brain(client: RocketClient, room_id: str) -> list[Hi
         role = "assistant" if is_bot else "user"
         timestamp = _format_timestamp(msg.get("ts"))
 
-        messages.append(HistoryMessage(
-            role=role, username=username, text=text, timestamp=timestamp,
-        ))
+        messages.append(
+            HistoryMessage(
+                role=role,
+                username=username,
+                text=text,
+                timestamp=timestamp,
+            )
+        )
 
     return messages
 
 
-async def handle_message(client: RocketClient, brain: Brain, msg: IncomingMessage) -> None:
+async def handle_message(
+    client: RocketClient, brain: Brain, msg: IncomingMessage
+) -> None:
     """Handle an incoming message."""
     log.info("Message from %s in %s: %s", msg.username, msg.room_id, msg.text[:50])
 
@@ -273,18 +292,25 @@ async def build_content(client: RocketClient, msg: IncomingMessage) -> MessageCo
         timestamp = msg.timestamp.astimezone().strftime("%Y-%m-%d %H:%M")
 
     return MessageContent(
-        username=msg.username, timestamp=timestamp, text=msg.text, images=images,
+        username=msg.username,
+        timestamp=timestamp,
+        text=msg.text,
+        images=images,
     )
 
 
-async def send_response(client: RocketClient, room_id: str, response: BrainResponse) -> None:
+async def send_response(
+    client: RocketClient, room_id: str, response: BrainResponse
+) -> None:
     """Send response to Rocket Chat."""
     await client.send_message(room_id, response.text)
 
 
 def run() -> None:
     parser = argparse.ArgumentParser(description="Docketeer agent")
-    parser.add_argument("--dev", action="store_true", help="Enable live reload on file changes")
+    parser.add_argument(
+        "--dev", action="store_true", help="Enable live reload on file changes"
+    )
     args = parser.parse_args()
 
     if args.dev:

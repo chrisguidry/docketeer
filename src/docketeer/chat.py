@@ -5,7 +5,7 @@ import logging
 import mimetypes
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -39,7 +39,7 @@ class IncomingMessage:
 def _parse_rc_timestamp(ts: Any) -> datetime | None:
     """Parse a Rocket Chat timestamp into a datetime."""
     if isinstance(ts, dict) and "$date" in ts:
-        return datetime.fromtimestamp(ts["$date"] / 1000, tz=timezone.utc)
+        return datetime.fromtimestamp(ts["$date"] / 1000, tz=UTC)
     if isinstance(ts, str):
         try:
             return datetime.fromisoformat(ts)
@@ -51,7 +51,7 @@ def _parse_rc_timestamp(ts: Any) -> datetime | None:
 class RocketClient:
     """Hybrid Rocket Chat client: DDP for subscriptions, async REST for actions."""
 
-    def __init__(self, url: str, username: str, password: str):
+    def __init__(self, url: str, username: str, password: str) -> None:
         self.url = url.rstrip("/")
         self.username = username
         self.password = password
@@ -68,17 +68,23 @@ class RocketClient:
         self._http = httpx.AsyncClient(base_url=f"{self.url}/api/v1", timeout=30)
 
         # Authenticate via REST
-        resp = await self._http.post("/login", json={
-            "user": self.username, "password": self.password,
-        })
+        resp = await self._http.post(
+            "/login",
+            json={
+                "user": self.username,
+                "password": self.password,
+            },
+        )
         resp.raise_for_status()
         data = resp.json()["data"]
         auth_token = data["authToken"]
         self._user_id = data["userId"]
-        self._http.headers.update({
-            "X-Auth-Token": auth_token,
-            "X-User-Id": self._user_id,
-        })
+        self._http.headers.update(
+            {
+                "X-Auth-Token": auth_token,
+                "X-User-Id": self._user_id,
+            }
+        )
 
         me = await self._get("me")
         log.info("Logged in as @%s (%s)", me.get("username"), me.get("name", ""))
@@ -87,6 +93,11 @@ class RocketClient:
             "login",
             [{"user": {"username": self.username}, "password": self.password}],
         )
+
+    @property
+    def _api(self) -> httpx.AsyncClient:
+        assert self._http is not None, "Not connected — call connect() first"
+        return self._http
 
     def _to_ws_url(self, url: str) -> str:
         if url.startswith("https://"):
@@ -97,13 +108,13 @@ class RocketClient:
 
     async def _get(self, endpoint: str, **params: Any) -> dict[str, Any]:
         """GET an API endpoint, returning the parsed JSON."""
-        resp = await self._http.get(f"/{endpoint}", params=params)
+        resp = await self._api.get(f"/{endpoint}", params=params)
         resp.raise_for_status()
         return resp.json()
 
     async def _post(self, endpoint: str, **json_body: Any) -> dict[str, Any]:
         """POST to an API endpoint with a JSON body."""
-        resp = await self._http.post(f"/{endpoint}", json=json_body)
+        resp = await self._api.post(f"/{endpoint}", json=json_body)
         resp.raise_for_status()
         return resp.json()
 
@@ -123,11 +134,13 @@ class RocketClient:
             body["attachments"] = attachments
         await self._post("chat.postMessage", **body)
 
-    async def upload_file(self, room_id: str, file_path: str, message: str = "") -> None:
+    async def upload_file(
+        self, room_id: str, file_path: str, message: str = ""
+    ) -> None:
         """Upload a file to a room and post it as a chat message."""
         path = Path(file_path)
         content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-        resp = await self._http.post(
+        resp = await self._api.post(
             f"/rooms.media/{room_id}",
             files={"file": (path.name, path.read_bytes(), content_type)},
         )
@@ -138,7 +151,7 @@ class RocketClient:
     async def fetch_attachment(self, url: str) -> bytes:
         """Fetch an attachment from Rocket Chat."""
         full_url = f"{self.url}{url}" if url.startswith("/") else url
-        resp = await self._http.get(full_url)
+        resp = await self._api.get(full_url)
         resp.raise_for_status()
         return resp.content
 
@@ -151,7 +164,9 @@ class RocketClient:
             log.warning("Failed to fetch message %s: %s", message_id, e)
             return None
 
-    async def fetch_room_history(self, room_id: str, count: int = 20) -> list[dict[str, Any]]:
+    async def fetch_room_history(
+        self, room_id: str, count: int = 20
+    ) -> list[dict[str, Any]]:
         """Fetch recent messages from a room."""
         try:
             result = await self._get("dm.history", roomId=room_id, count=count)
@@ -179,7 +194,9 @@ class RocketClient:
                 return
             except Exception as e:
                 if attempt == 3:
-                    log.warning("Failed to set status to %s after retries: %s", status, e)
+                    log.warning(
+                        "Failed to set status to %s after retries: %s", status, e
+                    )
                     return
                 log.debug("Status %s rate-limited, retrying in %ds", status, delay)
                 await asyncio.sleep(delay)
@@ -194,7 +211,11 @@ class RocketClient:
         async for event in self._ddp.events():
             log.debug("DDP event: %s", event)
             msg = await self._parse_message_event(event)
-            if not msg or msg.user_id == self._user_id or not (msg.text or msg.attachments):
+            if (
+                not msg
+                or msg.user_id == self._user_id
+                or not (msg.text or msg.attachments)
+            ):
                 continue
             if msg.message_id in seen:
                 log.debug("Skipping duplicate message %s", msg.message_id)
@@ -203,7 +224,9 @@ class RocketClient:
             log.info("Message from %s in %s", msg.username, msg.room_id)
             yield msg
 
-    async def _parse_message_event(self, event: dict[str, Any]) -> IncomingMessage | None:
+    async def _parse_message_event(
+        self, event: dict[str, Any]
+    ) -> IncomingMessage | None:
         """Parse a DDP event into an IncomingMessage."""
         if event.get("msg") != "changed":
             return None
@@ -228,7 +251,11 @@ class RocketClient:
                 msg_data = full_msg
 
         message_id = msg_data.get("_id", "") or payload.get("_id", "")
-        user = msg_data.get("u", {}) or msg_data.get("sender", {}) or payload.get("sender", {})
+        user = (
+            msg_data.get("u", {})
+            or msg_data.get("sender", {})
+            or payload.get("sender", {})
+        )
         room_id = msg_data.get("rid", "") or payload.get("rid", "")
         text = msg_data.get("msg", "")
 
@@ -237,11 +264,13 @@ class RocketClient:
             attachments = []
             for att in raw_attachments:
                 if image_url := att.get("image_url"):
-                    attachments.append(Attachment(
-                        url=image_url,
-                        media_type=att.get("image_type", "image/png"),
-                        title=att.get("title", ""),
-                    ))
+                    attachments.append(
+                        Attachment(
+                            url=image_url,
+                            media_type=att.get("image_type", "image/png"),
+                            title=att.get("title", ""),
+                        )
+                    )
 
         return IncomingMessage(
             message_id=message_id,

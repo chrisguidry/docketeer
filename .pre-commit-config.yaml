@@ -1,0 +1,48 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+        exclude: ^\.loq_cache$
+      - id: check-yaml
+      - id: check-toml
+      - id: check-added-large-files
+
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.1
+    hooks:
+      - id: codespell
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.0
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix, --show-fixes]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: loq
+        name: loq (max 500 lines)
+        entry: uv tool run loq check src/ tests/
+        language: system
+        types: [python]
+        pass_filenames: false
+
+      - id: ty
+        name: ty check
+        entry: ty check
+        language: system
+        types: [python]
+        files: ^src/|^tests/
+        pass_filenames: false
+        require_serial: true
+
+      - id: pytest
+        name: pytest
+        entry: pytest
+        language: system
+        types: [python]
+        pass_filenames: false
+        require_serial: true
