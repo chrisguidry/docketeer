@@ -1,5 +1,6 @@
 """Claude reasoning loop with tool use."""
 
+import base64
 import importlib.resources
 import json
 import logging
@@ -16,8 +17,11 @@ from docketeer.tools import ToolContext, registry
 
 log = logging.getLogger(__name__)
 
-HISTORY_LIMIT = 20
 MAX_TOOL_ROUNDS = 10
+MAX_RESPONSE_TOKENS = 128_000
+CONTEXT_BUDGET = 180_000
+COMPACT_THRESHOLD = 140_000
+MIN_RECENT_MESSAGES = 6
 
 
 def _ensure_template(workspace: Path, filename: str) -> None:
@@ -31,16 +35,29 @@ def _ensure_template(workspace: Path, filename: str) -> None:
     log.info("Copied %s template to %s", filename, target)
 
 
-def _load_system_prompt(workspace: Path, current_time: str, username: str) -> str:
-    """Build system prompt from SOUL.md and optionally BOOTSTRAP.md."""
+def _build_system_blocks(workspace: Path, current_time: str, username: str) -> list[dict]:
+    """Build system prompt as content blocks for prompt caching.
+
+    The stable SOUL.md content is cached; the dynamic time/username block is not.
+    """
     soul_path = workspace / "SOUL.md"
-    prompt = soul_path.read_text().format(current_time=current_time, username=username)
+    stable_text = soul_path.read_text()
 
     bootstrap_path = workspace / "BOOTSTRAP.md"
     if bootstrap_path.exists():
-        prompt += "\n\n" + bootstrap_path.read_text()
+        stable_text += "\n\n" + bootstrap_path.read_text()
 
-    return prompt
+    return [
+        {
+            "type": "text",
+            "text": stable_text,
+            "cache_control": {"type": "ephemeral"},
+        },
+        {
+            "type": "text",
+            "text": f"Current time: {current_time}\nTalking to: @{username}",
+        },
+    ]
 
 
 def _audit_log(audit_dir: Path, tool_name: str, args: dict, result: str, is_error: bool) -> None:
@@ -58,6 +75,38 @@ def _audit_log(audit_dir: Path, tool_name: str, args: dict, result: str, is_erro
     }
     with path.open("a") as f:
         f.write(json.dumps(record) + "\n")
+
+
+def _log_usage(response: anthropic.types.Message) -> None:
+    """Log token usage including cache stats."""
+    u = response.usage
+    cache_read = getattr(u, "cache_read_input_tokens", 0) or 0
+    cache_write = getattr(u, "cache_creation_input_tokens", 0) or 0
+    log.info(
+        "Tokens: %d in (%d cache-read, %d cache-write, %d uncached), %d out",
+        cache_read + cache_write + u.input_tokens,
+        cache_read, cache_write, u.input_tokens,
+        u.output_tokens,
+    )
+
+
+def _extract_text(content: str | list) -> str:
+    """Pull plain text from message content, skipping images and tool results."""
+    if isinstance(content, str):
+        return content
+    parts = []
+    for block in content:
+        if isinstance(block, dict):
+            if block.get("type") == "text":
+                parts.append(block["text"])
+            elif block.get("type") == "tool_result":
+                # Include tool results as brief context
+                result = block.get("content", "")
+                if isinstance(result, str) and result:
+                    parts.append(f"[tool result: {result[:200]}]")
+        elif hasattr(block, "text"):
+            parts.append(block.text)
+    return "\n".join(parts)
 
 
 @dataclass
@@ -92,6 +141,7 @@ class Brain:
         self.client = anthropic.Anthropic(api_key=config.anthropic_api_key)
         self.tool_context = tool_context
         self._conversations: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        self._room_token_counts: dict[str, int] = {}
 
         soul_path = config.workspace_path / "SOUL.md"
         first_run = not soul_path.exists()
@@ -119,12 +169,23 @@ class Brain:
     async def process(self, room_id: str, content: MessageContent) -> BrainResponse:
         """Process a message and return a response with tool call info."""
         current_time = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M %Z")
-        system = _load_system_prompt(
+        system = _build_system_blocks(
             self.config.workspace_path, current_time, content.username
         )
 
-        # Update tool context with current username
+        # Tool definitions with cache breakpoint on last definition
+        tools = registry.definitions()
+        if tools:
+            tools = [*tools]
+            tools[-1] = {**tools[-1], "cache_control": {"type": "ephemeral"}}
+
+        # Update tool context with current message info
         self.tool_context.username = content.username
+        self.tool_context.room_id = room_id
+
+        # Compact if we're approaching the context limit
+        if self._room_token_counts.get(room_id, 0) > COMPACT_THRESHOLD:
+            await self._compact_history(room_id, system, tools)
 
         # Build content for the user message
         user_content = self._build_content(content)
@@ -132,51 +193,71 @@ class Brain:
         # Add to conversation history
         self._conversations[room_id].append({"role": "user", "content": user_content})
 
-        # Get trimmed messages for API call
-        messages = self._conversations[room_id][-HISTORY_LIMIT * 2:]
+        messages = self._conversations[room_id]
 
         log.debug("Processing message with %d history messages", len(messages))
 
         # Agentic loop: keep calling Claude until no more tool use
         for _ in range(MAX_TOOL_ROUNDS):
-            response = self.client.messages.create(
+            with self.client.messages.stream(
                 model=self.config.claude_model,
-                max_tokens=1024,
+                max_tokens=MAX_RESPONSE_TOKENS,
                 system=system,
                 messages=messages,
-                tools=registry.definitions(),
-            )
+                tools=tools,
+            ) as stream:
+                response = stream.get_final_message()
 
-            # Check if we need to handle tool use
-            if response.stop_reason == "tool_use":
-                # Process all tool uses in this response
+            _log_usage(response)
+
+            # Process any tool_use blocks, even if the response was truncated
+            tool_blocks = [b for b in response.content if b.type == "tool_use"]
+
+            if tool_blocks:
                 tool_results = []
-                for block in response.content:
-                    if block.type == "tool_use":
-                        log.info("Tool call: %s(%s)", block.name, block.input)
-                        result = await registry.execute(
-                            block.name, block.input, self.tool_context
-                        )
-                        is_error = result.startswith("Error:")
-                        log.info("Tool result: %s", result[:100])
+                for block in tool_blocks:
+                    log.info("Tool call: %s(%s)", block.name, block.input)
+                    result = await registry.execute(
+                        block.name, block.input, self.tool_context
+                    )
+                    is_error = result.startswith("Error:")
+                    log.info("Tool result: %s", result[:100])
 
-                        _audit_log(
-                            self.config.audit_path,
-                            block.name, block.input, result, is_error,
-                        )
+                    _audit_log(
+                        self.config.audit_path,
+                        block.name, block.input, result, is_error,
+                    )
 
-                        tool_results.append({
-                            "type": "tool_result",
-                            "tool_use_id": block.id,
-                            "content": result,
-                            "is_error": is_error,
-                        })
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": result,
+                        "is_error": is_error,
+                    })
+
+                # Move cache breakpoint to the latest tool result so
+                # subsequent rounds reuse the conversation prefix.
+                # Strip any previous tool-result breakpoints first to
+                # stay within the API's 4-breakpoint limit.
+                for prev_msg in messages:
+                    if prev_msg["role"] != "user" or not isinstance(prev_msg["content"], list):
+                        continue
+                    for block in prev_msg["content"]:
+                        if isinstance(block, dict) and block.get("type") == "tool_result":
+                            block.pop("cache_control", None)
+
+                tool_results[-1] = {
+                    **tool_results[-1],
+                    "cache_control": {"type": "ephemeral"},
+                }
 
                 # Add assistant message and tool results to conversation
                 messages.append({"role": "assistant", "content": response.content})
                 messages.append({"role": "user", "content": tool_results})
+            elif response.stop_reason == "max_tokens":
+                log.warning("Response truncated at %d tokens", MAX_RESPONSE_TOKENS)
+                break
             else:
-                # No more tool use, extract final text response
                 break
 
         # Extract text from final response
@@ -185,20 +266,96 @@ class Brain:
             if hasattr(block, "text"):
                 reply_parts.append(block.text)
 
+        if response.stop_reason == "max_tokens" and not tool_blocks:
+            reply_parts.append("\n\n(I hit my response length limit — ask me to continue if I got cut off)")
+
         reply = "\n".join(reply_parts) if reply_parts else "(no response)"
 
         # Add final response to conversation history
         self._conversations[room_id].append({"role": "assistant", "content": reply})
 
+        tokens = self._measure_context(room_id, system, tools)
+        log.info(
+            "Context: %d / %d tokens for room %s",
+            tokens, CONTEXT_BUDGET, room_id,
+        )
+
         log.debug("Response: %s", reply[:100])
         return BrainResponse(text=reply)
+
+    def _measure_context(self, room_id: str, system: list[dict], tools: list[dict]) -> int:
+        """Count tokens for the current conversation state."""
+        result = self.client.messages.count_tokens(
+            model=self.config.claude_model,
+            system=system,
+            tools=tools,
+            messages=self._conversations[room_id],
+        )
+        self._room_token_counts[room_id] = result.input_tokens
+        return result.input_tokens
+
+    async def _compact_history(
+        self, room_id: str, system: list[dict], tools: list[dict],
+    ) -> None:
+        """Summarize older messages to free up context space."""
+        messages = self._conversations[room_id]
+        if len(messages) <= MIN_RECENT_MESSAGES:
+            return
+
+        old_count = len(messages)
+        old_messages = messages[:-MIN_RECENT_MESSAGES]
+        recent_messages = messages[-MIN_RECENT_MESSAGES:]
+
+        # Build a transcript of the old messages for summarization
+        transcript_lines = []
+        for msg in old_messages:
+            text = _extract_text(msg["content"])
+            if text:
+                transcript_lines.append(f"{msg['role']}: {text}")
+        transcript = "\n".join(transcript_lines)
+
+        if not transcript.strip():
+            return
+
+        try:
+            summary_response = self.client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=1024,
+                messages=[{
+                    "role": "user",
+                    "content": (
+                        "Summarize this conversation into a concise recap. "
+                        "Preserve key facts, decisions, and context that would "
+                        "be needed to continue the conversation naturally. "
+                        "Be brief but thorough.\n\n"
+                        f"{transcript}"
+                    ),
+                }],
+            )
+            summary = summary_response.content[0].text
+        except Exception:
+            log.exception("Summarization failed, falling back to truncation")
+            self._conversations[room_id] = recent_messages
+            return
+
+        self._conversations[room_id] = [
+            {"role": "user", "content": f"[Earlier conversation summary]\n{summary}"},
+            {"role": "assistant", "content": "Got it, I have that context."},
+            *recent_messages,
+        ]
+
+        new_count = len(self._conversations[room_id])
+        tokens = self._measure_context(room_id, system, tools)
+        log.info(
+            "Compacted room %s: %d messages → %d (%d tokens)",
+            room_id, old_count, new_count, tokens,
+        )
 
     def _build_content(self, content: MessageContent) -> list[dict] | str:
         """Build content blocks for Claude."""
         blocks = []
 
         for media_type, data in content.images:
-            import base64
             blocks.append({
                 "type": "image",
                 "source": {

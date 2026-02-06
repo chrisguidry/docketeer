@@ -9,6 +9,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, get_type_hints
 
+import httpx
+
 log = logging.getLogger(__name__)
 
 
@@ -17,6 +19,7 @@ class ToolContext:
     workspace: Path
     config: Any
     username: str = ""
+    room_id: str = ""
 
 
 class ToolRegistry:
@@ -332,8 +335,6 @@ async def web_search(ctx: ToolContext, query: str, count: int = 5) -> str:
     if not api_key:
         return "Error: Brave Search API key not configured (set DOCKETEER_BRAVE_API_KEY)"
 
-    import httpx
-
     max_retries = 3
     async with httpx.AsyncClient() as client:
         for attempt in range(max_retries):
@@ -381,8 +382,6 @@ async def web_request(ctx: ToolContext, url: str, method: str = "GET", headers: 
     headers: optional JSON string of headers
     body: optional request body
     """
-    import httpx
-
     parsed_headers = {}
     if headers:
         try:
@@ -404,3 +403,21 @@ async def web_request(ctx: ToolContext, url: str, method: str = "GET", headers: 
         text = text[:10_000] + "\n... (truncated)"
 
     return f"HTTP {response.status_code}\n\n{text}"
+
+
+@registry.tool
+async def download_file(ctx: ToolContext, url: str, path: str) -> str:
+    """Download a file from a URL to the workspace.
+
+    url: the URL to download
+    path: relative path in workspace to save the file
+    """
+    target = _safe_path(ctx.workspace, path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    async with httpx.AsyncClient(follow_redirects=True) as client:
+        response = await client.get(url, timeout=60)
+        response.raise_for_status()
+
+    target.write_bytes(response.content)
+    return f"Downloaded {len(response.content)} bytes to {path}"

@@ -2,20 +2,58 @@
 
 import argparse
 import asyncio
+import fcntl
 import logging
+import sys
 from pathlib import Path
 
 from docketeer.brain import Brain, BrainResponse, HistoryMessage, MessageContent
 from docketeer.chat import RocketClient, IncomingMessage
 from docketeer.config import Config
-from docketeer.tools import ToolContext
+from docketeer.tools import ToolContext, _safe_path, registry
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger(__name__)
 
 
+def _acquire_lock(data_dir: Path) -> None:
+    """Acquire an exclusive lock file, or exit if another instance is running."""
+    data_dir.mkdir(parents=True, exist_ok=True)
+    lock_path = data_dir / "docketeer.lock"
+    # Keep the file open for the lifetime of the process; flock is released on exit.
+    lock_file = lock_path.open("w")
+    try:
+        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        log.error("Another docketeer instance is already running (lock: %s)", lock_path)
+        sys.exit(1)
+    # Stash on the module so the GC doesn't close it.
+    _acquire_lock._lock_file = lock_file
+
+
+def _register_chat_tools(client: RocketClient, tool_context: ToolContext) -> None:
+    """Register tools that need the chat client."""
+
+    @registry.tool
+    async def send_file(ctx: ToolContext, path: str, message: str = "") -> str:
+        """Send a file from the workspace to the current chat room.
+
+        path: relative path to the file in workspace
+        message: optional message to include with the file
+        """
+        target = _safe_path(ctx.workspace, path)
+        if not target.exists():
+            return f"File not found: {path}"
+        if target.is_dir():
+            return f"Cannot send a directory: {path}"
+
+        client.upload_file(ctx.room_id, str(target), message=message)
+        return f"Sent {path} to chat"
+
+
 async def main() -> None:
     config = Config.from_env()
+    _acquire_lock(config.data_dir)
 
     # Ensure data directories exist
     config.workspace_path.mkdir(parents=True, exist_ok=True)
@@ -29,6 +67,9 @@ async def main() -> None:
         config.rocketchat_url, config.rocketchat_username, config.rocketchat_password
     )
     brain = Brain(config, tool_context)
+
+    # Register chat-specific tools
+    _register_chat_tools(client, tool_context)
 
     log.info("Connecting to Rocket Chat at %s...", config.rocketchat_url)
     await client.connect()

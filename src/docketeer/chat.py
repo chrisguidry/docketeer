@@ -21,6 +21,7 @@ class Attachment:
 
 @dataclass
 class IncomingMessage:
+    message_id: str
     user_id: str
     username: str
     display_name: str
@@ -88,6 +89,16 @@ class RocketClient:
         if self._rest:
             self._rest.chat_post_message(text, room_id=room_id, attachments=attachments)
 
+    def upload_file(self, room_id: str, file_path: str, message: str = "") -> None:
+        """Upload a file to a room and post it as a chat message."""
+        if not self._rest:
+            raise RuntimeError("Not connected")
+        result = self._rest.rooms_media(room_id, file_path)
+        file_id = result["file"]["_id"]
+        self._rest.call_api_post(
+            f"rooms.mediaConfirm/{room_id}/{file_id}", msg=message
+        )
+
     def fetch_attachment(self, url: str) -> bytes:
         """Fetch an attachment from Rocket Chat."""
         if not self._rest:
@@ -145,12 +156,18 @@ class RocketClient:
         if not self._ddp:
             return
 
+        seen: set[str] = set()
         async for event in self._ddp.events():
             log.debug("DDP event: %s", event)
             msg = self._parse_message_event(event)
-            if msg and msg.user_id != self._user_id and (msg.text or msg.attachments):
-                log.info("Message from %s in %s", msg.username, msg.room_id)
-                yield msg
+            if not msg or msg.user_id == self._user_id or not (msg.text or msg.attachments):
+                continue
+            if msg.message_id in seen:
+                log.debug("Skipping duplicate message %s", msg.message_id)
+                continue
+            seen.add(msg.message_id)
+            log.info("Message from %s in %s", msg.username, msg.room_id)
+            yield msg
 
     def _parse_message_event(self, event: dict[str, Any]) -> IncomingMessage | None:
         """Parse a DDP event into an IncomingMessage."""
@@ -177,6 +194,7 @@ class RocketClient:
             if full_msg:
                 msg_data = full_msg
 
+        message_id = msg_data.get("_id", "") or payload.get("_id", "")
         user = msg_data.get("u", {}) or msg_data.get("sender", {}) or payload.get("sender", {})
         room_id = msg_data.get("rid", "") or payload.get("rid", "")
         text = msg_data.get("msg", "")
@@ -193,6 +211,7 @@ class RocketClient:
                     ))
 
         return IncomingMessage(
+            message_id=message_id,
             user_id=user.get("_id", ""),
             username=user.get("username", ""),
             display_name=user.get("name", user.get("username", "")),
