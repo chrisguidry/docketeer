@@ -8,7 +8,7 @@ from pathlib import Path
 from docketeer.brain import Brain, BrainResponse, HistoryMessage, MessageContent
 from docketeer.chat import RocketClient, IncomingMessage
 from docketeer.config import Config
-from docketeer.tools import ToolExecutor
+from docketeer.tools import ToolContext
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger(__name__)
@@ -17,17 +17,18 @@ log = logging.getLogger(__name__)
 async def main() -> None:
     config = Config.from_env()
 
-    # Ensure workspace directory exists
+    # Ensure data directories exist
     config.workspace_path.mkdir(parents=True, exist_ok=True)
-    log.info("Workspace directory: %s", config.workspace_path.resolve())
+    config.audit_path.mkdir(parents=True, exist_ok=True)
+    log.info("Data directory: %s", config.data_dir.resolve())
 
-    # Create tool executor
-    tool_executor = ToolExecutor(config.workspace_path)
+    # Create tool context
+    tool_context = ToolContext(workspace=config.workspace_path, config=config)
 
     client = RocketClient(
         config.rocketchat_url, config.rocketchat_username, config.rocketchat_password
     )
-    brain = Brain(config, tool_executor)
+    brain = Brain(config, tool_context)
 
     log.info("Connecting to Rocket Chat at %s...", config.rocketchat_url)
     await client.connect()
@@ -132,29 +133,8 @@ def build_content(client: RocketClient, msg: IncomingMessage) -> MessageContent:
 
 
 def send_response(client: RocketClient, room_id: str, response: BrainResponse) -> None:
-    """Send response to Rocket Chat, with tool calls as attachments."""
-    attachments = []
-
-    for tool_call in response.tool_calls:
-        # Format args nicely
-        args_str = ", ".join(f"{k}={v!r}" for k, v in tool_call.args.items())
-
-        # Truncate long results
-        result_preview = tool_call.result
-        if len(result_preview) > 200:
-            result_preview = result_preview[:200] + "..."
-
-        attachments.append({
-            "color": "#dc3545" if tool_call.is_error else "#28a745",
-            "title": f"🔧 {tool_call.name}({args_str})",
-            "text": result_preview,
-            "collapsed": True,
-        })
-
-    if attachments:
-        client.send_message(room_id, response.text, attachments=attachments)
-    else:
-        client.send_message(room_id, response.text)
+    """Send response to Rocket Chat."""
+    client.send_message(room_id, response.text)
 
 
 def run() -> None:

@@ -185,6 +185,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "anthropic" },
+    { name = "httpx" },
     { name = "pydocket" },
     { name = "pyyaml" },
     { name = "rocketchat-api" },
@@ -201,6 +202,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "anthropic" },
+    { name = "httpx" },
     { name = "pydocket" },
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "pytest-asyncio", marker = "extra == 'dev'" },

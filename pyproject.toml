@@ -10,6 +10,7 @@ dependencies = [
     "websockets",
     "pyyaml",
     "watchfiles",
+    "httpx",
 ]
 
 [project.scripts]

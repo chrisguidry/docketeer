@@ -11,7 +11,8 @@ class Config:
     rocketchat_username: str
     rocketchat_password: str
     anthropic_api_key: str
-    workspace_path: Path
+    data_dir: Path
+    brave_api_key: str = ""
     claude_model: str = "claude-opus-4-6"
 
     @classmethod
@@ -21,9 +22,20 @@ class Config:
             rocketchat_username=os.environ["DOCKETEER_ROCKETCHAT_USERNAME"],
             rocketchat_password=os.environ["DOCKETEER_ROCKETCHAT_PASSWORD"],
             anthropic_api_key=os.environ["DOCKETEER_ANTHROPIC_API_KEY"],
-            workspace_path=Path(os.environ.get("DOCKETEER_WORKSPACE_PATH", "workspace")),
+            data_dir=Path(
+                os.environ.get("DOCKETEER_DATA_DIR", "~/.docketeer")
+            ).expanduser(),
+            brave_api_key=os.environ.get("DOCKETEER_BRAVE_API_KEY", ""),
             claude_model=os.environ.get("DOCKETEER_CLAUDE_MODEL", "claude-opus-4-6"),
         )
+
+    @property
+    def workspace_path(self) -> Path:
+        return self.data_dir / "memory"
+
+    @property
+    def audit_path(self) -> Path:
+        return self.data_dir / "audit"
 
     @property
     def rocketchat_ws_url(self) -> str:
