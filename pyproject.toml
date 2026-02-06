@@ -6,7 +6,6 @@ requires-python = ">=3.12"
 dependencies = [
     "pydocket",
     "anthropic",
-    "rocketchat-API",
     "websockets",
     "pyyaml",
     "watchfiles",

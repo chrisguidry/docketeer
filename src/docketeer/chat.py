@@ -1,11 +1,14 @@
-"""Rocket Chat client combining DDP subscriptions with REST API."""
+"""Rocket Chat client combining DDP subscriptions with async REST API."""
 
+import asyncio
 import logging
+import mimetypes
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
-from rocketchat_API.rocketchat import RocketChat
+import httpx
 
 from docketeer.ddp import DDPClient
 
@@ -32,14 +35,14 @@ class IncomingMessage:
 
 
 class RocketClient:
-    """Hybrid Rocket Chat client: DDP for subscriptions, REST for actions."""
+    """Hybrid Rocket Chat client: DDP for subscriptions, async REST for actions."""
 
     def __init__(self, url: str, username: str, password: str):
-        self.url = url
+        self.url = url.rstrip("/")
         self.username = username
         self.password = password
         self._ddp: DDPClient | None = None
-        self._rest: RocketChat | None = None
+        self._http: httpx.AsyncClient | None = None
         self._user_id: str | None = None
 
     async def connect(self) -> None:
@@ -48,11 +51,22 @@ class RocketClient:
         self._ddp = DDPClient(url=ws_url)
         await self._ddp.connect()
 
-        self._rest = RocketChat(
-            self.username, self.password, server_url=self.url
-        )
-        me = self._rest.me()
-        self._user_id = me["_id"]
+        self._http = httpx.AsyncClient(base_url=f"{self.url}/api/v1", timeout=30)
+
+        # Authenticate via REST
+        resp = await self._http.post("/login", json={
+            "user": self.username, "password": self.password,
+        })
+        resp.raise_for_status()
+        data = resp.json()["data"]
+        auth_token = data["authToken"]
+        self._user_id = data["userId"]
+        self._http.headers.update({
+            "X-Auth-Token": auth_token,
+            "X-User-Id": self._user_id,
+        })
+
+        me = await self._get("me")
         log.info("Logged in as @%s (%s)", me.get("username"), me.get("name", ""))
 
         await self._ddp.call(
@@ -61,12 +75,23 @@ class RocketClient:
         )
 
     def _to_ws_url(self, url: str) -> str:
-        url = url.rstrip("/")
         if url.startswith("https://"):
             return url.replace("https://", "wss://") + "/websocket"
         elif url.startswith("http://"):
             return url.replace("http://", "ws://") + "/websocket"
         return url + "/websocket"
+
+    async def _get(self, endpoint: str, **params: Any) -> dict[str, Any]:
+        """GET an API endpoint, returning the parsed JSON."""
+        resp = await self._http.get(f"/{endpoint}", params=params)
+        resp.raise_for_status()
+        return resp.json()
+
+    async def _post(self, endpoint: str, **json_body: Any) -> dict[str, Any]:
+        """POST to an API endpoint with a JSON body."""
+        resp = await self._http.post(f"/{endpoint}", json=json_body)
+        resp.raise_for_status()
+        return resp.json()
 
     async def subscribe_to_my_messages(self) -> None:
         """Subscribe to all messages for the logged-in user."""
@@ -75,73 +100,76 @@ class RocketClient:
                 "stream-notify-user", [f"{self._user_id}/notification", False]
             )
 
-    def send_message(
+    async def send_message(
         self, room_id: str, text: str, attachments: list[dict[str, Any]] | None = None
     ) -> None:
-        """Send a message to a room via REST API."""
-        if self._rest:
-            self._rest.chat_post_message(text, room_id=room_id, attachments=attachments)
+        """Send a message to a room."""
+        body: dict[str, Any] = {"roomId": room_id, "text": text}
+        if attachments:
+            body["attachments"] = attachments
+        await self._post("chat.postMessage", **body)
 
-    def upload_file(self, room_id: str, file_path: str, message: str = "") -> None:
+    async def upload_file(self, room_id: str, file_path: str, message: str = "") -> None:
         """Upload a file to a room and post it as a chat message."""
-        if not self._rest:
-            raise RuntimeError("Not connected")
-        result = self._rest.rooms_media(room_id, file_path)
-        file_id = result["file"]["_id"]
-        self._rest.call_api_post(
-            f"rooms.mediaConfirm/{room_id}/{file_id}", msg=message
+        path = Path(file_path)
+        content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+        resp = await self._http.post(
+            f"/rooms.media/{room_id}",
+            files={"file": (path.name, path.read_bytes(), content_type)},
         )
+        resp.raise_for_status()
+        file_id = resp.json()["file"]["_id"]
+        await self._post(f"rooms.mediaConfirm/{room_id}/{file_id}", msg=message)
 
-    def fetch_attachment(self, url: str) -> bytes:
+    async def fetch_attachment(self, url: str) -> bytes:
         """Fetch an attachment from Rocket Chat."""
-        if not self._rest:
-            raise RuntimeError("Not connected")
         full_url = f"{self.url}{url}" if url.startswith("/") else url
-        response = self._rest.session.get(full_url, headers=self._rest.headers)
-        response.raise_for_status()
-        return response.content
+        resp = await self._http.get(full_url)
+        resp.raise_for_status()
+        return resp.content
 
-    def fetch_message(self, message_id: str) -> dict[str, Any] | None:
-        """Fetch a message by ID via REST API."""
-        if not self._rest:
-            return None
+    async def fetch_message(self, message_id: str) -> dict[str, Any] | None:
+        """Fetch a message by ID."""
         try:
-            result = self._rest.chat_get_message(msg_id=message_id)
+            result = await self._get("chat.getMessage", msgId=message_id)
             return result.get("message")
         except Exception as e:
             log.warning("Failed to fetch message %s: %s", message_id, e)
             return None
 
-    def fetch_room_history(self, room_id: str, count: int = 20) -> list[dict[str, Any]]:
+    async def fetch_room_history(self, room_id: str, count: int = 20) -> list[dict[str, Any]]:
         """Fetch recent messages from a room."""
-        if not self._rest:
-            return []
         try:
-            result = self._rest.call_api_get("dm.history", roomId=room_id, count=count)
+            result = await self._get("dm.history", roomId=room_id, count=count)
             messages = result.get("messages", [])
-            # Messages come newest-first, reverse to get chronological order
             return list(reversed(messages))
         except Exception as e:
             log.warning("Failed to fetch room history for %s: %s", room_id, e)
             return []
 
-    def list_dm_rooms(self) -> list[dict[str, Any]]:
+    async def list_dm_rooms(self) -> list[dict[str, Any]]:
         """List all DM rooms for the bot."""
-        if not self._rest:
-            return []
         try:
-            result = self._rest.call_api_get("dm.list")
+            result = await self._get("dm.list")
             return result.get("ims", [])
         except Exception as e:
             log.warning("Failed to list DM rooms: %s", e)
             return []
 
-    def set_status(self, status: str, message: str = "") -> None:
+    async def set_status(self, status: str, message: str = "") -> None:
         """Set the bot's presence status (online, busy, away, offline)."""
-        if self._rest:
-            self._rest.call_api_post(
-                "users.setStatus", status=status, message=message
-            )
+        delay = 1
+        for attempt in range(4):
+            try:
+                await self._post("users.setStatus", status=status, message=message)
+                return
+            except Exception as e:
+                if attempt == 3:
+                    log.warning("Failed to set status to %s after retries: %s", status, e)
+                    return
+                log.debug("Status %s rate-limited, retrying in %ds", status, delay)
+                await asyncio.sleep(delay)
+                delay *= 2
 
     async def incoming_messages(self) -> AsyncIterator[IncomingMessage]:
         """Yield incoming messages from subscriptions."""
@@ -151,7 +179,7 @@ class RocketClient:
         seen: set[str] = set()
         async for event in self._ddp.events():
             log.debug("DDP event: %s", event)
-            msg = self._parse_message_event(event)
+            msg = await self._parse_message_event(event)
             if not msg or msg.user_id == self._user_id or not (msg.text or msg.attachments):
                 continue
             if msg.message_id in seen:
@@ -161,7 +189,7 @@ class RocketClient:
             log.info("Message from %s in %s", msg.username, msg.room_id)
             yield msg
 
-    def _parse_message_event(self, event: dict[str, Any]) -> IncomingMessage | None:
+    async def _parse_message_event(self, event: dict[str, Any]) -> IncomingMessage | None:
         """Parse a DDP event into an IncomingMessage."""
         if event.get("msg") != "changed":
             return None
@@ -181,8 +209,7 @@ class RocketClient:
         # Check if this is a notification that needs full message fetch
         payload = msg_data.get("payload", {})
         if payload and payload.get("_id"):
-            # This is a notification - fetch full message for attachments
-            full_msg = self.fetch_message(payload["_id"])
+            full_msg = await self.fetch_message(payload["_id"])
             if full_msg:
                 msg_data = full_msg
 
@@ -215,5 +242,7 @@ class RocketClient:
 
     async def close(self) -> None:
         """Close the connection."""
+        if self._http:
+            await self._http.aclose()
         if self._ddp:
             await self._ddp.close()

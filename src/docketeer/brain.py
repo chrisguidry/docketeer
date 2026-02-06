@@ -265,7 +265,6 @@ class Brain:
 
         reply = "\n".join(reply_parts) if reply_parts else "(no response)"
 
-        # Add final response to conversation history
         self._conversations[room_id].append({"role": "assistant", "content": reply})
 
         tokens = self._measure_context(room_id, system, tools)
