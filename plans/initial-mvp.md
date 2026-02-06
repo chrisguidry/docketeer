@@ -2,12 +2,15 @@
 
 A headless agent using Claude for reasoning, pydocket for temporal awareness, and Rocket Chat for communication.
 
-## Philosophy (via nanoclaw)
+## Philosophy
 
-- Small, forkable, personal - not a product
+- Small, forkable, personal — not a product
 - Opinionated: Claude + Docket + Rocket Chat specifically
 - Explainable: markdown memories, visible task queue
 - Multi-user aware from day one
+- The LLM decides how to organize its memory — code provides tools but
+  doesn't dictate structure (the journal and profile contracts are the
+  exceptions, and they're tool-mediated)
 
 ## Architecture Overview
 
@@ -19,7 +22,7 @@ A headless agent using Claude for reasoning, pydocket for temporal awareness, an
               ┌────────────┴────────────┐
               │     Docketeer Agent     │
               │                         │
-              │   chat.py (realtime)    │──> presence, typing, messages
+              │   chat.py (realtime)    │──> presence, messages
               │          │              │
               │          v              │
               │      brain.py           │──> Claude reasoning + tools
@@ -36,294 +39,154 @@ A headless agent using Claude for reasoning, pydocket for temporal awareness, an
                     (executes tasks)
 ```
 
-**No web ingress** - Agent connects outbound to Rocket Chat.
+**No web ingress** — Agent connects outbound to Rocket Chat.
 
 **Hybrid approach:**
 - **Minimal DDP client** (~100 lines) for real-time message subscriptions via websocket
-- **REST API** (via `rocketchat-API` library) for sending messages, presence, actions
+- **Async REST API** (httpx) for sending messages, presence, actions
 
-**What is DDP?** Distributed Data Protocol - the websocket protocol Meteor uses.
-Rocket Chat is built on Meteor, so this is THE way clients communicate.
-The official `@rocket.chat/ddp-client` npm package uses the same protocol.
-
-The protocol is simple (this is what we implement):
-```
-1. Connect websocket to wss://server/websocket
-2. Send: {"msg": "connect", "version": "1", "support": ["1"]}
-3. Receive: {"msg": "connected", "session": "..."}
-4. Subscribe: {"msg": "sub", "id": "1", "name": "stream-room-messages", "params": [room_id, false]}
-5. Receive: {"msg": "changed", "collection": "...", "fields": {message data}}
-6. Keepalive: respond {"msg": "pong"} to {"msg": "ping"}
-```
-
-## File Structure
+## Current File Structure
 
 ```
 docketeer/
 ├── pyproject.toml
+├── plans/
+│   └── initial-mvp.md      # This file
 ├── src/docketeer/
 │   ├── __init__.py
-│   ├── main.py          # Entry: runs chat client + docket worker
-│   ├── config.py        # Settings from environment
-│   ├── brain.py         # Claude reasoning loop with tools
-│   ├── tools.py         # Tool definitions for Claude
-│   ├── memory.py        # Markdown memory read/write
-│   ├── tasks.py         # Built-in docket tasks
-│   ├── ddp.py           # Minimal DDP client for subscriptions
-│   └── chat.py          # Rocket Chat client (DDP + REST)
-└── workspace/           # Writeable area (gitignored)
-    ├── memory/
-    │   ├── users/{user_id}/
-    │   │   ├── profile.md    # Timestamped notes about this user
-    │   │   └── history.md    # Time-anchored conversation log
-    │   └── notes/
-    │       └── {topic}.md    # Freeform markdown notes
-    └── scripts/              # Future: agent-created tasks
+│   ├── __main__.py
+│   ├── main.py              # Entry: chat client + message loop
+│   ├── config.py            # Settings from environment
+│   ├── brain.py             # Claude reasoning loop with tools + auto-context
+│   ├── tools.py             # Tool registry + all tool definitions
+│   ├── ddp.py               # Minimal DDP client for subscriptions
+│   ├── chat.py              # Rocket Chat client (DDP + async REST)
+│   ├── soul.md              # System prompt template (new installs)
+│   └── bootstrap.md         # First-run guidance (deleted by agent when done)
+└── ~/.docketeer/            # Data directory (DOCKETEER_DATA_DIR)
+    ├── memory/              # Agent's workspace
+    │   ├── SOUL.md          # Live system prompt (diverges from template)
+    │   ├── people/{name}/
+    │   │   └── profile.md   # Auto-loaded per-person context
+    │   ├── notes/
+    │   └── journal/
+    │       └── YYYY-MM-DD.md
+    └── audit/
+        └── YYYY-MM-DD.jsonl # Tool call audit log
 ```
 
-## Core Components
+## What's Built
 
-### 1. config.py (~40 lines)
-Dataclass loading from environment:
-- `ANTHROPIC_API_KEY`, `CLAUDE_MODEL` (default: `claude-opus-4-6`)
-- `REDIS_URL`, `DOCKET_NAME`
-- `ROCKETCHAT_URL` (websocket: `wss://server/websocket`)
-- `ROCKETCHAT_USERNAME`, `ROCKETCHAT_PASSWORD` (or token-based auth)
-- `WORKSPACE_PATH`
+### Phase 1: Foundation ✅
+- **config.py** — Dataclass from env vars (`DOCKETEER_*` prefix)
+- **ddp.py** — Minimal DDP/websocket client
+- **chat.py** — Hybrid RC client (DDP subscriptions + async httpx REST)
 
-### 2. chat.py (~200 lines)
-Hybrid Rocket Chat client: minimal DDP for subscriptions + REST for actions.
+### Phase 2: Agent Core ✅
+- **brain.py** — Claude reasoning with agentic tool loop (up to 10 rounds),
+  streaming responses, prompt caching (3 cache breakpoints: SOUL.md, last
+  tool def, latest tool result), context compaction via Haiku summarization
+  when approaching 140k tokens
+- **tools.py** — Decorator-based registry with auto schema derivation from
+  type hints. Workspace tools (list/read/write/search/delete files), journal
+  tools (add/read/search), web tools (search via Brave, HTTP requests,
+  download)
+- **main.py** — Message loop, history loading, dev mode with watchfiles
 
-**ddp.py (~100 lines) - Minimal DDP client using `websockets` library:**
-```python
-class DDPClient:
-    async def connect(url: str) -> None        # wss://server/websocket
-    async def call(method: str, params: list) -> dict  # RPC method call
-    async def subscribe(name: str, params: list) -> str  # Returns sub ID
-    async def unsubscribe(sub_id: str) -> None
-    async def events() -> AsyncIterator[dict]  # Yields subscription events
+### Phase 3: Memory & Identity ✅
+Instead of a separate `memory.py`, memory is handled through:
+- **Journal tools** — `journal_add`, `journal_read`, `journal_search` enforce
+  the `journal/YYYY-MM-DD.md` format. Append-only, agent never writes directly.
+- **Workspace file tools** — Agent manages `people/`, `notes/`, and any other
+  files it wants through `read_file`, `write_file`, `search_files`
+- **Auto-context loading** — `brain.py` scans `people/*/profile.md` at startup
+  for `**Username:** @handle` lines, builds a username→person mapping. On each
+  message, auto-loads the speaker's profile + last 7 days of journal mentions
+  as a dynamic system block. Map rebuilds when agent writes to `people/`.
+- **SOUL.md** — Expanded system prompt (~100 lines) covering identity,
+  personality, social intelligence, privacy rules, journaling habits (tags,
+  wikilinks, reflection triggers), and workspace conventions
+- **Timestamped messages** — All messages (history + real-time) include
+  `[YYYY-MM-DD HH:MM]` timestamps in local time so the agent has temporal
+  awareness across the whole conversation
+- **Presence indicators** — Goes "away" while thinking, back to "online" when done
+- **Audit log** — Tool calls logged to `audit/YYYY-MM-DD.jsonl` (outside the
+  agent's workspace so it can't see or tamper with its own audit trail)
+- **Instance lock** — flock-based so only one docketeer runs at a time
 
-# Internal: background task handles ping/pong keepalive
-```
+### Phase 4: Scheduling 🔜
+- **tasks.py** — Built-in docket tasks (remind, check-in, daily summary)
+- Scheduling tools (schedule_task, cancel_task, list_scheduled)
+- Wire docket worker into main.py
 
-The client wraps raw websocket messages into the DDP format and handles the
-connection lifecycle. Subscription events are yielded as they arrive.
-
-**chat.py - High-level wrapper:**
-- `RocketClient.connect()` - DDP connect + REST auth
-- `RocketClient.send_message(room_id, text, attachments)` - Via REST API
-- `RocketClient.send_typing(room_id)` - Via DDP method
-- `async for msg in client.incoming_messages()` - From DDP subscription
-- `RocketClient.fetch_attachment(url)` - Download attachment bytes
-- `RocketClient.fetch_room_history(room_id)` - Load older messages
-- `RocketClient.list_dm_rooms()` - List DM rooms
-
-Uses `rocketchat-API` (maintained) for REST calls, own code for DDP subscriptions.
-
-`IncomingMessage` dataclass: `user_id`, `username`, `display_name`, `text`, `room_id`, `is_direct`, `attachments`
-
-### 3. memory.py (~120 lines)
-Markdown-based memory with timecoded logs:
-- `get_user_context(user_id)` - Load profile + recent history
-- `append_to_profile(user_id, note)` - Add a timestamped note about user
-- `append_history(user_id, role, content)` - Time-anchored conversation log
-- `recall(query)` - Search all markdown files by keyword
-- `remember(name, content)` - Create/update a general note
-
-Simple journal approach - no rigid structure:
-```markdown
-# chris
-
-- 2026-02-05T0930 | Prefers morning reminders
-- 2026-02-05T1420 | Working on docketeer project
-- 2026-02-12T1100 | Mentioned upcoming trip to Portland
-```
-
-Notes are freeform markdown files:
-```markdown
-# docketeer project
-
-Chris's lightweight agent system using pydocket.
-
-- 2026-02-05T1430 | Started planning
-- 2026-02-06T0900 | Decided on Rocket Chat for comms
-```
-
-Timestamps use ISO8601 format (`YYYY-MM-DDTHHMM`) - real dates, not relative.
-
-### 4. tools.py (~200 lines)
-Claude tool definitions and execution via `anthropic` SDK tool_use.
-
-**Workspace Tools:**
-| Tool | Purpose |
-|------|---------|
-| `list_files` | List files/dirs in workspace |
-| `read_file` | Read a text file |
-| `write_file` | Write a text file |
-
-**Memory Tools:**
-| Tool | Purpose |
-|------|---------|
-| `recall` | Search memory files by keyword |
-| `remember` | Create/append to a markdown note |
-| `note_about_user` | Add timestamped note to user's profile |
-
-**Scheduling Tools:**
-| Tool | Purpose |
-|------|---------|
-| `schedule_task` | Schedule work for later |
-| `cancel_task` | Cancel by key |
-| `list_scheduled` | Show pending tasks via `docket.snapshot()` |
-
-**Rocket Chat Tools:**
-| Tool | Purpose |
-|------|---------|
-| `send_message` | Send to user (@username) or room |
-
-Tool calls are surfaced to users as collapsed Rocket Chat attachments with
-color coding (green for success, red for errors).
-
-### 5. brain.py (~150 lines)
-Claude reasoning loop using `anthropic` SDK with tool_use:
-1. Load user context from memory
-2. Build system prompt with context + current time
-3. Log incoming message to history
-4. Agentic loop: Claude → tool calls → results → Claude (up to 10 rounds)
-5. Return `BrainResponse` with text + list of `ToolCall` records
-6. Caller sends response and logs to history
-
-Returns `BrainResponse(text, tool_calls)` so main.py can format tool calls
-as Rocket Chat attachments.
-
-System prompt emphasizes:
-- Multi-user awareness (always check WHO is talking)
-- Temporal thinking (schedule follow-ups, don't just respond and forget)
-- Incremental learning (update profiles as you learn)
-
-### 6. tasks.py (~100 lines)
-Built-in docket tasks:
-- `remind_user(user_id, message)` - Send reminder via DM
-- `check_in_user(user_id, topic)` - Proactive follow-up
-- `summarize_day()` - Perpetual daily task (automatic=True)
-
-Helper: `parse_when(str)` - Parse "in 1 hour", "tomorrow 9am", ISO format
-
-### 7. main.py (~150 lines)
-Entry point running two concurrent async loops:
-1. Load config, create ToolExecutor, RocketClient, Brain
-2. Start Docket context manager
-3. Register built-in tasks
-4. Start Worker in background (`worker.run_forever()`)
-5. Connect to Rocket Chat
-6. Load conversation history for existing DM rooms
-7. Message loop: `async for msg in client.incoming_messages()`
-   - Show typing indicator
-   - Build content (fetch images if attached)
-   - Process with Brain
-   - Send response with tool call attachments
-8. Graceful shutdown: disconnect
-
-Dev mode: `docketeer --dev` uses watchfiles for live reload.
-
-No web server - purely outbound connections to Rocket Chat and Redis.
+### Future
+- Group room support (auto-load profiles for multiple speakers)
+- Tool call visibility as RC attachments (green/red color coding)
+- Topic-based context pre-loading
+- Dynamic script loading with safety checks
 
 ## Key Design Decisions
 
+### Memory Architecture
+
+Three tiers, modeled after human memory:
+
+1. **Working memory (always loaded):** SOUL.md — identity, personality, social
+   rules, journaling habits. Cached via prompt caching. ~2,200 tokens.
+
+2. **Episodic context (loaded per-conversation):** Person profile + recent
+   journal mentions, auto-loaded when someone messages. Non-cached but saves
+   the tool calls the agent would otherwise make. ~500–2,000 tokens.
+
+3. **Long-term memory (searchable):** Full journal history, all notes, older
+   observations. Accessed through journal_search, search_files, read_file.
+   Agent decides when to dig deeper.
+
+Information flows upward through distillation: journal (raw stream) →
+people files (current understanding) → SOUL.md (core principles).
+
+### Agent Autonomy
+
+The agent decides how to organize its workspace. Code provides two contracts:
+
+1. **Journal** — `journal/YYYY-MM-DD.md` with `- HH:MM | text` entries,
+   managed exclusively through journal tools
+2. **Profiles** — `people/{name}/profile.md` with a `**Username:** @handle`
+   line, auto-loaded by brain.py
+
+Everything else — what goes in the profile, how to organize notes, when to
+reflect, what to journal — is guidance in SOUL.md, not code.
+
 ### Message Flow
 ```
-1. Websocket subscription receives message event
-2. Parse to IncomingMessage (user_id, username, text, room_id, attachments)
-3. Send typing indicator to room
+1. DDP subscription receives message event (with timestamp)
+2. Parse to IncomingMessage
+3. Set presence to "away"
 4. Fetch any image attachments
-5. Build system prompt with user context + current time
-6. Claude processes with tools available (agentic loop, up to 10 rounds)
-7. Tool calls execute against workspace/memory/docket/chat
-8. Send response to same room with tool call attachments
-9. Conversation logged to user's history.md
+5. Auto-load speaker's profile + recent journal mentions
+6. Build system prompt (SOUL.md cached + dynamic person context)
+7. Claude processes with tools (agentic loop, up to 10 rounds)
+8. Tool calls execute, audit-logged
+9. Send response to room
+10. Set presence back to "online"
 ```
-
-### Multi-User Model
-- Every message includes `user_id` from Rocket Chat
-- User context loaded fresh each message
-- Profile stores timestamped notes about each user
-- Tasks include `user_id` in args for proper delivery
-- No cross-user data leakage
-
-### Self-Scheduling
-The agent schedules itself via:
-- Explicit: "remind me in 1 hour" → `schedule_task`
-- Perpetual: Daily summary task with `automatic=True`
-- Proactive: Agent notices deadline, offers to schedule check-in
-- Learning from patterns: Notes in user profile inform future behavior
-
-### Tool Visibility
-Tool calls are surfaced as Rocket Chat message attachments:
-- Green (#28a745) for successful calls
-- Red (#dc3545) for errors
-- Collapsed by default so they don't clutter the chat
-- Title shows tool name and arguments
-- Body shows result (truncated to 200 chars)
 
 ## Dependencies
 
 ```toml
-[project]
 dependencies = [
     "pydocket",
     "anthropic",
-    "rocketchat-API",    # REST API wrapper (maintained)
-    "websockets",        # For our minimal DDP client
+    "websockets",
     "pyyaml",
-    "watchfiles",        # Dev mode live reload
+    "watchfiles",
+    "httpx",
 ]
 ```
 
-No web framework needed - agent is a pure client.
-
-## Implementation Order
-
-### Phase 1: Foundation ✅
-1. **pyproject.toml** - Project setup
-2. **config.py** - Settings from environment
-3. **ddp.py** - Minimal DDP client
-4. **chat.py** - Rocket Chat wrapper (DDP + REST)
-
-### Phase 2: Agent Core ✅
-5. **brain.py** - Claude reasoning loop with tool_use agentic loop
-6. **tools.py** - Workspace file tools (list_files, read_file, write_file)
-7. **main.py** - Wire it all together with tool call attachments
-
-### Phase 3: Memory
-8. **memory.py** - Markdown memory system
-9. Add memory tools to tools.py (recall, remember, note_about_user)
-10. Wire memory into brain.py system prompt
-
-### Phase 4: Scheduling
-11. **tasks.py** - Built-in docket tasks (remind, check-in)
-12. Add scheduling tools to tools.py (schedule_task, cancel_task, list_scheduled)
-13. Wire docket worker into main.py
-
-### Phase 5: Polish
-14. More tools (send_message, etc.)
-15. Integration tests with in-memory docket
-
-### Future (post-MVP)
-- **loader.py** - Dynamic script loading with AST safety checks
-- Script sandboxing (allowlist imports, blocklist patterns)
-- Agent-created Python tasks saved to workspace/scripts/
-
-## Verification
-
-1. **Unit tests**: memory.py parsing, tasks.py time parsing
-2. **Integration test**: Full message flow with mocked Rocket Chat + in-memory docket
-3. **Manual test**:
-   - Start with `docketeer --dev`
-   - Agent should connect and load history
-   - Send DM to bot, verify typing indicator and response
-   - Ask bot to write/read files in workspace
-   - Schedule a reminder, wait for it
+No web framework needed — purely outbound connections.
 
 ## Reference Files
 
-- `/home/chris/src/github.com/chrisguidry/docket/src/docket/docket.py` - Docket API (add, cancel, snapshot)
-- `/home/chris/src/github.com/chrisguidry/docket/src/docket/dependencies/_perpetual.py` - Perpetual task pattern
+- `/home/chris/src/github.com/chrisguidry/docket/src/docket/docket.py` — Docket API (add, cancel, snapshot)
+- `/home/chris/src/github.com/chrisguidry/docket/src/docket/dependencies/_perpetual.py` — Perpetual task pattern
