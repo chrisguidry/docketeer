@@ -339,7 +339,7 @@ class Brain:
         if response.stop_reason == "max_tokens" and not tool_blocks:
             reply_parts.append("\n\n(I hit my response length limit — ask me to continue if I got cut off)")
 
-        reply = "\n".join(reply_parts) if reply_parts else "(no response)"
+        reply = "\n".join(reply_parts).strip() if reply_parts else "(no response)"
 
         self._conversations[room_id].append({"role": "assistant", "content": reply})
 

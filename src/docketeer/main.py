@@ -5,9 +5,13 @@ import asyncio
 import fcntl
 import logging
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from docket import Docket, Worker
+
+from docketeer import tasks
 from docketeer.brain import Brain, BrainResponse, HistoryMessage, MessageContent
 from docketeer.chat import RocketClient, IncomingMessage, _parse_rc_timestamp
 from docketeer.config import Config
@@ -52,6 +56,75 @@ def _register_chat_tools(client: RocketClient, tool_context: ToolContext) -> Non
         return f"Sent {path} to chat"
 
 
+def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
+    """Register scheduling tools that need the docket instance."""
+
+    @registry.tool
+    async def schedule(
+        ctx: ToolContext, prompt: str, when: str, key: str = "", silent: bool = False,
+    ) -> str:
+        """Schedule a future task — reminder, follow-up, or background work. The time must be in the future — add the delay to the current time shown in your system prompt.
+
+        prompt: what to do when the task fires (be specific — future-you needs context)
+        when: ISO 8601 datetime in the future (e.g. 2026-02-07T15:00:00-05:00)
+        key: unique identifier for cancellation/rescheduling (e.g. "remind-chris-dentist")
+        silent: if true, work silently without sending a message (default: false)
+        """
+        try:
+            fire_at = datetime.fromisoformat(when)
+        except ValueError:
+            return f"Error: invalid datetime format: {when}"
+
+        room_id = "" if silent else ctx.room_id
+
+        if key:
+            await docket.replace(tasks.nudge, when=fire_at, key=key)(
+                prompt=prompt, room_id=room_id,
+            )
+        else:
+            key = f"task-{fire_at.strftime('%Y%m%d-%H%M%S')}"
+            await docket.add(tasks.nudge, when=fire_at, key=key)(
+                prompt=prompt, room_id=room_id,
+            )
+
+        local = fire_at.astimezone().strftime("%Y-%m-%d %H:%M %Z")
+        mode = "silently" if silent else f"in this room"
+        return f"Scheduled \"{key}\" for {local} ({mode})"
+
+    @registry.tool
+    async def cancel_task(ctx: ToolContext, key: str) -> str:
+        """Cancel a scheduled task.
+
+        key: the task key to cancel
+        """
+        await docket.cancel(key)
+        return f"Cancelled \"{key}\""
+
+    @registry.tool
+    async def list_scheduled(ctx: ToolContext) -> str:
+        """List all scheduled and running tasks."""
+        snap = await docket.snapshot()
+
+        lines: list[str] = []
+
+        for ex in snap.future:
+            local = ex.when.astimezone().strftime("%Y-%m-%d %H:%M %Z")
+            prompt = ex.kwargs.get("prompt", "")
+            if len(prompt) > 80:
+                prompt = prompt[:77] + "..."
+            lines.append(f"  [{ex.key}] {local} — {prompt}")
+
+        for ex in snap.running:
+            prompt = ex.kwargs.get("prompt", "")
+            if len(prompt) > 80:
+                prompt = prompt[:77] + "..."
+            lines.append(f"  [{ex.key}] RUNNING — {prompt}")
+
+        if not lines:
+            return "No scheduled tasks"
+        return f"{len(lines)} task(s):\n" + "\n".join(lines)
+
+
 async def main() -> None:
     config = Config.from_env()
     _acquire_lock(config.data_dir)
@@ -70,27 +143,43 @@ async def main() -> None:
     brain = Brain(config, tool_context)
     tool_context.on_people_write = brain.rebuild_person_map
 
-    # Register chat-specific tools
-    _register_chat_tools(client, tool_context)
+    # Make brain/client available to docket task handlers
+    tasks.set_brain(brain)
+    tasks.set_client(client)
 
-    log.info("Connecting to Rocket Chat at %s...", config.rocketchat_url)
-    await client.connect()
+    async with Docket(name=config.docket_name, url=config.docket_url) as docket:
+        docket.register_collection("docketeer.tasks:docketeer_tasks")
 
-    log.info("Loading conversation history...")
-    await load_all_history(client, brain)
+        # Register tools (chat + docket)
+        _register_chat_tools(client, tool_context)
+        _register_docket_tools(docket, tool_context)
 
-    log.info("Subscribing to messages...")
-    await client.subscribe_to_my_messages()
+        async with Worker(docket) as worker:
+            worker_task = asyncio.create_task(worker.run_forever())
 
-    log.info("Listening for messages...")
-    try:
-        async for msg in client.incoming_messages():
-            await handle_message(client, brain, msg)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        await client.close()
-        log.info("Disconnected.")
+            log.info("Connecting to Rocket Chat at %s...", config.rocketchat_url)
+            await client.connect()
+
+            log.info("Loading conversation history...")
+            await load_all_history(client, brain)
+
+            log.info("Subscribing to messages...")
+            await client.subscribe_to_my_messages()
+
+            log.info("Listening for messages...")
+            try:
+                async for msg in client.incoming_messages():
+                    await handle_message(client, brain, msg)
+            except KeyboardInterrupt:
+                pass
+            finally:
+                worker_task.cancel()
+                try:
+                    await worker_task
+                except asyncio.CancelledError:
+                    pass
+                await client.close()
+                log.info("Disconnected.")
 
 
 async def load_all_history(client: RocketClient, brain: Brain) -> None:
