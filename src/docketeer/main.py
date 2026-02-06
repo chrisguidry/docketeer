@@ -67,6 +67,7 @@ async def main() -> None:
         config.rocketchat_url, config.rocketchat_username, config.rocketchat_password
     )
     brain = Brain(config, tool_context)
+    tool_context.on_people_write = brain.rebuild_person_map
 
     # Register chat-specific tools
     _register_chat_tools(client, tool_context)

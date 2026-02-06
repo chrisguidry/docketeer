@@ -20,6 +20,7 @@ class ToolContext:
     config: Any
     username: str = ""
     room_id: str = ""
+    on_people_write: Callable[[], None] | None = None
 
 
 class ToolRegistry:
@@ -169,6 +170,8 @@ async def write_file(ctx: ToolContext, path: str, content: str) -> str:
     target = _safe_path(ctx.workspace, path)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(content)
+    if path.startswith("people/") and ctx.on_people_write:
+        ctx.on_people_write()
     return f"Wrote {len(content)} bytes to {path}"
 
 

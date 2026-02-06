@@ -5,9 +5,10 @@ import base64
 import importlib.resources
 import json
 import logging
+import re
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +26,57 @@ COMPACT_THRESHOLD = 140_000
 MIN_RECENT_MESSAGES = 6
 
 
+_USERNAME_RE = re.compile(r"\*\*Username:\*\*\s*@(\S+)")
+
+
+def _build_person_map(workspace: Path) -> dict[str, str]:
+    """Scan people/*/profile.md for **Username:** lines, return {rc_username: person_dir}."""
+    people_dir = workspace / "people"
+    if not people_dir.is_dir():
+        return {}
+    mapping: dict[str, str] = {}
+    for profile in people_dir.glob("*/profile.md"):
+        for line in profile.read_text().splitlines():
+            if m := _USERNAME_RE.search(line):
+                mapping[m.group(1)] = f"people/{profile.parent.name}"
+                break
+    return mapping
+
+
+def _load_person_context(
+    workspace: Path, username: str, person_map: dict[str, str],
+) -> str:
+    """Build a context string with the person's profile and recent journal mentions."""
+    person_dir = person_map.get(username)
+    if not person_dir:
+        return ""
+
+    parts: list[str] = []
+
+    profile = workspace / person_dir / "profile.md"
+    if profile.exists():
+        parts.append(profile.read_text().rstrip())
+
+    # Use the directory name for wikilink matching (e.g. "chris" from "people/chris")
+    name = Path(person_dir).name
+    wikilink_pattern = f"[[people/{name}]]".lower()
+
+    journal_dir = workspace / "journal"
+    if journal_dir.is_dir():
+        cutoff = (datetime.now().astimezone() - timedelta(days=7)).strftime("%Y-%m-%d")
+        mentions: list[str] = []
+        for jpath in sorted(journal_dir.glob("*.md")):
+            if jpath.stem < cutoff:
+                continue
+            for line in jpath.read_text().splitlines():
+                if line.startswith("- ") and wikilink_pattern in line.lower():
+                    mentions.append(f"[{jpath.stem}] {line}")
+        if mentions:
+            parts.append("Recent journal mentions:\n" + "\n".join(mentions))
+
+    return "\n\n".join(parts)
+
+
 def _ensure_template(workspace: Path, filename: str) -> None:
     """Copy a template from the package to the workspace if it doesn't exist."""
     stem, ext = filename.rsplit(".", 1)
@@ -36,10 +88,14 @@ def _ensure_template(workspace: Path, filename: str) -> None:
     log.info("Copied %s template to %s", filename, target)
 
 
-def _build_system_blocks(workspace: Path, current_time: str, username: str) -> list[dict]:
+def _build_system_blocks(
+    workspace: Path, current_time: str, username: str,
+    person_context: str = "",
+) -> list[dict]:
     """Build system prompt as content blocks for prompt caching.
 
-    The stable SOUL.md content is cached; the dynamic time/username block is not.
+    The stable SOUL.md content is cached; the dynamic time/username/person
+    context block is not (but saves tool calls Nix would otherwise make).
     """
     soul_path = workspace / "SOUL.md"
     stable_text = soul_path.read_text()
@@ -48,17 +104,21 @@ def _build_system_blocks(workspace: Path, current_time: str, username: str) -> l
     if bootstrap_path.exists():
         stable_text += "\n\n" + bootstrap_path.read_text()
 
-    return [
+    blocks = [
         {
             "type": "text",
             "text": stable_text,
             "cache_control": {"type": "ephemeral"},
         },
-        {
-            "type": "text",
-            "text": f"Current time: {current_time}\nTalking to: @{username}",
-        },
     ]
+
+    dynamic_parts = [f"Current time: {current_time}", f"Talking to: @{username}"]
+    if person_context:
+        dynamic_parts.append(f"\n## What I know about @{username}\n\n{person_context}")
+
+    blocks.append({"type": "text", "text": "\n".join(dynamic_parts)})
+
+    return blocks
 
 
 def _audit_log(audit_dir: Path, tool_name: str, args: dict, result: str, is_error: bool) -> None:
@@ -143,12 +203,21 @@ class Brain:
         self.tool_context = tool_context
         self._conversations: dict[str, list[dict[str, Any]]] = defaultdict(list)
         self._room_token_counts: dict[str, int] = {}
+        self._person_map: dict[str, str] = {}
 
         soul_path = config.workspace_path / "SOUL.md"
         first_run = not soul_path.exists()
         _ensure_template(config.workspace_path, "soul.md")
         if first_run:
             _ensure_template(config.workspace_path, "bootstrap.md")
+
+        self._person_map = _build_person_map(config.workspace_path)
+        log.info("Person map: %s", self._person_map)
+
+    def rebuild_person_map(self) -> None:
+        """Rebuild the username→person-file mapping after a people/ write."""
+        self._person_map = _build_person_map(self.config.workspace_path)
+        log.info("Rebuilt person map: %s", self._person_map)
 
     def load_history(self, room_id: str, messages: list[HistoryMessage]) -> int:
         """Load conversation history for a room. Returns count loaded."""
@@ -170,8 +239,12 @@ class Brain:
     async def process(self, room_id: str, content: MessageContent) -> BrainResponse:
         """Process a message and return a response with tool call info."""
         current_time = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M %Z")
+        person_context = _load_person_context(
+            self.config.workspace_path, content.username, self._person_map,
+        )
         system = _build_system_blocks(
-            self.config.workspace_path, current_time, content.username
+            self.config.workspace_path, current_time, content.username,
+            person_context=person_context,
         )
 
         # Tool definitions with cache breakpoint on last definition
