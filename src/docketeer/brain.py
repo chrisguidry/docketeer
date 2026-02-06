@@ -174,6 +174,7 @@ def _extract_text(content: str | list) -> str:
 class MessageContent:
     """Content to send to Claude - text and/or images."""
     username: str
+    timestamp: str = ""
     text: str = ""
     images: list[tuple[str, bytes]] = None
 
@@ -188,6 +189,7 @@ class HistoryMessage:
     role: str
     username: str
     text: str
+    timestamp: str = ""
 
 
 @dataclass
@@ -223,7 +225,8 @@ class Brain:
         """Load conversation history for a room. Returns count loaded."""
         for msg in messages:
             if msg.role == "user":
-                content = f"@{msg.username}: {msg.text}"
+                prefix = f"[{msg.timestamp}] " if msg.timestamp else ""
+                content = f"{prefix}@{msg.username}: {msg.text}"
             else:
                 content = msg.text
             self._conversations[room_id].append({
@@ -433,6 +436,7 @@ class Brain:
     def _build_content(self, content: MessageContent) -> list[dict] | str:
         """Build content blocks for Claude."""
         blocks = []
+        prefix = f"[{content.timestamp}] " if content.timestamp else ""
 
         for media_type, data in content.images:
             blocks.append({
@@ -444,15 +448,15 @@ class Brain:
                 },
             })
 
-        text = f"@{content.username}: {content.text}" if content.text else ""
+        text = f"{prefix}@{content.username}: {content.text}" if content.text else ""
 
         if text:
             blocks.append({"type": "text", "text": text})
 
         if not blocks:
-            blocks.append({"type": "text", "text": f"@{content.username}: (empty message)"})
+            blocks.append({"type": "text", "text": f"{prefix}@{content.username}: (empty message)"})
 
         if len(blocks) == 1 and blocks[0]["type"] == "text":
-            return text or f"@{content.username}: (empty message)"
+            return text or f"{prefix}@{content.username}: (empty message)"
 
         return blocks

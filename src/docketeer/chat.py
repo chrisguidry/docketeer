@@ -5,6 +5,7 @@ import logging
 import mimetypes
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -31,7 +32,20 @@ class IncomingMessage:
     text: str
     room_id: str
     is_direct: bool
+    timestamp: datetime | None = None
     attachments: list[Attachment] | None = None
+
+
+def _parse_rc_timestamp(ts: Any) -> datetime | None:
+    """Parse a Rocket Chat timestamp into a datetime."""
+    if isinstance(ts, dict) and "$date" in ts:
+        return datetime.fromtimestamp(ts["$date"] / 1000, tz=timezone.utc)
+    if isinstance(ts, str):
+        try:
+            return datetime.fromisoformat(ts)
+        except ValueError:
+            return None
+    return None
 
 
 class RocketClient:
@@ -237,6 +251,7 @@ class RocketClient:
             text=text,
             room_id=room_id,
             is_direct=room_id.startswith(self._user_id or "") if room_id else False,
+            timestamp=_parse_rc_timestamp(msg_data.get("ts")),
             attachments=attachments,
         )
 

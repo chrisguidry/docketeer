@@ -6,9 +6,10 @@ import fcntl
 import logging
 import sys
 from pathlib import Path
+from typing import Any
 
 from docketeer.brain import Brain, BrainResponse, HistoryMessage, MessageContent
-from docketeer.chat import RocketClient, IncomingMessage
+from docketeer.chat import RocketClient, IncomingMessage, _parse_rc_timestamp
 from docketeer.config import Config
 from docketeer.tools import ToolContext, _safe_path, registry
 
@@ -112,6 +113,14 @@ async def load_all_history(client: RocketClient, brain: Brain) -> None:
         log.info("    Loaded %d messages", count)
 
 
+def _format_timestamp(ts: Any) -> str:
+    """Parse an RC timestamp and format it in local time."""
+    dt = _parse_rc_timestamp(ts)
+    if not dt:
+        return ""
+    return dt.astimezone().strftime("%Y-%m-%d %H:%M")
+
+
 async def fetch_history_for_brain(client: RocketClient, room_id: str) -> list[HistoryMessage]:
     """Fetch room history and convert to Brain's format."""
     raw_history = await client.fetch_room_history(room_id, count=20)
@@ -129,8 +138,11 @@ async def fetch_history_for_brain(client: RocketClient, room_id: str) -> list[Hi
         username = user.get("username", "unknown")
         is_bot = user.get("_id") == client._user_id
         role = "assistant" if is_bot else "user"
+        timestamp = _format_timestamp(msg.get("ts"))
 
-        messages.append(HistoryMessage(role=role, username=username, text=text))
+        messages.append(HistoryMessage(
+            role=role, username=username, text=text, timestamp=timestamp,
+        ))
 
     return messages
 
@@ -167,7 +179,13 @@ async def build_content(client: RocketClient, msg: IncomingMessage) -> MessageCo
             except Exception as e:
                 log.warning("Failed to fetch attachment %s: %s", att.url, e)
 
-    return MessageContent(username=msg.username, text=msg.text, images=images)
+    timestamp = ""
+    if msg.timestamp:
+        timestamp = msg.timestamp.astimezone().strftime("%Y-%m-%d %H:%M")
+
+    return MessageContent(
+        username=msg.username, timestamp=timestamp, text=msg.text, images=images,
+    )
 
 
 async def send_response(client: RocketClient, room_id: str, response: BrainResponse) -> None:
