@@ -1,5 +1,6 @@
 """Claude reasoning loop with tool use."""
 
+import asyncio
 import base64
 import importlib.resources
 import json
@@ -199,14 +200,7 @@ class Brain:
 
         # Agentic loop: keep calling Claude until no more tool use
         for _ in range(MAX_TOOL_ROUNDS):
-            with self.client.messages.stream(
-                model=self.config.claude_model,
-                max_tokens=MAX_RESPONSE_TOKENS,
-                system=system,
-                messages=messages,
-                tools=tools,
-            ) as stream:
-                response = stream.get_final_message()
+            response = await asyncio.to_thread(self._stream_message, system, messages, tools)
 
             _log_usage(response)
 
@@ -282,6 +276,19 @@ class Brain:
 
         log.debug("Response: %s", reply[:100])
         return BrainResponse(text=reply)
+
+    def _stream_message(
+        self, system: list[dict], messages: list[dict], tools: list[dict],
+    ) -> anthropic.types.Message:
+        """Run the synchronous streaming call (meant to be called via asyncio.to_thread)."""
+        with self.client.messages.stream(
+            model=self.config.claude_model,
+            max_tokens=MAX_RESPONSE_TOKENS,
+            system=system,
+            messages=messages,
+            tools=tools,
+        ) as stream:
+            return stream.get_final_message()
 
     def _measure_context(self, room_id: str, system: list[dict], tools: list[dict]) -> int:
         """Count tokens for the current conversation state."""

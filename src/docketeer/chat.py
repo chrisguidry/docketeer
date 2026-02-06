@@ -41,7 +41,6 @@ class RocketClient:
         self._ddp: DDPClient | None = None
         self._rest: RocketChat | None = None
         self._user_id: str | None = None
-        self._subscribed_rooms: set[str] = set()
 
     async def connect(self) -> None:
         """Connect via DDP and authenticate via REST."""
@@ -68,12 +67,6 @@ class RocketClient:
         elif url.startswith("http://"):
             return url.replace("http://", "ws://") + "/websocket"
         return url + "/websocket"
-
-    async def subscribe_to_room(self, room_id: str) -> None:
-        """Subscribe to messages in a room."""
-        if self._ddp and room_id not in self._subscribed_rooms:
-            await self._ddp.subscribe("stream-room-messages", [room_id, False])
-            self._subscribed_rooms.add(room_id)
 
     async def subscribe_to_my_messages(self) -> None:
         """Subscribe to all messages for the logged-in user."""
@@ -143,12 +136,11 @@ class RocketClient:
             log.warning("Failed to list DM rooms: %s", e)
             return []
 
-    async def send_typing(self, room_id: str, typing: bool = True) -> None:
-        """Send typing indicator via DDP."""
-        if self._ddp:
-            await self._ddp.call(
-                "stream-notify-room",
-                [f"{room_id}/typing", self.username, typing],
+    def set_status(self, status: str, message: str = "") -> None:
+        """Set the bot's presence status (online, busy, away, offline)."""
+        if self._rest:
+            self._rest.call_api_post(
+                "users.setStatus", status=status, message=message
             )
 
     async def incoming_messages(self) -> AsyncIterator[IncomingMessage]:

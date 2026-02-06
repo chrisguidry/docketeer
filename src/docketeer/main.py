@@ -145,17 +145,13 @@ async def handle_message(client: RocketClient, brain: Brain, msg: IncomingMessag
         count = brain.load_history(msg.room_id, history)
         log.info("    Loaded %d messages", count)
 
-    # Show typing indicator
-    await client.send_typing(msg.room_id)
-
-    # Build content for Brain (fetch any images)
-    content = build_content(client, msg)
-
-    # Get response from Brain
-    response = await brain.process(msg.room_id, content)
-
-    # Send response with tool call attachments
-    send_response(client, msg.room_id, response)
+    client.set_status("away")
+    try:
+        content = build_content(client, msg)
+        response = await brain.process(msg.room_id, content)
+        send_response(client, msg.room_id, response)
+    finally:
+        client.set_status("online")
 
 
 def build_content(client: RocketClient, msg: IncomingMessage) -> MessageContent:
