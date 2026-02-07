@@ -31,7 +31,8 @@ DOCKETEER_ANTHROPIC_API_KEY = "test-key"
 minversion = "9.0"
 addopts = [
     "--import-mode=importlib",
-    "--cov=docketeer/src/docketeer",
+    "--cov=docketeer",
+    "--cov-config=../pyproject.toml",
     "--cov-branch",
     "--cov-report=term-missing",
     "--cov-fail-under=100",

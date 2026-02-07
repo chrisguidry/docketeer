@@ -8,7 +8,8 @@ figure out which packages are affected by the current change.
 Trigger rules (matching .pre-commit-config.yaml):
   - Root-level file changes (not inside a member dir) → all packages
   - Changes in <member>/src/ → that member + reverse dependents
-  - Changes in <member>/tests/ or <member>/pyproject.toml → just that member
+  - Changes in <member>/pyproject.toml → that member + reverse dependents
+  - Changes in <member>/tests/ → just that member
 
 Outputs to $GITHUB_OUTPUT (or stdout if not set):
   matrix=["docketeer", "docketeer-web", ...]
@@ -84,7 +85,7 @@ def compute_affected(
 
         relative = path[len(matched_member) + 1 :]
 
-        if relative.startswith("src/"):
+        if relative.startswith("src/") or relative == "pyproject.toml":
             affected.add(matched_member)
             affected.update(reverse_deps.get(matched_member, set()))
         else:

@@ -32,7 +32,7 @@ repos:
 
       - id: ty
         name: ty check
-        entry: ty check
+        entry: uv run --no-sync ty check
         language: system
         types: [python]
         files: ^docketeer.*/src/|^docketeer.*/tests/
@@ -41,7 +41,7 @@ repos:
 
       - id: pytest-docketeer
         name: pytest (docketeer)
-        entry: uv run --directory docketeer pytest
+        entry: uv run --no-sync --directory docketeer pytest
         language: system
         types: [python]
         files: ^docketeer/
@@ -50,7 +50,7 @@ repos:
 
       - id: pytest-docketeer-web
         name: pytest (docketeer-web)
-        entry: uv run --directory docketeer-web pytest
+        entry: uv run --no-sync --directory docketeer-web pytest
         language: system
         types: [python]
         files: ^docketeer/src/|^docketeer-web/
@@ -59,7 +59,7 @@ repos:
 
       - id: pytest-docketeer-rocketchat
         name: pytest (docketeer-rocketchat)
-        entry: uv run --directory docketeer-rocketchat pytest
+        entry: uv run --no-sync --directory docketeer-rocketchat pytest
         language: system
         types: [python]
         files: ^docketeer/src/|^docketeer-rocketchat/
