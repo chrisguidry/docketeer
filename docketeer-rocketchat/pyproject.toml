@@ -6,12 +6,25 @@ readme = "README.md"
 authors = [
     { name = "Chris Guidry", email = "chris@theguidrys.us" }
 ]
+license = "MIT"
 requires-python = ">=3.12"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Communications :: Chat",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
     "docketeer",
     "httpx",
     "websockets",
 ]
+
+[project.urls]
+Homepage = "https://github.com/chrisguidry/docketeer"
+Repository = "https://github.com/chrisguidry/docketeer"
+Issues = "https://github.com/chrisguidry/docketeer/issues"
 
 [project.entry-points."docketeer.chat"]
 rocketchat = "docketeer_rocketchat"
