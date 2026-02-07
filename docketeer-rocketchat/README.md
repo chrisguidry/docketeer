@@ -1,22 +1,18 @@
 # docketeer-rocketchat
 
 [Rocket Chat](https://www.rocket.chat/) chat backend for
-[Docketeer](../README.md). Connects to Rocket Chat via DDP (WebSocket) for
-real-time message subscriptions and the REST API for sending messages, uploading
-files, and managing presence.
+[Docketeer](https://pypi.org/project/docketeer/). Connects to a Rocket Chat
+server via DDP (WebSocket) for real-time message subscriptions and the REST API
+for sending messages, uploading files, and managing presence.
 
-## Setup
+Install `docketeer-rocketchat` alongside `docketeer` and it will be
+automatically discovered as the chat backend.
 
-You'll need a Rocket Chat server with a bot account. Add these to your
-`.envrc.private`:
+## Tools
 
-```sh
-export DOCKETEER_ROCKETCHAT_URL="https://your-rocketchat-server.example.com"
-export DOCKETEER_ROCKETCHAT_USERNAME="your-bot-username"
-export DOCKETEER_ROCKETCHAT_PASSWORD="your-bot-password"
-```
+- **`send_file`** — send a file from the agent's workspace to the current chat room
 
-## Environment variables
+## Configuration
 
 | Variable                         | Default      | Description            |
 |----------------------------------|--------------|------------------------|

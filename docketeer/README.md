@@ -1,8 +1,58 @@
 # Docketeer
 
-A small, opinionated toolkit for building autonomous AI agents with
+The core agent engine for building autonomous AI assistants with
 [Anthropic](https://platform.claude.com/docs/en/api/sdks/python) and
 [Docket](https://github.com/chrisguidry/docket).
 
-For setup instructions, plugin development, and more, see the
-[project repository](https://github.com/chrisguidry/docketeer).
+Docketeer is a small, opinionated toolkit for running an AI agent that can
+manage its own memory, schedule its own future work, and extend itself through
+plugins. The core package provides the agent loop, a persistent workspace for
+the agent's files and journal, and a plugin system based on standard Python
+[entry points](https://packaging.python.org/en/latest/specifications/entry-points/).
+
+## Tools
+
+### Workspace
+
+- **`list_files`** — list files and directories in the workspace
+- **`read_file`** — read contents of a text file
+- **`write_file`** — write content to a text file
+- **`delete_file`** — delete a file
+- **`search_files`** — search for text across files (case-insensitive)
+
+### Journal
+
+- **`journal_add`** — add a timestamped entry to today's journal
+- **`journal_read`** — read journal entries for a day or date range
+- **`journal_search`** — search across all journal entries
+
+### Scheduling
+
+- **`schedule`** — schedule a future nudge to prompt the agent at a given time
+- **`cancel_task`** — cancel a scheduled task
+- **`list_scheduled`** — list all scheduled and running tasks
+
+## Configuration
+
+| Variable                       | Default                    | Description                                  |
+|--------------------------------|----------------------------|----------------------------------------------|
+| `DOCKETEER_ANTHROPIC_API_KEY`  | _(required)_               | Anthropic API key                            |
+| `DOCKETEER_CLAUDE_MODEL`       | `claude-opus-4-6`          | Claude model to use                          |
+| `DOCKETEER_DATA_DIR`           | `~/.docketeer`             | Where the agent stores memory and audit logs |
+| `DOCKETEER_DOCKET_URL`         | `redis://localhost:6379/0` | Redis connection for task scheduling         |
+| `DOCKETEER_DOCKET_NAME`        | `docketeer`                | Name of the Docket instance                  |
+| `DOCKETEER_REVERIE_INTERVAL`   | `PT30M` (30 min)           | Background thinking cycle interval           |
+| `DOCKETEER_CONSOLIDATION_CRON` | `0 3 * * *`                | Cron schedule for daily memory consolidation |
+
+## Plugins
+
+Docketeer discovers plugins through two entry point groups:
+
+- **`docketeer.chat`** — chat backends (how the agent talks to people)
+- **`docketeer.tools`** — tool plugins (what the agent can do)
+
+Available plugins:
+
+- [docketeer-rocketchat](https://pypi.org/project/docketeer-rocketchat/) — Rocket Chat backend
+- [docketeer-web](https://pypi.org/project/docketeer-web/) — web search, HTTP requests, file downloads
+- [docketeer-monty](https://pypi.org/project/docketeer-monty/) — sandboxed Python execution
