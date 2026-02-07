@@ -1,26 +1,11 @@
-[project]
-name = "docketeer"
-version = "0.1.0"
-description = "Lightweight agentic system using Claude, pydocket, and Rocket Chat"
-readme = "README.md"
-authors = [
-    { name = "Chris Guidry", email = "chris@theguidrys.us" }
-]
-requires-python = ">=3.12"
-dependencies = [
-    "anthropic",
-    "httpx",
-    "pydocket",
-    "pyyaml",
-    "watchfiles",
-    "websockets",
-]
-
-[project.scripts]
-docketeer = "docketeer.main:run"
+[tool.uv.workspace]
+members = ["docketeer", "docketeer-rocketchat", "docketeer-web"]
 
 [dependency-groups]
 dev = [
+    "docketeer",
+    "docketeer-rocketchat",
+    "docketeer-web",
     "codespell",
     "prek",
     "pytest",
@@ -33,12 +18,10 @@ dev = [
     "ty",
 ]
 
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/docketeer"]
+[tool.uv.sources]
+docketeer = { workspace = true }
+docketeer-rocketchat = { workspace = true }
+docketeer-web = { workspace = true }
 
 [tool.ruff]
 target-version = "py312"
@@ -82,8 +65,11 @@ ignore = [
     "ANN401",   # any-type
 ]
 
+[tool.ruff.lint.isort]
+known-first-party = ["docketeer", "docketeer_rocketchat", "docketeer_web"]
+
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["ANN201"]
+"**/tests/**/*.py" = ["ANN201"]
 
 [tool.ruff.lint.flake8-annotations]
 suppress-dummy-args = true
@@ -94,47 +80,6 @@ fixture-parentheses = true
 parametrize-names-type = "tuple"
 parametrize-values-type = "list"
 parametrize-values-row-type = "tuple"
-
-[tool.pytest_env]
-DOCKETEER_ROCKETCHAT_URL = "http://localhost:3000"
-DOCKETEER_ROCKETCHAT_USERNAME = "testbot"
-DOCKETEER_ROCKETCHAT_PASSWORD = "testpass"
-DOCKETEER_ANTHROPIC_API_KEY = "test-key"
-DOCKETEER_BRAVE_API_KEY = "brave-test-key"
-
-[tool.pytest.ini_options]
-minversion = "9.0"
-addopts = [
-    "--import-mode=importlib",
-    "--cov=src/docketeer",
-    "--cov-branch",
-    "--cov-report=term-missing",
-]
-asyncio_mode = "auto"
-filterwarnings = [
-    "error",
-]
-
-[tool.coverage.run]
-branch = true
-source = ["src/docketeer"]
-omit = ["src/docketeer/__main__.py", "src/docketeer/testing.py"]
-
-[tool.coverage.report]
-fail_under = 100
-precision = 2
-skip_empty = true
-skip_covered = true
-exclude_also = [
-    "pragma: no cover",
-    "def __repr__",
-    "raise AssertionError",
-    "raise NotImplementedError",
-    "if TYPE_CHECKING:",
-    "if __name__ == .__main__.:",
-    "@overload",
-    "@abstractmethod",
-]
 
 [tool.ty.rules]
 unused-ignore-comment = "error"

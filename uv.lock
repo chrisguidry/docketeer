@@ -2,6 +2,30 @@ version = 1
 revision = 2
 requires-python = ">=3.12"
 
+[manifest]
+members = [
+    "docketeer",
+    "docketeer-rocketchat",
+    "docketeer-web",
+]
+
+[manifest.dependency-groups]
+dev = [
+    { name = "codespell" },
+    { name = "docketeer", editable = "docketeer" },
+    { name = "docketeer-rocketchat", editable = "docketeer-rocketchat" },
+    { name = "docketeer-web", editable = "docketeer-web" },
+    { name = "prek" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
+    { name = "pytest-env" },
+    { name = "pytest-xdist" },
+    { name = "respx", specifier = ">=0.22.0" },
+    { name = "ruff" },
+    { name = "ty" },
+]
+
 [[package]]
 name = "annotated-types"
 version = "0.7.0"
@@ -208,52 +232,52 @@ wheels = [
 [[package]]
 name = "docketeer"
 version = "0.1.0"
-source = { editable = "." }
+source = { editable = "docketeer" }
 dependencies = [
     { name = "anthropic" },
-    { name = "httpx" },
     { name = "pydocket" },
     { name = "pyyaml" },
     { name = "watchfiles" },
-    { name = "websockets" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "codespell" },
-    { name = "prek" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
-    { name = "pytest-env" },
-    { name = "pytest-xdist" },
-    { name = "respx" },
-    { name = "ruff" },
-    { name = "ty" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "anthropic" },
-    { name = "httpx" },
     { name = "pydocket" },
     { name = "pyyaml" },
     { name = "watchfiles" },
+]
+
+[[package]]
+name = "docketeer-rocketchat"
+version = "0.1.0"
+source = { editable = "docketeer-rocketchat" }
+dependencies = [
+    { name = "docketeer" },
+    { name = "httpx" },
     { name = "websockets" },
 ]
 
-[package.metadata.requires-dev]
-dev = [
-    { name = "codespell" },
-    { name = "prek" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
-    { name = "pytest-env" },
-    { name = "pytest-xdist" },
-    { name = "respx", specifier = ">=0.22.0" },
-    { name = "ruff" },
-    { name = "ty" },
+[package.metadata]
+requires-dist = [
+    { name = "docketeer", editable = "docketeer" },
+    { name = "httpx" },
+    { name = "websockets" },
+]
+
+[[package]]
+name = "docketeer-web"
+version = "0.1.0"
+source = { editable = "docketeer-web" }
+dependencies = [
+    { name = "docketeer" },
+    { name = "httpx" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "docketeer", editable = "docketeer" },
+    { name = "httpx" },
 ]
 
 [[package]]

@@ -8,7 +8,7 @@ import pytest
 import websockets
 from websockets import ServerConnection
 
-from docketeer.ddp import DDPClient
+from docketeer_rocketchat.ddp import DDPClient
 
 
 @pytest.fixture()

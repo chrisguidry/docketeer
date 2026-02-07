@@ -1,14 +1,15 @@
-"""Tests for lock acquisition, chat tool registration, and docket tool registration."""
+"""Tests for lock acquisition, chat backend discovery, and docket tool registration."""
 
 from datetime import UTC, datetime
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from docketeer.main import (
     _acquire_lock,
-    _register_chat_tools,
+    _discover_chat_backend,
     _register_docket_tools,
 )
 from docketeer.testing import MemoryChat
@@ -33,31 +34,35 @@ def test_acquire_lock_already_held(tmp_path: Path):
         held.close()
 
 
-async def test_register_chat_tools_send_file(
-    chat: MemoryChat, tool_context: ToolContext
-):
-    (tool_context.workspace / "test.txt").write_text("hello")
-    _register_chat_tools(chat, tool_context)
-    result = await registry.execute("send_file", {"path": "test.txt"}, tool_context)
-    assert "Sent" in result
-    assert len(chat.uploaded_files) == 1
+def test_discover_chat_backend():
+    client = MemoryChat()
+    module = MagicMock()
+    module.create_client.return_value = client
+
+    ep = MagicMock()
+    ep.load.return_value = module
+    with patch("importlib.metadata.entry_points", return_value=[ep]):
+        result_client, register_fn = _discover_chat_backend()
+    assert result_client is client
+    assert register_fn is not None
 
 
-async def test_register_chat_tools_send_file_not_found(
-    chat: MemoryChat, tool_context: ToolContext
-):
-    _register_chat_tools(chat, tool_context)
-    result = await registry.execute("send_file", {"path": "nope.txt"}, tool_context)
-    assert "File not found" in result
+def test_discover_chat_backend_no_register_tools():
+    client = MemoryChat()
+    module = SimpleNamespace(create_client=lambda: client)
+
+    ep = MagicMock()
+    ep.load.return_value = module
+    with patch("importlib.metadata.entry_points", return_value=[ep]):
+        result_client, register_fn = _discover_chat_backend()
+    assert result_client is client
+    assert register_fn is None
 
 
-async def test_register_chat_tools_send_file_is_dir(
-    chat: MemoryChat, tool_context: ToolContext
-):
-    (tool_context.workspace / "subdir").mkdir()
-    _register_chat_tools(chat, tool_context)
-    result = await registry.execute("send_file", {"path": "subdir"}, tool_context)
-    assert "Cannot send a directory" in result
+def test_discover_chat_backend_no_plugins():
+    with patch("importlib.metadata.entry_points", return_value=[]):
+        with pytest.raises(RuntimeError, match="No chat backend installed"):
+            _discover_chat_backend()
 
 
 async def test_register_docket_tools_schedule_with_key(

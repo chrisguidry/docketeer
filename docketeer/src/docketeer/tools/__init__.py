@@ -119,6 +119,19 @@ def _safe_path(workspace: Path, path: str) -> Path:
 
 registry = ToolRegistry()
 
+
+def _load_tool_plugins() -> None:
+    """Discover and load tool plugins registered via the docketeer.tools entry_point group."""
+    from importlib.metadata import entry_points
+
+    for ep in entry_points(group="docketeer.tools"):
+        try:
+            ep.load()
+        except Exception:
+            log.warning("Failed to load tool plugin: %s", ep.name, exc_info=True)
+
+
 import docketeer.tools.journal as _journal  # noqa: E402, F401
-import docketeer.tools.web as _web  # noqa: E402, F401
 import docketeer.tools.workspace as _workspace  # noqa: E402, F401
+
+_load_tool_plugins()

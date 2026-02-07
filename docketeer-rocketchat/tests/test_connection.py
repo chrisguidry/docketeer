@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 import httpx
 import respx
 
-from docketeer.chat import RocketChatClient
+from docketeer_rocketchat.client import RocketChatClient
 
 
 async def test_close():
@@ -32,7 +32,7 @@ def test_user_id_property():
 async def test_connect():
     client = RocketChatClient()
 
-    with patch("docketeer.chat.DDPClient") as mock_ddp_cls:
+    with patch("docketeer_rocketchat.client.DDPClient") as mock_ddp_cls:
         ddp = AsyncMock()
         mock_ddp_cls.return_value = ddp
 

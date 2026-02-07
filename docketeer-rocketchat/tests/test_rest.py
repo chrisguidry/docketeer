@@ -9,7 +9,7 @@ import httpx
 import pytest
 import respx
 
-from docketeer.chat import RocketChatClient, _parse_rc_timestamp
+from docketeer_rocketchat.client import RocketChatClient, _parse_rc_timestamp
 
 
 def test_parse_rc_timestamp_dict():
@@ -141,6 +141,76 @@ async def test_fetch_room_history_failure(rc: RocketChatClient):
 
 
 @respx.mock
+async def test_fetch_history_as_messages(rc: RocketChatClient):
+    respx.get("http://localhost:3000/api/v1/dm.history").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "messages": [
+                    {
+                        "msg": "hi back",
+                        "u": {"_id": "bot_uid", "username": "testbot"},
+                        "ts": "2026-02-06T10:01:00+00:00",
+                    },
+                    {
+                        "msg": "hello",
+                        "u": {"_id": "user1", "username": "alice"},
+                        "ts": "2026-02-06T10:00:00+00:00",
+                    },
+                ]
+            },
+        )
+    )
+    msgs = await rc.fetch_history_as_messages("room1")
+    assert len(msgs) == 2
+    assert msgs[0].role == "user"
+    assert msgs[0].username == "alice"
+    assert msgs[1].role == "assistant"
+    assert msgs[1].username == "testbot"
+    assert msgs[0].timestamp != ""
+
+
+@respx.mock
+async def test_fetch_history_as_messages_skips_system_and_empty(rc: RocketChatClient):
+    respx.get("http://localhost:3000/api/v1/dm.history").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "messages": [
+                    {"msg": "", "t": "uj", "u": {"_id": "u1", "username": "alice"}},
+                    {"msg": "", "u": {"_id": "u1", "username": "alice"}},
+                    {
+                        "msg": "real",
+                        "u": {"_id": "user1", "username": "alice"},
+                        "ts": "2026-02-06T10:00:00+00:00",
+                    },
+                ]
+            },
+        )
+    )
+    msgs = await rc.fetch_history_as_messages("room1")
+    assert len(msgs) == 1
+    assert msgs[0].text == "real"
+
+
+@respx.mock
+async def test_fetch_history_as_messages_no_timestamp(rc: RocketChatClient):
+    respx.get("http://localhost:3000/api/v1/dm.history").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "messages": [
+                    {"msg": "no ts", "u": {"_id": "user1", "username": "alice"}},
+                ]
+            },
+        )
+    )
+    msgs = await rc.fetch_history_as_messages("room1")
+    assert len(msgs) == 1
+    assert msgs[0].timestamp == ""
+
+
+@respx.mock
 async def test_list_dm_rooms(rc: RocketChatClient):
     respx.get("http://localhost:3000/api/v1/dm.list").mock(
         return_value=httpx.Response(200, json={"ims": [{"_id": "r1"}, {"_id": "r2"}]})
@@ -181,7 +251,7 @@ async def test_set_status_all_retries_fail(rc: RocketChatClient):
     respx.post("http://localhost:3000/api/v1/users.setStatus").mock(
         side_effect=httpx.HTTPError("fail")
     )
-    with patch("docketeer.chat.asyncio.sleep", new_callable=AsyncMock):
+    with patch("docketeer_rocketchat.client.asyncio.sleep", new_callable=AsyncMock):
         await rc.set_status("online")
 
 

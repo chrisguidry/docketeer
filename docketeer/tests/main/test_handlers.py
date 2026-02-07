@@ -10,7 +10,8 @@ from docketeer.chat import Attachment, IncomingMessage
 from docketeer.main import build_content, handle_message, run, send_response
 from docketeer.prompt import BrainResponse, HistoryMessage
 from docketeer.testing import MemoryChat
-from tests.conftest import (
+
+from ..conftest import (
     FakeMessage,
     FakeMessages,
     make_text_block,
@@ -42,12 +43,10 @@ async def test_handle_message_new_room(
     chat: MemoryChat, brain: Brain, fake_messages: FakeMessages
 ):
     fake_messages.responses = [FakeMessage(content=[make_text_block(text="Hello!")])]
-    chat._room_history["new_room"] = [
-        {
-            "msg": "old msg",
-            "u": {"_id": "u1", "username": "alice"},
-            "ts": "2026-02-06T10:00:00Z",
-        }
+    chat._history_messages["new_room"] = [
+        HistoryMessage(
+            role="user", username="alice", text="old msg", timestamp="2026-02-06 10:00"
+        )
     ]
 
     msg = IncomingMessage(

@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 import httpx
 import respx
 
-from docketeer.chat import RocketChatClient
+from docketeer_rocketchat.client import RocketChatClient
 
 
 async def test_incoming_messages_filters():

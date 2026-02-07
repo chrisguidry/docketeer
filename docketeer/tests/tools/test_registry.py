@@ -1,12 +1,14 @@
 """Tests for tool registry, schema generation, path safety, and param docs."""
 
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from docketeer.tools import (
     ToolContext,
     ToolRegistry,
+    _load_tool_plugins,
     _parse_param_docs,
     _safe_path,
     _schema_from_hints,
@@ -176,3 +178,19 @@ def test_safe_path_traversal_blocked(tmp_path: Path):
     workspace.mkdir()
     with pytest.raises(ValueError, match="outside workspace"):
         _safe_path(workspace, "../../../etc/passwd")
+
+
+def test_load_tool_plugins_calls_load():
+    ep = MagicMock()
+    ep.name = "test_plugin"
+    with patch("importlib.metadata.entry_points", return_value=[ep]):
+        _load_tool_plugins()
+    ep.load.assert_called_once()
+
+
+def test_load_tool_plugins_warns_on_failure():
+    ep = MagicMock()
+    ep.name = "broken_plugin"
+    ep.load.side_effect = ImportError("no such module")
+    with patch("importlib.metadata.entry_points", return_value=[ep]):
+        _load_tool_plugins()

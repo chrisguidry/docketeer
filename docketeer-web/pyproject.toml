@@ -1,0 +1,62 @@
+[project]
+name = "docketeer-web"
+version = "0.1.0"
+description = "Web tools plugin for Docketeer"
+authors = [
+    { name = "Chris Guidry", email = "chris@theguidrys.us" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "docketeer",
+    "httpx",
+]
+
+[project.entry-points."docketeer.tools"]
+web = "docketeer_web"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/docketeer_web"]
+
+[tool.uv.sources]
+docketeer = { workspace = true }
+
+[tool.pytest_env]
+DOCKETEER_ANTHROPIC_API_KEY = "test-key"
+DOCKETEER_BRAVE_API_KEY = "brave-test-key"
+
+[tool.pytest.ini_options]
+minversion = "9.0"
+addopts = [
+    "--import-mode=importlib",
+    "--cov=src/docketeer_web",
+    "--cov-branch",
+    "--cov-report=term-missing",
+]
+asyncio_mode = "auto"
+filterwarnings = [
+    "error",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["src/docketeer_web"]
+
+[tool.coverage.report]
+fail_under = 100
+precision = 2
+skip_empty = true
+skip_covered = true
+exclude_also = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+    "@overload",
+    "@abstractmethod",
+]

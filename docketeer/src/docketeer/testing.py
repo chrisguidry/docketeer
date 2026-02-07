@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from docketeer.chat import ChatClient, IncomingMessage
+from docketeer.prompt import HistoryMessage
 
 
 @dataclass
@@ -41,6 +42,7 @@ class MemoryChat(ChatClient):
         self.typing_events: list[tuple[str, bool]] = []
         self._incoming: asyncio.Queue[IncomingMessage | None] = asyncio.Queue()
         self._room_history: dict[str, list[dict[str, Any]]] = {}
+        self._history_messages: dict[str, list[HistoryMessage]] = {}
         self._dm_rooms: list[dict[str, Any]] = []
         self._attachments: dict[str, bytes] = {}
         self._messages: dict[str, dict[str, Any]] = {}
@@ -86,6 +88,11 @@ class MemoryChat(ChatClient):
         self, room_id: str, count: int = 20
     ) -> list[dict[str, Any]]:
         return self._room_history.get(room_id, [])[:count]
+
+    async def fetch_history_as_messages(
+        self, room_id: str, count: int = 20
+    ) -> list[HistoryMessage]:
+        return self._history_messages.get(room_id, [])[:count]
 
     async def list_dm_rooms(self) -> list[dict[str, Any]]:
         return self._dm_rooms

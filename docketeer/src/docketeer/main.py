@@ -14,14 +14,9 @@ from docket import Docket, Worker
 
 from docketeer import environment, tasks
 from docketeer.brain import Brain, ProcessCallbacks
-from docketeer.chat import (
-    ChatClient,
-    IncomingMessage,
-    RocketChatClient,
-    _parse_rc_timestamp,
-)
-from docketeer.prompt import BrainResponse, HistoryMessage, MessageContent, RoomInfo
-from docketeer.tools import ToolContext, _safe_path, registry
+from docketeer.chat import ChatClient, IncomingMessage
+from docketeer.prompt import BrainResponse, MessageContent, RoomInfo
+from docketeer.tools import ToolContext, registry
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s"
@@ -50,24 +45,17 @@ def _acquire_lock(data_dir: Path) -> None:
         sys.exit(1)
 
 
-def _register_chat_tools(client: ChatClient, tool_context: ToolContext) -> None:
-    """Register tools that need the chat client."""
+def _discover_chat_backend() -> tuple[ChatClient, Any]:
+    """Discover the chat backend via entry_points."""
+    from importlib.metadata import entry_points
 
-    @registry.tool
-    async def send_file(ctx: ToolContext, path: str, message: str = "") -> str:
-        """Send a file from the workspace to the current chat room.
-
-        path: relative path to the file in workspace
-        message: optional message to include with the file
-        """
-        target = _safe_path(ctx.workspace, path)
-        if not target.exists():
-            return f"File not found: {path}"
-        if target.is_dir():
-            return f"Cannot send a directory: {path}"
-
-        await client.upload_file(ctx.room_id, str(target), message=message)
-        return f"Sent {path} to chat"
+    eps = list(entry_points(group="docketeer.chat"))
+    if not eps:
+        raise RuntimeError("No chat backend installed")
+    module = eps[0].load()
+    client = module.create_client()
+    register_fn = getattr(module, "register_tools", None)
+    return client, register_fn
 
 
 def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
@@ -158,7 +146,7 @@ async def main() -> None:  # pragma: no cover
     # Create tool context
     tool_context = ToolContext(workspace=environment.WORKSPACE_PATH)
 
-    client = RocketChatClient()
+    client, register_chat_tools = _discover_chat_backend()
     brain = Brain(tool_context)
     tool_context.on_people_write = brain.rebuild_person_map
 
@@ -170,7 +158,8 @@ async def main() -> None:  # pragma: no cover
         docket.register_collection("docketeer.tasks:docketeer_tasks")
 
         # Register tools (chat + docket)
-        _register_chat_tools(client, tool_context)
+        if register_chat_tools:
+            register_chat_tools(client, tool_context)
         _register_docket_tools(docket, tool_context)
 
         async with Worker(docket) as worker:
@@ -184,6 +173,7 @@ async def main() -> None:  # pragma: no cover
             log.info("Subscribing to messages...")
             await client.subscribe_to_my_messages()
 
+            await client.set_status_available()
             log.info("Listening for messages...")
             try:
                 async for msg in client.incoming_messages():
@@ -222,50 +212,9 @@ async def load_all_history(client: ChatClient, brain: Brain) -> None:
         )
 
         log.info("  Loading history for DM with %s", room_label)
-        history = await fetch_history_for_brain(client, room_id)
+        history = await client.fetch_history_as_messages(room_id)
         count = brain.load_history(room_id, history)
         log.info("    Loaded %d messages", count)
-
-
-def _format_timestamp(ts: Any) -> str:
-    """Parse an RC timestamp and format it in local time."""
-    dt = _parse_rc_timestamp(ts)
-    if not dt:
-        return ""
-    return dt.astimezone().strftime("%Y-%m-%d %H:%M")
-
-
-async def fetch_history_for_brain(
-    client: ChatClient, room_id: str
-) -> list[HistoryMessage]:
-    """Fetch room history and convert to Brain's format."""
-    raw_history = await client.fetch_room_history(room_id, count=20)
-    messages = []
-
-    for msg in raw_history:
-        if msg.get("t"):
-            continue
-
-        text = msg.get("msg", "")
-        if not text:
-            continue
-
-        user = msg.get("u", {})
-        username = user.get("username", "unknown")
-        is_bot = user.get("_id") == client.user_id
-        role = "assistant" if is_bot else "user"
-        timestamp = _format_timestamp(msg.get("ts"))
-
-        messages.append(
-            HistoryMessage(
-                role=role,
-                username=username,
-                text=text,
-                timestamp=timestamp,
-            )
-        )
-
-    return messages
 
 
 async def handle_message(
@@ -277,7 +226,7 @@ async def handle_message(
     # Load history if this is a new room
     if not brain.has_history(msg.room_id):
         log.info("  New room, loading history...")
-        history = await fetch_history_for_brain(client, msg.room_id)
+        history = await client.fetch_history_as_messages(msg.room_id)
         count = brain.load_history(msg.room_id, history)
         log.info("    Loaded %d messages", count)
 
@@ -379,10 +328,11 @@ def run_dev() -> None:  # pragma: no cover
     """Run with live reload on file changes."""
     from watchfiles import run_process
 
-    src_path = Path(__file__).parent
-    log.info("Dev mode: watching %s for changes...", src_path)
+    repo_root = Path(__file__).resolve().parents[3]
+    watch_paths = sorted(repo_root.glob("docketeer*/src"))
+    log.info("Dev mode: watching %s for changes...", watch_paths)
 
-    run_process(src_path, target=_run_main)
+    run_process(*watch_paths, target=_run_main)
 
 
 def _run_main() -> None:  # pragma: no cover

@@ -3,43 +3,18 @@
 import asyncio
 import logging
 import mimetypes
-from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import httpx
 
-from docketeer import environment
-from docketeer.ddp import DDPClient
+from docketeer.chat import Attachment, ChatClient, IncomingMessage
+from docketeer.prompt import HistoryMessage
+from docketeer_rocketchat.ddp import DDPClient
 
 log = logging.getLogger(__name__)
-
-ROCKETCHAT_URL = environment.get_str("ROCKETCHAT_URL")
-ROCKETCHAT_USERNAME = environment.get_str("ROCKETCHAT_USERNAME")
-ROCKETCHAT_PASSWORD = environment.get_str("ROCKETCHAT_PASSWORD")
-
-
-@dataclass
-class Attachment:
-    url: str
-    media_type: str
-    title: str = ""
-
-
-@dataclass
-class IncomingMessage:
-    message_id: str
-    user_id: str
-    username: str
-    display_name: str
-    text: str
-    room_id: str
-    is_direct: bool
-    timestamp: datetime | None = None
-    attachments: list[Attachment] | None = None
 
 
 def _parse_rc_timestamp(ts: Any) -> datetime | None:
@@ -54,70 +29,15 @@ def _parse_rc_timestamp(ts: Any) -> datetime | None:
     return None
 
 
-class ChatClient(ABC):
-    """Abstract chat client interface for testing and alternative backends."""
-
-    username: str
-    user_id: str
-
-    @abstractmethod
-    async def connect(self) -> None: ...
-
-    @abstractmethod
-    async def close(self) -> None: ...
-
-    @abstractmethod
-    async def subscribe_to_my_messages(self) -> None: ...
-
-    @abstractmethod
-    def incoming_messages(self) -> AsyncGenerator[IncomingMessage, None]: ...
-
-    @abstractmethod
-    async def send_message(
-        self, room_id: str, text: str, attachments: list[dict[str, Any]] | None = None
-    ) -> None: ...
-
-    @abstractmethod
-    async def upload_file(
-        self, room_id: str, file_path: str, message: str = ""
-    ) -> None: ...
-
-    @abstractmethod
-    async def fetch_attachment(self, url: str) -> bytes: ...
-
-    @abstractmethod
-    async def fetch_message(self, message_id: str) -> dict[str, Any] | None: ...
-
-    @abstractmethod
-    async def fetch_room_history(
-        self, room_id: str, count: int = 20
-    ) -> list[dict[str, Any]]: ...
-
-    @abstractmethod
-    async def list_dm_rooms(self) -> list[dict[str, Any]]: ...
-
-    @abstractmethod
-    async def set_status(self, status: str, message: str = "") -> None: ...
-
-    async def set_status_busy(self) -> None:
-        """Signal that the bot is busy (e.g. executing tools)."""
-        await self.set_status("away")
-
-    async def set_status_available(self) -> None:
-        """Signal that the bot is idle and ready."""
-        await self.set_status("online")
-
-    @abstractmethod
-    async def send_typing(self, room_id: str, typing: bool) -> None: ...
-
-
 class RocketChatClient(ChatClient):
     """Hybrid Rocket Chat client: DDP for subscriptions, async REST for actions."""
 
     def __init__(self) -> None:
-        self.url = ROCKETCHAT_URL.rstrip("/")
-        self.username = ROCKETCHAT_USERNAME
-        self.password = ROCKETCHAT_PASSWORD
+        from docketeer import environment
+
+        self.url = environment.get_str("ROCKETCHAT_URL").rstrip("/")
+        self.username = environment.get_str("ROCKETCHAT_USERNAME")
+        self.password = environment.get_str("ROCKETCHAT_PASSWORD")
         self._ddp: DDPClient | None = None
         self._http: httpx.AsyncClient | None = None
         self._user_id: str | None = None
@@ -243,6 +163,34 @@ class RocketChatClient(ChatClient):
         except Exception as e:
             log.warning("Failed to fetch room history for %s: %s", room_id, e)
             return []
+
+    async def fetch_history_as_messages(
+        self, room_id: str, count: int = 20
+    ) -> list[HistoryMessage]:
+        """Fetch room history and convert to HistoryMessage objects."""
+        raw_history = await self.fetch_room_history(room_id, count)
+        messages = []
+        for msg in raw_history:
+            if msg.get("t"):
+                continue
+            text = msg.get("msg", "")
+            if not text:
+                continue
+            user = msg.get("u", {})
+            username = user.get("username", "unknown")
+            is_bot = user.get("_id") == self.user_id
+            role = "assistant" if is_bot else "user"
+            dt = _parse_rc_timestamp(msg.get("ts"))
+            timestamp = dt.astimezone().strftime("%Y-%m-%d %H:%M") if dt else ""
+            messages.append(
+                HistoryMessage(
+                    role=role,
+                    username=username,
+                    text=text,
+                    timestamp=timestamp,
+                )
+            )
+        return messages
 
     async def list_dm_rooms(self) -> list[dict[str, Any]]:
         """List all DM rooms for the bot."""
