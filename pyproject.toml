@@ -81,6 +81,25 @@ parametrize-names-type = "tuple"
 parametrize-values-type = "list"
 parametrize-values-row-type = "tuple"
 
+[tool.coverage.run]
+branch = true
+omit = ["*/__main__.py", "*/testing.py"]
+
+[tool.coverage.report]
+precision = 2
+skip_empty = true
+skip_covered = true
+exclude_also = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+    "@overload",
+    "@abstractmethod",
+]
+
 [tool.ty.rules]
 unused-ignore-comment = "error"
 invalid-ignore-comment = "error"

@@ -35,31 +35,12 @@ DOCKETEER_ANTHROPIC_API_KEY = "test-key"
 minversion = "9.0"
 addopts = [
     "--import-mode=importlib",
-    "--cov=src/docketeer_rocketchat",
+    "--cov=docketeer_rocketchat",
     "--cov-branch",
     "--cov-report=term-missing",
+    "--cov-fail-under=100",
 ]
 asyncio_mode = "auto"
 filterwarnings = [
     "error",
-]
-
-[tool.coverage.run]
-branch = true
-source = ["src/docketeer_rocketchat"]
-
-[tool.coverage.report]
-fail_under = 100
-precision = 2
-skip_empty = true
-skip_covered = true
-exclude_also = [
-    "pragma: no cover",
-    "def __repr__",
-    "raise AssertionError",
-    "raise NotImplementedError",
-    "if TYPE_CHECKING:",
-    "if __name__ == .__main__.:",
-    "@overload",
-    "@abstractmethod",
 ]
