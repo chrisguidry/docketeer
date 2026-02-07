@@ -101,6 +101,9 @@ class Brain:
 
         ensure_template(self._workspace, "cycles.md")
 
+        self.tool_context.summarize = self._summarize_webpage
+        self.tool_context.classify_response = self._classify_response
+
         self._person_map = build_person_map(self._workspace)
         log.info("Person map: %s", self._person_map)
 
@@ -408,6 +411,52 @@ class Brain:
         except Exception:
             log.exception("Summarization failed, falling back to truncation")
             return None
+
+    async def _summarize_webpage(self, text: str, purpose: str) -> str:
+        """Ask Haiku to summarize a web page, guided by the fetch purpose."""
+        focus = f" for someone who wants to: {purpose}" if purpose else ""
+        response = await self.client.messages.create(
+            model=COMPACT_MODEL,
+            max_tokens=2048,
+            messages=[
+                {
+                    "role": "user",
+                    "content": (
+                        f"Summarize this web page{focus}. "
+                        "Preserve key facts, URLs, numbers, and any structured data. "
+                        "Omit navigation, ads, and boilerplate.\n\n"
+                        f"{text}"
+                    ),
+                }
+            ],
+        )
+        first_block = response.content[0]
+        return str(first_block.text if hasattr(first_block, "text") else first_block)
+
+    async def _classify_response(
+        self, url: str, status_code: int, headers: str
+    ) -> bool:
+        """Ask Haiku whether an HTTP response body is likely readable text."""
+        response = await self.client.messages.create(
+            model=COMPACT_MODEL,
+            max_tokens=8,
+            messages=[
+                {
+                    "role": "user",
+                    "content": (
+                        "Given this HTTP response, is the body likely readable text "
+                        "(HTML, JSON, plain text, etc.) that would be useful to read? "
+                        "Answer only 'true' or 'false'.\n\n"
+                        f"URL: {url}\n"
+                        f"Status: {status_code}\n"
+                        f"Headers:\n{headers}"
+                    ),
+                }
+            ],
+        )
+        first_block = response.content[0]
+        answer = str(first_block.text) if hasattr(first_block, "text") else ""
+        return answer.strip().lower() == "true"
 
     def _build_content(self, content: MessageContent) -> list[dict] | str:
         """Build content blocks for Claude."""

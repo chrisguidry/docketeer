@@ -1,23 +1,15 @@
 """Tool registry and toolkit for the Docketeer agent."""
 
-import asyncio
 import inspect
-import json
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from types import FunctionType
 from typing import Any, get_type_hints
 
-import httpx
-
-from docketeer import environment
-
 log = logging.getLogger(__name__)
-
-BRAVE_API_KEY = environment.get_str("BRAVE_API_KEY")
 
 
 @dataclass
@@ -26,6 +18,8 @@ class ToolContext:
     username: str = ""
     room_id: str = ""
     on_people_write: Callable[[], None] | None = None
+    summarize: Callable[[str, str], Awaitable[str]] | None = None
+    classify_response: Callable[[str, int, str], Awaitable[bool]] | None = None
 
 
 class ToolRegistry:
@@ -322,107 +316,4 @@ async def journal_search(ctx: ToolContext, query: str) -> str:
     return "\n".join(matches)
 
 
-@registry.tool
-async def web_search(ctx: ToolContext, query: str, count: int = 5) -> str:
-    """Search the web using Brave Search.
-
-    query: search query
-    count: number of results (default 5)
-    """
-    if not BRAVE_API_KEY:
-        return (
-            "Error: Brave Search API key not configured (set DOCKETEER_BRAVE_API_KEY)"
-        )
-
-    max_retries = 3
-    async with httpx.AsyncClient() as client:
-        for attempt in range(max_retries):
-            response = await client.get(
-                "https://api.search.brave.com/res/v1/web/search",
-                params={"q": query, "count": count},
-                headers={"X-Subscription-Token": BRAVE_API_KEY},
-                timeout=30,
-            )
-            if response.status_code == 429:
-                retry_after = int(response.headers.get("retry-after", 1))
-                log.info(
-                    "Brave rate limited, retrying in %ds (attempt %d/%d)",
-                    retry_after,
-                    attempt + 1,
-                    max_retries,
-                )
-                await asyncio.sleep(retry_after)
-                continue
-            if response.status_code == 401:
-                return "Error: Brave Search API key is invalid"
-            response.raise_for_status()
-            break
-        else:
-            return "Error: Brave Search rate limit exceeded, try again shortly"
-
-        data = response.json()
-
-    results = data.get("web", {}).get("results", [])
-    if not results:
-        return f"No results for '{query}'"
-
-    lines = []
-    for i, r in enumerate(results, 1):
-        title = r.get("title", "")
-        url = r.get("url", "")
-        desc = r.get("description", "")
-        lines.append(f"{i}. {title}\n   {url}\n   {desc}")
-
-    return "\n\n".join(lines)
-
-
-@registry.tool
-async def web_request(
-    ctx: ToolContext, url: str, method: str = "GET", headers: str = "", body: str = ""
-) -> str:
-    """Make an HTTP request to a URL.
-
-    url: the URL to request
-    method: HTTP method (default GET)
-    headers: optional JSON string of headers
-    body: optional request body
-    """
-    parsed_headers = {}
-    if headers:
-        try:
-            parsed_headers = json.loads(headers)
-        except json.JSONDecodeError:
-            return "Error: headers must be a valid JSON string"
-
-    async with httpx.AsyncClient() as client:
-        response = await client.request(
-            method=method,
-            url=url,
-            headers=parsed_headers,
-            content=body or None,
-            timeout=30,
-        )
-
-    text = response.text
-    if len(text) > 10_000:
-        text = text[:10_000] + "\n... (truncated)"
-
-    return f"HTTP {response.status_code}\n\n{text}"
-
-
-@registry.tool
-async def download_file(ctx: ToolContext, url: str, path: str) -> str:
-    """Download a file from a URL to the workspace.
-
-    url: the URL to download
-    path: relative path in workspace to save the file
-    """
-    target = _safe_path(ctx.workspace, path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-
-    async with httpx.AsyncClient(follow_redirects=True) as client:
-        response = await client.get(url, timeout=60)
-        response.raise_for_status()
-
-    target.write_bytes(response.content)
-    return f"Downloaded {len(response.content)} bytes to {path}"
+import docketeer.web as _web  # noqa: E402, F401 — registers web tools with the registry
