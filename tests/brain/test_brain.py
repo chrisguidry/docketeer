@@ -3,8 +3,9 @@
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-from docketeer.brain import Brain, HistoryMessage, MessageContent
+from docketeer.brain import Brain
 from docketeer.config import Config
+from docketeer.prompt import HistoryMessage, MessageContent
 from docketeer.tools import ToolContext
 
 from ..conftest import FakeMessage, make_text_block, make_tool_use_block

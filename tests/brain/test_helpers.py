@@ -6,19 +6,19 @@ from pathlib import Path
 
 import pytest
 
-from docketeer.brain import (
-    _audit_log,
-    _build_system_blocks,
-    _ensure_template,
-    _extract_text,
-    _log_usage,
+from docketeer.brain import _audit_log, _log_usage
+from docketeer.prompt import (
+    RoomInfo,
+    build_system_blocks,
+    ensure_template,
+    extract_text,
 )
 
 from ..conftest import FakeMessage, make_text_block
 
 
 def test_ensure_template_copies_when_missing(workspace: Path):
-    _ensure_template(workspace, "soul.md")
+    ensure_template(workspace, "soul.md")
     target = workspace / "SOUL.md"
     assert target.exists()
     source = importlib.resources.files("docketeer").joinpath("soul.md")
@@ -28,13 +28,13 @@ def test_ensure_template_copies_when_missing(workspace: Path):
 def test_ensure_template_skips_existing(workspace: Path):
     target = workspace / "SOUL.md"
     target.write_text("custom soul")
-    _ensure_template(workspace, "soul.md")
+    ensure_template(workspace, "soul.md")
     assert target.read_text() == "custom soul"
 
 
 def test_build_system_blocks_without_person_context(workspace: Path):
     (workspace / "SOUL.md").write_text("I am the soul")
-    blocks = _build_system_blocks(workspace, "2026-02-06 10:00 EST", "chris")
+    blocks = build_system_blocks(workspace, "2026-02-06 10:00 EST", "chris")
     assert len(blocks) == 2
     assert "I am the soul" in blocks[0]["text"]
     assert blocks[0]["cache_control"] == {"type": "ephemeral"}
@@ -44,7 +44,7 @@ def test_build_system_blocks_without_person_context(workspace: Path):
 
 def test_build_system_blocks_with_person_context(workspace: Path):
     (workspace / "SOUL.md").write_text("soul")
-    blocks = _build_system_blocks(
+    blocks = build_system_blocks(
         workspace, "2026-02-06 10:00", "chris", person_context="Chris likes coffee"
     )
     dynamic = blocks[1]["text"]
@@ -52,10 +52,53 @@ def test_build_system_blocks_with_person_context(workspace: Path):
     assert "Chris likes coffee" in dynamic
 
 
+def test_build_system_blocks_dm_room(workspace: Path):
+    (workspace / "SOUL.md").write_text("soul")
+    info = RoomInfo(room_id="r1", is_direct=True, members=["nix", "alice"])
+    blocks = build_system_blocks(workspace, "2026-02-06 10:00", "alice", room_info=info)
+    dynamic = blocks[1]["text"]
+    assert "Room: DM with @nix" in dynamic
+
+
+def test_build_system_blocks_dm_room_no_others(workspace: Path):
+    (workspace / "SOUL.md").write_text("soul")
+    info = RoomInfo(room_id="r1", is_direct=True, members=["alice"])
+    blocks = build_system_blocks(workspace, "2026-02-06 10:00", "alice", room_info=info)
+    dynamic = blocks[1]["text"]
+    assert "Room: DM" in dynamic
+
+
+def test_build_system_blocks_group_room_with_name(workspace: Path):
+    (workspace / "SOUL.md").write_text("soul")
+    info = RoomInfo(
+        room_id="r1", is_direct=False, members=["alice", "bob", "chris"], name="general"
+    )
+    blocks = build_system_blocks(workspace, "2026-02-06 10:00", "chris", room_info=info)
+    dynamic = blocks[1]["text"]
+    assert "Room: #general (with @alice, @bob)" in dynamic
+
+
+def test_build_system_blocks_group_room_no_name(workspace: Path):
+    (workspace / "SOUL.md").write_text("soul")
+    info = RoomInfo(room_id="r1", is_direct=False, members=["alice", "bob"])
+    blocks = build_system_blocks(workspace, "2026-02-06 10:00", "bob", room_info=info)
+    dynamic = blocks[1]["text"]
+    assert "Room: group chat (with @alice)" in dynamic
+
+
+def test_build_system_blocks_group_room_no_others(workspace: Path):
+    (workspace / "SOUL.md").write_text("soul")
+    info = RoomInfo(room_id="r1", is_direct=False, members=["chris"], name="solo")
+    blocks = build_system_blocks(workspace, "2026-02-06 10:00", "chris", room_info=info)
+    dynamic = blocks[1]["text"]
+    assert "Room: #solo" in dynamic
+    assert "(with" not in dynamic
+
+
 def test_build_system_blocks_with_bootstrap(workspace: Path):
     (workspace / "SOUL.md").write_text("soul")
     (workspace / "BOOTSTRAP.md").write_text("bootstrap instructions")
-    blocks = _build_system_blocks(workspace, "2026-02-06 10:00", "chris")
+    blocks = build_system_blocks(workspace, "2026-02-06 10:00", "chris")
     assert "bootstrap instructions" in blocks[0]["text"]
 
 
@@ -86,7 +129,7 @@ def test_log_usage(caplog: pytest.LogCaptureFixture):
 
 
 def test_extract_text_string():
-    assert _extract_text("hello") == "hello"
+    assert extract_text("hello") == "hello"
 
 
 def test_extract_text_blocks():
@@ -95,18 +138,18 @@ def test_extract_text_blocks():
         {"type": "text", "text": "second"},
         {"type": "image", "source": {}},
     ]
-    assert _extract_text(blocks) == "first\nsecond"
+    assert extract_text(blocks) == "first\nsecond"
 
 
 def test_extract_text_tool_result():
     blocks = [{"type": "tool_result", "content": "some result data here"}]
-    result = _extract_text(blocks)
+    result = extract_text(blocks)
     assert "tool result:" in result
 
 
 def test_extract_text_hasattr_block():
     block = make_text_block(text="from block")
-    assert _extract_text([block]) == "from block"
+    assert extract_text([block]) == "from block"
 
 
 def test_extract_text_mixed_block_types():
@@ -117,7 +160,7 @@ def test_extract_text_mixed_block_types():
         make_text_block(text="from sdk"),
         {"type": "image"},
     ]
-    result = _extract_text(blocks)
+    result = extract_text(blocks)
     assert "first" in result
     assert "tool result:" in result
     assert "from sdk" in result
@@ -129,7 +172,7 @@ def test_extract_text_tool_result_empty_content():
         {"type": "tool_result", "content": ""},
         {"type": "text", "text": "after"},
     ]
-    result = _extract_text(blocks)
+    result = extract_text(blocks)
     assert "tool result:" not in result
     assert "after" in result
 
@@ -137,10 +180,10 @@ def test_extract_text_tool_result_empty_content():
 def test_extract_text_non_dict_without_text():
     """Non-dict block without .text exercises the hasattr False branch."""
     blocks = [42, {"type": "text", "text": "ok"}]
-    result = _extract_text(blocks)
+    result = extract_text(blocks)
     assert result == "ok"
 
 
 def test_extract_text_skips_other():
     blocks = [{"type": "image"}, {"type": "unknown"}]
-    assert _extract_text(blocks) == ""
+    assert extract_text(blocks) == ""

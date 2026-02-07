@@ -2,11 +2,9 @@
 
 import asyncio
 import base64
-import importlib.resources
 import json
 import logging
 from collections import defaultdict
-from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
@@ -16,6 +14,15 @@ from anthropic.types import ToolUseBlock
 
 from docketeer.config import Config
 from docketeer.people import build_person_map, load_person_context
+from docketeer.prompt import (
+    BrainResponse,
+    HistoryMessage,
+    MessageContent,
+    RoomInfo,
+    build_system_blocks,
+    ensure_template,
+    extract_text,
+)
 from docketeer.tools import ToolContext, registry
 
 log = logging.getLogger(__name__)
@@ -26,52 +33,6 @@ CONTEXT_BUDGET = 180_000
 COMPACT_THRESHOLD = 140_000
 COMPACT_MODEL = "claude-haiku-4-5-20251001"
 MIN_RECENT_MESSAGES = 6
-
-
-def _ensure_template(workspace: Path, filename: str) -> None:
-    """Copy a template from the package to the workspace if it doesn't exist."""
-    stem, ext = filename.rsplit(".", 1)
-    target = workspace / f"{stem.upper()}.{ext}"
-    if target.exists():
-        return
-    source = importlib.resources.files("docketeer").joinpath(filename)
-    target.write_text(source.read_text())
-    log.info("Copied %s template to %s", filename, target)
-
-
-def _build_system_blocks(
-    workspace: Path,
-    current_time: str,
-    username: str,
-    person_context: str = "",
-) -> list[dict]:
-    """Build system prompt as content blocks for prompt caching.
-
-    The stable SOUL.md content is cached; the dynamic time/username/person
-    context block is not (but saves tool calls Nix would otherwise make).
-    """
-    soul_path = workspace / "SOUL.md"
-    stable_text = soul_path.read_text()
-
-    bootstrap_path = workspace / "BOOTSTRAP.md"
-    if bootstrap_path.exists():
-        stable_text += "\n\n" + bootstrap_path.read_text()
-
-    blocks = [
-        {
-            "type": "text",
-            "text": stable_text,
-            "cache_control": {"type": "ephemeral"},
-        },
-    ]
-
-    dynamic_parts = [f"Current time: {current_time}", f"Talking to: @{username}"]
-    if person_context:
-        dynamic_parts.append(f"\n## What I know about @{username}\n\n{person_context}")
-
-    blocks.append({"type": "text", "text": "\n".join(dynamic_parts)})
-
-    return blocks
 
 
 def _audit_log(
@@ -108,52 +69,6 @@ def _log_usage(response: anthropic.types.Message) -> None:
     )
 
 
-def _extract_text(content: str | list) -> str:
-    """Pull plain text from message content, skipping images and tool results."""
-    if isinstance(content, str):
-        return content
-    parts = []
-    for block in content:
-        if isinstance(block, dict):
-            if block.get("type") == "text":
-                parts.append(block["text"])
-            elif block.get("type") == "tool_result":
-                # Include tool results as brief context
-                result = block.get("content", "")
-                if isinstance(result, str) and result:
-                    parts.append(f"[tool result: {result[:200]}]")
-        elif hasattr(block, "text"):
-            parts.append(block.text)
-    return "\n".join(parts)
-
-
-@dataclass
-class MessageContent:
-    """Content to send to Claude - text and/or images."""
-
-    username: str
-    timestamp: str = ""
-    text: str = ""
-    images: list[tuple[str, bytes]] = field(default_factory=list)
-
-
-@dataclass
-class HistoryMessage:
-    """A message from conversation history."""
-
-    role: str
-    username: str
-    text: str
-    timestamp: str = ""
-
-
-@dataclass
-class BrainResponse:
-    """Response from Brain."""
-
-    text: str
-
-
 class Brain:
     def __init__(self, config: Config, tool_context: ToolContext) -> None:
         self.config = config
@@ -161,16 +76,21 @@ class Brain:
         self.tool_context = tool_context
         self._conversations: dict[str, list[dict[str, Any]]] = defaultdict(list)
         self._room_token_counts: dict[str, int] = {}
+        self._room_info: dict[str, RoomInfo] = {}
         self._person_map: dict[str, str] = {}
 
         soul_path = config.workspace_path / "SOUL.md"
         first_run = not soul_path.exists()
-        _ensure_template(config.workspace_path, "soul.md")
+        ensure_template(config.workspace_path, "soul.md")
         if first_run:
-            _ensure_template(config.workspace_path, "bootstrap.md")
+            ensure_template(config.workspace_path, "bootstrap.md")
 
         self._person_map = build_person_map(config.workspace_path)
         log.info("Person map: %s", self._person_map)
+
+    def set_room_info(self, room_id: str, info: RoomInfo) -> None:
+        """Store metadata about a room for use in the system prompt."""
+        self._room_info[room_id] = info
 
     def rebuild_person_map(self) -> None:
         """Rebuild the username→person-file mapping after a people/ write."""
@@ -205,11 +125,13 @@ class Brain:
             content.username,
             self._person_map,
         )
-        system = _build_system_blocks(
+        room_info = self._room_info.get(room_id)
+        system = build_system_blocks(
             self.config.workspace_path,
             current_time,
             content.username,
             person_context=person_context,
+            room_info=room_info,
         )
 
         # Tool definitions with cache breakpoint on last definition
@@ -237,7 +159,10 @@ class Brain:
         log.debug("Processing message with %d history messages", len(messages))
 
         # Agentic loop: keep calling Claude until no more tool use
+        tool_blocks = []
+        rounds = 0
         for _ in range(MAX_TOOL_ROUNDS):
+            rounds += 1
             response = await asyncio.to_thread(
                 self._stream_message, system, messages, tools
             )
@@ -258,7 +183,7 @@ class Brain:
             else:
                 break
 
-        reply = self._build_reply(response, bool(tool_blocks))
+        reply = self._build_reply(response, bool(tool_blocks), rounds)
 
         self._conversations[room_id].append({"role": "assistant", "content": reply})
 
@@ -339,7 +264,7 @@ class Brain:
         }
 
     def _build_reply(
-        self, response: anthropic.types.Message, had_tool_use: bool
+        self, response: anthropic.types.Message, had_tool_use: bool, rounds: int
     ) -> str:
         """Extract the final reply text from a response."""
         reply_parts = []
@@ -352,7 +277,20 @@ class Brain:
                 "\n\n(I hit my response length limit — ask me to continue if I got cut off)"
             )
 
-        return "\n".join(reply_parts).strip() if reply_parts else "(no response)"
+        if not reply_parts:
+            block_types = [
+                getattr(b, "type", type(b).__name__) for b in response.content
+            ]
+            log.warning(
+                "No text in response: stop_reason=%s, blocks=%s, rounds=%d/%d",
+                response.stop_reason,
+                block_types,
+                rounds,
+                MAX_TOOL_ROUNDS,
+            )
+            return "(no response)"
+
+        return "\n".join(reply_parts).strip()
 
     def _measure_context(self, room_id: str, system: Any, tools: Any) -> int:
         """Count tokens for the current conversation state."""
@@ -378,7 +316,7 @@ class Brain:
         # Build a transcript of the old messages for summarization
         transcript_lines = []
         for msg in old_messages:
-            text = _extract_text(msg["content"])
+            text = extract_text(msg["content"])
             if text:
                 transcript_lines.append(f"{msg['role']}: {text}")
         transcript = "\n".join(transcript_lines)

@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from docketeer import tasks
-from docketeer.brain import BrainResponse, MessageContent
+from docketeer.prompt import BrainResponse, MessageContent
 
 
 @pytest.fixture(autouse=True)

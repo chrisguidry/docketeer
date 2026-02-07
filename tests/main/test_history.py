@@ -33,6 +33,9 @@ async def test_load_all_history(chat: MemoryChat, brain: Brain):
     await load_all_history(chat, brain)
     assert brain.has_history("r1")
     assert brain.has_history("r2")
+    assert brain._room_info["r1"].is_direct is True
+    assert brain._room_info["r1"].members == ["testbot", "alice"]
+    assert brain._room_info["r2"].members == ["testbot", "bob"]
 
 
 async def test_load_all_history_skips_no_id(chat: MemoryChat, brain: Brain):

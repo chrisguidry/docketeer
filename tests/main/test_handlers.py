@@ -3,9 +3,10 @@
 from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
-from docketeer.brain import Brain, BrainResponse, HistoryMessage
+from docketeer.brain import Brain
 from docketeer.chat import Attachment, IncomingMessage
 from docketeer.main import build_content, handle_message, run, send_response
+from docketeer.prompt import BrainResponse, HistoryMessage
 from docketeer.testing import MemoryChat
 from tests.conftest import FakeMessage, FakeMessages, make_text_block
 
@@ -54,6 +55,9 @@ async def test_handle_message_new_room(
     await handle_message(chat, brain, msg)
     assert brain.has_history("new_room")
     assert len(chat.sent_messages) == 1
+    info = brain._room_info["new_room"]
+    assert info.is_direct is True
+    assert info.members == ["alice"]
 
 
 async def test_handle_message_sets_status(

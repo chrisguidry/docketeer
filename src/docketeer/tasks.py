@@ -2,8 +2,9 @@
 
 from datetime import datetime
 
-from docketeer.brain import Brain, BrainResponse, MessageContent
+from docketeer.brain import Brain
 from docketeer.chat import ChatClient
+from docketeer.prompt import BrainResponse, MessageContent
 
 _brain: Brain | None = None
 _client: ChatClient | None = None

@@ -13,7 +13,7 @@ from typing import Any
 from docket import Docket, Worker
 
 from docketeer import tasks
-from docketeer.brain import Brain, BrainResponse, HistoryMessage, MessageContent
+from docketeer.brain import Brain
 from docketeer.chat import (
     ChatClient,
     IncomingMessage,
@@ -21,6 +21,7 @@ from docketeer.chat import (
     _parse_rc_timestamp,
 )
 from docketeer.config import Config
+from docketeer.prompt import BrainResponse, HistoryMessage, MessageContent, RoomInfo
 from docketeer.tools import ToolContext, _safe_path, registry
 
 logging.basicConfig(
@@ -213,6 +214,15 @@ async def load_all_history(client: ChatClient, brain: Brain) -> None:
         other_users = [u for u in usernames if u != client.username]
         room_label = ", ".join(other_users) if other_users else room_id
 
+        brain.set_room_info(
+            room_id,
+            RoomInfo(
+                room_id=room_id,
+                is_direct=True,
+                members=usernames,
+            ),
+        )
+
         log.info("  Loading history for DM with %s", room_label)
         history = await fetch_history_for_brain(client, room_id)
         count = brain.load_history(room_id, history)
@@ -272,6 +282,15 @@ async def handle_message(
         history = await fetch_history_for_brain(client, msg.room_id)
         count = brain.load_history(msg.room_id, history)
         log.info("    Loaded %d messages", count)
+
+        brain.set_room_info(
+            msg.room_id,
+            RoomInfo(
+                room_id=msg.room_id,
+                is_direct=msg.is_direct,
+                members=[msg.username],
+            ),
+        )
 
     await client.set_status("away")
     try:
