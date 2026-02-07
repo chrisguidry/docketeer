@@ -5,6 +5,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
+def _opt_int(value: str | None) -> int | None:
+    return int(value) if value is not None else None
+
+
 @dataclass
 class Config:
     rocketchat_url: str
@@ -16,6 +20,8 @@ class Config:
     claude_model: str = "claude-opus-4-6"
     docket_url: str = "redis://localhost:6379/0"
     docket_name: str = "docketeer"
+    reverie_minutes: int | None = None
+    consolidation_cron: str | None = None
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -33,6 +39,8 @@ class Config:
                 "DOCKETEER_DOCKET_URL", "redis://localhost:6379/0"
             ),
             docket_name=os.environ.get("DOCKETEER_DOCKET_NAME", "docketeer"),
+            reverie_minutes=_opt_int(os.environ.get("DOCKETEER_REVERIE_MINUTES")),
+            consolidation_cron=os.environ.get("DOCKETEER_CONSOLIDATION_CRON"),
         )
 
     @property

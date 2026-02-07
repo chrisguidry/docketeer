@@ -1,7 +1,9 @@
 """Tests for message handling, content building, response sending, and run modes."""
 
 from datetime import UTC, datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
+
+import pytest
 
 from docketeer.brain import Brain
 from docketeer.chat import Attachment, IncomingMessage
@@ -158,12 +160,11 @@ async def test_send_response_empty_skips_message(chat: MemoryChat):
     assert chat.sent_messages == []
 
 
-def test_run_normal_mode():
+def test_run_start():
     with (
-        patch("docketeer.main.argparse.ArgumentParser.parse_args") as mock_args,
+        patch("sys.argv", ["docketeer", "start"]),
         patch("docketeer.main.asyncio.run") as mock_run,
     ):
-        mock_args.return_value = MagicMock(dev=False)
         run()
         mock_run.assert_called_once()
         coro = mock_run.call_args[0][0]
@@ -217,11 +218,25 @@ async def test_handle_message_tool_use_status_changes(
     assert statuses == ["away", "online"]
 
 
-def test_run_dev_mode():
+def test_run_start_dev():
     with (
-        patch("docketeer.main.argparse.ArgumentParser.parse_args") as mock_args,
+        patch("sys.argv", ["docketeer", "start", "--dev"]),
         patch("docketeer.main.run_dev") as mock_dev,
     ):
-        mock_args.return_value = MagicMock(dev=True)
         run()
         mock_dev.assert_called_once()
+
+
+def test_run_snapshot():
+    with (
+        patch("sys.argv", ["docketeer", "snapshot"]),
+        patch("docketeer.main.run_snapshot") as mock_snapshot,
+    ):
+        run()
+        mock_snapshot.assert_called_once()
+
+
+def test_run_no_command(capsys: pytest.CaptureFixture[str]):
+    with patch("sys.argv", ["docketeer"]):
+        run()
+    assert "snapshot" in capsys.readouterr().out

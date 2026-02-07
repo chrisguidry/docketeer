@@ -95,6 +95,8 @@ class Brain:
         if first_run:
             ensure_template(config.workspace_path, "bootstrap.md")
 
+        ensure_template(config.workspace_path, "cycles.md")
+
         self._person_map = build_person_map(config.workspace_path)
         log.info("Person map: %s", self._person_map)
 

@@ -6,13 +6,14 @@ import contextlib
 import fcntl
 import logging
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from docket import Docket, Worker
+from docket.dependencies import Cron, Perpetual
 
-from docketeer import tasks
+from docketeer import cycles, tasks
 from docketeer.brain import Brain, ProcessCallbacks
 from docketeer.chat import (
     ChatClient,
@@ -145,6 +146,19 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
         return f"{len(lines)} task(s):\n" + "\n".join(lines)
 
 
+def _configure_cycles(config: Config) -> None:
+    """Set cycle intervals from config before worker auto-scheduling."""
+    if config.reverie_minutes is not None:
+        cycles.reverie.__defaults__ = (
+            Perpetual(every=timedelta(minutes=config.reverie_minutes), automatic=True),
+        )
+
+    if config.consolidation_cron is not None:
+        cycles.consolidation.__defaults__ = (
+            Cron(config.consolidation_cron, automatic=True),
+        )
+
+
 async def main() -> None:  # pragma: no cover
     config = Config.from_env()
     _acquire_lock(config.data_dir)
@@ -168,6 +182,7 @@ async def main() -> None:  # pragma: no cover
     tasks.set_client(client)
 
     async with Docket(name=config.docket_name, url=config.docket_url) as docket:
+        _configure_cycles(config)
         docket.register_collection("docketeer.tasks:docketeer_tasks")
 
         # Register tools (chat + docket)
@@ -345,15 +360,37 @@ async def send_response(
 
 def run() -> None:
     parser = argparse.ArgumentParser(description="Docketeer agent")
-    parser.add_argument(
+    subparsers = parser.add_subparsers(dest="command")
+
+    run_parser = subparsers.add_parser("start", help="Start the agent")
+    run_parser.add_argument(
         "--dev", action="store_true", help="Enable live reload on file changes"
     )
+
+    subparsers.add_parser("snapshot", help="Show what's on the docket")
+
     args = parser.parse_args()
 
-    if args.dev:
-        run_dev()
+    if args.command == "snapshot":
+        run_snapshot()
+    elif args.command == "start":
+        if args.dev:
+            run_dev()
+        else:
+            asyncio.run(main())
     else:
-        asyncio.run(main())
+        parser.print_help()
+
+
+def run_snapshot() -> None:  # pragma: no cover
+    """Exec `docket snapshot` with the right env vars."""
+    import os
+
+    config = Config.from_env()
+    os.environ["DOCKET_NAME"] = config.docket_name
+    os.environ["DOCKET_URL"] = config.docket_url
+    os.environ["DOCKET_TASKS"] = "docketeer.tasks:docketeer_tasks"
+    os.execvp("docket", ["docket", "snapshot"])
 
 
 def run_dev() -> None:  # pragma: no cover

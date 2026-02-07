@@ -4,6 +4,7 @@ from datetime import datetime
 
 from docketeer.brain import Brain
 from docketeer.chat import ChatClient
+from docketeer.cycles import consolidation, reverie
 from docketeer.prompt import BrainResponse, MessageContent
 
 _brain: Brain | None = None
@@ -47,4 +48,4 @@ async def nudge(prompt: str, room_id: str = "") -> None:
         await client.send_message(room_id, response.text)
 
 
-docketeer_tasks = [nudge]
+docketeer_tasks = [nudge, reverie, consolidation]

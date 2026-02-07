@@ -21,6 +21,13 @@ def test_brain_init_first_run(
     assert (config.workspace_path / "BOOTSTRAP.md").exists()
 
 
+def test_brain_init_seeds_cycles_md(
+    config: Config, tool_context: ToolContext, mock_anthropic: MagicMock
+):
+    Brain(config, tool_context)
+    assert (config.workspace_path / "CYCLES.md").exists()
+
+
 def test_brain_init_existing_soul(
     config: Config, tool_context: ToolContext, mock_anthropic: MagicMock
 ):

@@ -18,6 +18,8 @@ def _env_vars(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("DOCKETEER_DOCKET_URL", raising=False)
     monkeypatch.delenv("DOCKETEER_DOCKET_NAME", raising=False)
     monkeypatch.delenv("DOCKETEER_DATA_DIR", raising=False)
+    monkeypatch.delenv("DOCKETEER_REVERIE_MINUTES", raising=False)
+    monkeypatch.delenv("DOCKETEER_CONSOLIDATION_CRON", raising=False)
 
 
 @pytest.mark.usefixtures("_env_vars")
@@ -45,6 +47,8 @@ def test_from_env_defaults():
     assert cfg.claude_model == "claude-opus-4-6"
     assert cfg.docket_url == "redis://localhost:6379/0"
     assert cfg.docket_name == "docketeer"
+    assert cfg.reverie_minutes is None
+    assert cfg.consolidation_cron is None
 
 
 @pytest.mark.usefixtures("_env_vars")
@@ -52,6 +56,15 @@ def test_from_env_custom_data_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
     monkeypatch.setenv("DOCKETEER_DATA_DIR", str(tmp_path / "custom"))
     cfg = Config.from_env()
     assert cfg.data_dir == tmp_path / "custom"
+
+
+@pytest.mark.usefixtures("_env_vars")
+def test_from_env_cycle_overrides(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("DOCKETEER_REVERIE_MINUTES", "30")
+    monkeypatch.setenv("DOCKETEER_CONSOLIDATION_CRON", "0 8 * * *")
+    cfg = Config.from_env()
+    assert cfg.reverie_minutes == 30
+    assert cfg.consolidation_cron == "0 8 * * *"
 
 
 def test_workspace_path():
