@@ -102,7 +102,8 @@ def test_build_content_with_images(brain: Brain):
 def test_build_content_empty_message(brain: Brain):
     content = MessageContent(username="chris", text="")
     result = brain._build_content(content)
-    assert "(empty message)" in (result if isinstance(result, str) else str(result))
+    assert isinstance(result, str)
+    assert "(empty message)" in result
 
 
 def test_build_content_images_only(brain: Brain):

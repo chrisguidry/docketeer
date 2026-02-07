@@ -30,9 +30,9 @@ def test_parse_rc_timestamp_invalid_string():
     assert _parse_rc_timestamp("not-a-date") is None
 
 
-def test_parse_rc_timestamp_other_type():
-    assert _parse_rc_timestamp(12345) is None
-    assert _parse_rc_timestamp(None) is None
+@pytest.mark.parametrize("value", [12345, None])
+def test_parse_rc_timestamp_other_type(value: Any):
+    assert _parse_rc_timestamp(value) is None
 
 
 @pytest.mark.parametrize(

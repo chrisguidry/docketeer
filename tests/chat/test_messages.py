@@ -137,7 +137,7 @@ async def test_incoming_messages_no_ddp():
     assert results == []
 
 
-async def test_parse_message_event_changed(parser: RocketClient):
+async def test_parse_message_event_changed(rc: RocketClient):
     event = {
         "msg": "changed",
         "fields": {
@@ -152,38 +152,37 @@ async def test_parse_message_event_changed(parser: RocketClient):
             ]
         },
     }
-    msg = await parser._parse_message_event(event)
+    msg = await rc._parse_message_event(event)
     assert msg is not None
     assert msg.text == "hi"
     assert msg.username == "alice"
     assert msg.display_name == "Alice"
 
 
-async def test_parse_message_event_not_changed(parser: RocketClient):
-    assert await parser._parse_message_event({"msg": "added"}) is None
+async def test_parse_message_event_not_changed(rc: RocketClient):
+    assert await rc._parse_message_event({"msg": "added"}) is None
 
 
-async def test_parse_message_event_no_args(parser: RocketClient):
+async def test_parse_message_event_no_args(rc: RocketClient):
     event = {"msg": "changed", "fields": {"args": []}}
-    assert await parser._parse_message_event(event) is None
+    assert await rc._parse_message_event(event) is None
 
 
-async def test_parse_message_event_non_dict_args(parser: RocketClient):
+async def test_parse_message_event_non_dict_args(rc: RocketClient):
     event = {"msg": "changed", "fields": {"args": ["not a dict"]}}
-    assert await parser._parse_message_event(event) is None
+    assert await rc._parse_message_event(event) is None
 
 
-async def test_parse_message_event_system_message(parser: RocketClient):
+async def test_parse_message_event_system_message(rc: RocketClient):
     event = {
         "msg": "changed",
         "fields": {"args": [{"_id": "m1", "t": "uj", "rid": "r1", "u": {"_id": "u1"}}]},
     }
-    assert await parser._parse_message_event(event) is None
+    assert await rc._parse_message_event(event) is None
 
 
 @respx.mock
-async def test_parse_message_event_with_payload_fetch(parser: RocketClient):
-    parser._http = httpx.AsyncClient(base_url="http://localhost:3000/api/v1", timeout=5)
+async def test_parse_message_event_with_payload_fetch(rc: RocketClient):
     respx.get("http://localhost:3000/api/v1/chat.getMessage").mock(
         return_value=httpx.Response(
             200,
@@ -211,15 +210,14 @@ async def test_parse_message_event_with_payload_fetch(parser: RocketClient):
             ]
         },
     }
-    msg = await parser._parse_message_event(event)
+    msg = await rc._parse_message_event(event)
     assert msg is not None
     assert msg.text == "full message"
 
 
 @respx.mock
-async def test_parse_message_event_payload_fetch_returns_none(parser: RocketClient):
+async def test_parse_message_event_payload_fetch_returns_none(rc: RocketClient):
     """When fetch_message returns None, fall back to payload data."""
-    parser._http = httpx.AsyncClient(base_url="http://localhost:3000/api/v1", timeout=5)
     respx.get("http://localhost:3000/api/v1/chat.getMessage").mock(
         return_value=httpx.Response(500)
     )
@@ -237,13 +235,13 @@ async def test_parse_message_event_payload_fetch_returns_none(parser: RocketClie
             ]
         },
     }
-    msg = await parser._parse_message_event(event)
+    msg = await rc._parse_message_event(event)
     assert msg is not None
     assert msg.username == "alice"
     assert msg.room_id == "r1"
 
 
-async def test_parse_message_event_attachment_without_image_url(parser: RocketClient):
+async def test_parse_message_event_attachment_without_image_url(rc: RocketClient):
     """Attachments without image_url are skipped."""
     event = {
         "msg": "changed",
@@ -261,12 +259,12 @@ async def test_parse_message_event_attachment_without_image_url(parser: RocketCl
             ]
         },
     }
-    msg = await parser._parse_message_event(event)
+    msg = await rc._parse_message_event(event)
     assert msg is not None
     assert msg.attachments == []
 
 
-async def test_parse_message_event_with_attachments(parser: RocketClient):
+async def test_parse_message_event_with_attachments(rc: RocketClient):
     event = {
         "msg": "changed",
         "fields": {
@@ -287,7 +285,7 @@ async def test_parse_message_event_with_attachments(parser: RocketClient):
             ]
         },
     }
-    msg = await parser._parse_message_event(event)
+    msg = await rc._parse_message_event(event)
     assert msg is not None
     assert msg.attachments is not None
     assert len(msg.attachments) == 1
