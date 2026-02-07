@@ -25,7 +25,7 @@ repos:
     hooks:
       - id: loq
         name: loq (max 500 lines)
-        entry: uv tool run loq check docketeer/src/ docketeer/tests/ docketeer-web/src/ docketeer-web/tests/ docketeer-rocketchat/src/ docketeer-rocketchat/tests/
+        entry: uv tool run loq check docketeer/src/ docketeer/tests/ docketeer-monty/src/ docketeer-monty/tests/ docketeer-web/src/ docketeer-web/tests/ docketeer-rocketchat/src/ docketeer-rocketchat/tests/
         language: system
         types: [python]
         pass_filenames: false
@@ -45,6 +45,15 @@ repos:
         language: system
         types: [python]
         files: ^docketeer/
+        pass_filenames: false
+        require_serial: true
+
+      - id: pytest-docketeer-monty
+        name: pytest (docketeer-monty)
+        entry: uv run --no-sync --directory docketeer-monty pytest
+        language: system
+        types: [python]
+        files: ^docketeer/src/|^docketeer-monty/
         pass_filenames: false
         require_serial: true
 

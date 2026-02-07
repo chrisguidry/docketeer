@@ -1,0 +1,43 @@
+[project]
+name = "docketeer-monty"
+dynamic = ["version"]
+description = "Sandboxed Python execution plugin for Docketeer"
+authors = [
+    { name = "Chris Guidry", email = "chris@theguidrys.us" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "docketeer",
+    "pydantic-monty",
+]
+
+[project.entry-points."docketeer.tools"]
+monty = "docketeer_monty"
+
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+raw-options.root = ".."
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/docketeer_monty"]
+
+[tool.uv.sources]
+docketeer = { workspace = true }
+
+[tool.pytest.ini_options]
+minversion = "9.0"
+addopts = [
+    "--import-mode=importlib",
+    "--cov=docketeer_monty",
+    "--cov-branch",
+    "--cov-report=term-missing",
+    "--cov-fail-under=100",
+]
+asyncio_mode = "auto"
+filterwarnings = [
+    "error",
+]
