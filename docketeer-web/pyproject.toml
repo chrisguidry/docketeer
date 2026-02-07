@@ -4,7 +4,7 @@ dynamic = ["version"]
 description = "Web tools plugin for Docketeer"
 readme = "README.md"
 authors = [
-    { name = "Chris Guidry", email = "chris@theguidrys.us" }
+    { name = "Chris Guidry", email = "guid@omg.lol" }
 ]
 license = "MIT"
 requires-python = ">=3.12"
