@@ -1,7 +1,7 @@
 [project]
 name = "docketeer"
 version = "0.1.0"
-description = "Lightweight agentic system using Claude, pydocket, and Rocket Chat"
+description = "A reasonably sized autonomous AI construction kit"
 readme = "../README.md"
 authors = [
     { name = "Chris Guidry", email = "chris@theguidrys.us" }
