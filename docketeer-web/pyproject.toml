@@ -2,6 +2,7 @@
 name = "docketeer-web"
 dynamic = ["version"]
 description = "Web tools plugin for Docketeer"
+readme = "README.md"
 authors = [
     { name = "Chris Guidry", email = "chris@theguidrys.us" }
 ]
