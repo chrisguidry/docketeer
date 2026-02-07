@@ -6,22 +6,20 @@ import contextlib
 import fcntl
 import logging
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from docket import Docket, Worker
-from docket.dependencies import Cron, Perpetual
 
-from docketeer import cycles, tasks
+from docketeer import environment, tasks
 from docketeer.brain import Brain, ProcessCallbacks
 from docketeer.chat import (
     ChatClient,
     IncomingMessage,
-    RocketClient,
+    RocketChatClient,
     _parse_rc_timestamp,
 )
-from docketeer.config import Config
 from docketeer.prompt import BrainResponse, HistoryMessage, MessageContent, RoomInfo
 from docketeer.tools import ToolContext, _safe_path, registry
 
@@ -29,6 +27,9 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s"
 )
 log = logging.getLogger(__name__)
+
+DOCKET_URL = environment.get_str("DOCKET_URL", "redis://localhost:6379/0")
+DOCKET_NAME = environment.get_str("DOCKET_NAME", "docketeer")
 
 _lock_file: Any = None
 
@@ -146,43 +147,26 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
         return f"{len(lines)} task(s):\n" + "\n".join(lines)
 
 
-def _configure_cycles(config: Config) -> None:
-    """Set cycle intervals from config before worker auto-scheduling."""
-    if config.reverie_minutes is not None:
-        cycles.reverie.__defaults__ = (
-            Perpetual(every=timedelta(minutes=config.reverie_minutes), automatic=True),
-        )
-
-    if config.consolidation_cron is not None:
-        cycles.consolidation.__defaults__ = (
-            Cron(config.consolidation_cron, automatic=True),
-        )
-
-
 async def main() -> None:  # pragma: no cover
-    config = Config.from_env()
-    _acquire_lock(config.data_dir)
+    _acquire_lock(environment.DATA_DIR)
 
     # Ensure data directories exist
-    config.workspace_path.mkdir(parents=True, exist_ok=True)
-    config.audit_path.mkdir(parents=True, exist_ok=True)
-    log.info("Data directory: %s", config.data_dir.resolve())
+    environment.WORKSPACE_PATH.mkdir(parents=True, exist_ok=True)
+    environment.AUDIT_PATH.mkdir(parents=True, exist_ok=True)
+    log.info("Data directory: %s", environment.DATA_DIR.resolve())
 
     # Create tool context
-    tool_context = ToolContext(workspace=config.workspace_path, config=config)
+    tool_context = ToolContext(workspace=environment.WORKSPACE_PATH)
 
-    client = RocketClient(
-        config.rocketchat_url, config.rocketchat_username, config.rocketchat_password
-    )
-    brain = Brain(config, tool_context)
+    client = RocketChatClient()
+    brain = Brain(tool_context)
     tool_context.on_people_write = brain.rebuild_person_map
 
     # Make brain/client available to docket task handlers
     tasks.set_brain(brain)
     tasks.set_client(client)
 
-    async with Docket(name=config.docket_name, url=config.docket_url) as docket:
-        _configure_cycles(config)
+    async with Docket(name=DOCKET_NAME, url=DOCKET_URL) as docket:
         docket.register_collection("docketeer.tasks:docketeer_tasks")
 
         # Register tools (chat + docket)
@@ -192,7 +176,6 @@ async def main() -> None:  # pragma: no cover
         async with Worker(docket) as worker:
             worker_task = asyncio.create_task(worker.run_forever())
 
-            log.info("Connecting to Rocket Chat at %s...", config.rocketchat_url)
             await client.connect()
 
             log.info("Loading conversation history...")
@@ -386,9 +369,8 @@ def run_snapshot() -> None:  # pragma: no cover
     """Exec `docket snapshot` with the right env vars."""
     import os
 
-    config = Config.from_env()
-    os.environ["DOCKET_NAME"] = config.docket_name
-    os.environ["DOCKET_URL"] = config.docket_url
+    os.environ["DOCKET_NAME"] = DOCKET_NAME
+    os.environ["DOCKET_URL"] = DOCKET_URL
     os.environ["DOCKET_TASKS"] = "docketeer.tasks:docketeer_tasks"
     os.execvp("docket", ["docket", "snapshot"])
 

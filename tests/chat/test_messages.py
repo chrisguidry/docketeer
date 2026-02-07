@@ -7,12 +7,12 @@ from unittest.mock import AsyncMock
 import httpx
 import respx
 
-from docketeer.chat import RocketClient
+from docketeer.chat import RocketChatClient
 
 
 async def test_incoming_messages_filters():
     """Own messages, empty text, and unparsable events are skipped."""
-    client = RocketClient("http://localhost:3000", "bot", "pass")
+    client = RocketChatClient()
     client._user_id = "bot_uid"
 
     ddp = AsyncMock()
@@ -80,7 +80,7 @@ async def test_incoming_messages_filters():
 
 async def test_incoming_messages_dedup():
     """Duplicate message IDs are skipped."""
-    client = RocketClient("http://localhost:3000", "bot", "pass")
+    client = RocketChatClient()
     client._user_id = "bot_uid"
 
     ddp = AsyncMock()
@@ -129,7 +129,7 @@ async def test_incoming_messages_dedup():
 
 async def test_incoming_messages_no_ddp():
     """No DDP connection means immediate return."""
-    client = RocketClient("http://localhost:3000", "bot", "pass")
+    client = RocketChatClient()
     client._ddp = None
     results = []
     async for msg in client.incoming_messages():
@@ -137,7 +137,7 @@ async def test_incoming_messages_no_ddp():
     assert results == []
 
 
-async def test_parse_message_event_changed(rc: RocketClient):
+async def test_parse_message_event_changed(rc: RocketChatClient):
     event = {
         "msg": "changed",
         "fields": {
@@ -159,21 +159,21 @@ async def test_parse_message_event_changed(rc: RocketClient):
     assert msg.display_name == "Alice"
 
 
-async def test_parse_message_event_not_changed(rc: RocketClient):
+async def test_parse_message_event_not_changed(rc: RocketChatClient):
     assert await rc._parse_message_event({"msg": "added"}) is None
 
 
-async def test_parse_message_event_no_args(rc: RocketClient):
+async def test_parse_message_event_no_args(rc: RocketChatClient):
     event = {"msg": "changed", "fields": {"args": []}}
     assert await rc._parse_message_event(event) is None
 
 
-async def test_parse_message_event_non_dict_args(rc: RocketClient):
+async def test_parse_message_event_non_dict_args(rc: RocketChatClient):
     event = {"msg": "changed", "fields": {"args": ["not a dict"]}}
     assert await rc._parse_message_event(event) is None
 
 
-async def test_parse_message_event_system_message(rc: RocketClient):
+async def test_parse_message_event_system_message(rc: RocketChatClient):
     event = {
         "msg": "changed",
         "fields": {"args": [{"_id": "m1", "t": "uj", "rid": "r1", "u": {"_id": "u1"}}]},
@@ -182,7 +182,7 @@ async def test_parse_message_event_system_message(rc: RocketClient):
 
 
 @respx.mock
-async def test_parse_message_event_with_payload_fetch(rc: RocketClient):
+async def test_parse_message_event_with_payload_fetch(rc: RocketChatClient):
     respx.get("http://localhost:3000/api/v1/chat.getMessage").mock(
         return_value=httpx.Response(
             200,
@@ -216,7 +216,7 @@ async def test_parse_message_event_with_payload_fetch(rc: RocketClient):
 
 
 @respx.mock
-async def test_parse_message_event_payload_fetch_returns_none(rc: RocketClient):
+async def test_parse_message_event_payload_fetch_returns_none(rc: RocketChatClient):
     """When fetch_message returns None, fall back to payload data."""
     respx.get("http://localhost:3000/api/v1/chat.getMessage").mock(
         return_value=httpx.Response(500)
@@ -241,7 +241,7 @@ async def test_parse_message_event_payload_fetch_returns_none(rc: RocketClient):
     assert msg.room_id == "r1"
 
 
-async def test_parse_message_event_attachment_without_image_url(rc: RocketClient):
+async def test_parse_message_event_attachment_without_image_url(rc: RocketChatClient):
     """Attachments without image_url are skipped."""
     event = {
         "msg": "changed",
@@ -264,7 +264,7 @@ async def test_parse_message_event_attachment_without_image_url(rc: RocketClient
     assert msg.attachments == []
 
 
-async def test_parse_message_event_with_attachments(rc: RocketClient):
+async def test_parse_message_event_with_attachments(rc: RocketChatClient):
     event = {
         "msg": "changed",
         "fields": {

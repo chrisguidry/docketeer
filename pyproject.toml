@@ -26,6 +26,7 @@ dev = [
     "pytest",
     "pytest-asyncio",
     "pytest-cov",
+    "pytest-env",
     "pytest-xdist",
     "respx>=0.22.0",
     "ruff",
@@ -93,6 +94,13 @@ fixture-parentheses = true
 parametrize-names-type = "tuple"
 parametrize-values-type = "list"
 parametrize-values-row-type = "tuple"
+
+[tool.pytest_env]
+DOCKETEER_ROCKETCHAT_URL = "http://localhost:3000"
+DOCKETEER_ROCKETCHAT_USERNAME = "testbot"
+DOCKETEER_ROCKETCHAT_PASSWORD = "testpass"
+DOCKETEER_ANTHROPIC_API_KEY = "test-key"
+DOCKETEER_BRAVE_API_KEY = "brave-test-key"
 
 [tool.pytest.ini_options]
 minversion = "9.0"

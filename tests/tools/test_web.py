@@ -1,5 +1,7 @@
 """Tests for web tools (search, request, download) using respx."""
 
+from unittest.mock import patch
+
 import httpx
 import respx
 
@@ -31,8 +33,8 @@ async def test_web_search_success(tool_context: ToolContext):
 
 @respx.mock
 async def test_web_search_no_api_key(tool_context: ToolContext):
-    tool_context.config.brave_api_key = ""
-    result = await registry.execute("web_search", {"query": "test"}, tool_context)
+    with patch("docketeer.tools.BRAVE_API_KEY", ""):
+        result = await registry.execute("web_search", {"query": "test"}, tool_context)
     assert "Brave Search API key not configured" in result
 
 

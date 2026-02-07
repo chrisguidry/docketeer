@@ -4,41 +4,36 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from docketeer.brain import Brain, ProcessCallbacks
-from docketeer.config import Config
 from docketeer.prompt import HistoryMessage, MessageContent
 from docketeer.tools import ToolContext
 
 from ..conftest import FakeMessage, make_text_block, make_tool_use_block
 
 
-def test_brain_init_first_run(
-    config: Config, tool_context: ToolContext, mock_anthropic: MagicMock
-):
-    soul = config.workspace_path / "SOUL.md"
+def test_brain_init_first_run(tool_context: ToolContext, mock_anthropic: MagicMock):
+    soul = tool_context.workspace / "SOUL.md"
     assert not soul.exists()
-    Brain(config, tool_context)
+    Brain(tool_context)
     assert soul.exists()
-    assert (config.workspace_path / "BOOTSTRAP.md").exists()
+    assert (tool_context.workspace / "BOOTSTRAP.md").exists()
 
 
 def test_brain_init_seeds_cycles_md(
-    config: Config, tool_context: ToolContext, mock_anthropic: MagicMock
+    tool_context: ToolContext, mock_anthropic: MagicMock
 ):
-    Brain(config, tool_context)
-    assert (config.workspace_path / "CYCLES.md").exists()
+    Brain(tool_context)
+    assert (tool_context.workspace / "CYCLES.md").exists()
 
 
-def test_brain_init_existing_soul(
-    config: Config, tool_context: ToolContext, mock_anthropic: MagicMock
-):
-    (config.workspace_path / "SOUL.md").write_text("custom")
-    Brain(config, tool_context)
-    assert (config.workspace_path / "SOUL.md").read_text() == "custom"
-    assert not (config.workspace_path / "BOOTSTRAP.md").exists()
+def test_brain_init_existing_soul(tool_context: ToolContext, mock_anthropic: MagicMock):
+    (tool_context.workspace / "SOUL.md").write_text("custom")
+    Brain(tool_context)
+    assert (tool_context.workspace / "SOUL.md").read_text() == "custom"
+    assert not (tool_context.workspace / "BOOTSTRAP.md").exists()
 
 
 def test_brain_init_builds_person_map(brain: Brain):
-    people = brain.config.workspace_path / "people" / "chris"
+    people = brain._workspace / "people" / "chris"
     people.mkdir(parents=True)
     (people / "profile.md").write_text("**Username:** @cguidry")
     brain.rebuild_person_map()
@@ -47,7 +42,7 @@ def test_brain_init_builds_person_map(brain: Brain):
 
 def test_rebuild_person_map(brain: Brain):
     assert brain._person_map == {}
-    people = brain.config.workspace_path / "people" / "alex"
+    people = brain._workspace / "people" / "alex"
     people.mkdir(parents=True)
     (people / "profile.md").write_text("**Username:** @alex")
     brain.rebuild_person_map()

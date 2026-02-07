@@ -56,17 +56,13 @@ async def test_execute_success():
         """Echo text."""
         return text
 
-    result = await reg.execute(
-        "echo", {"text": "hi"}, ToolContext(workspace=Path("."), config=None)
-    )
+    result = await reg.execute("echo", {"text": "hi"}, ToolContext(workspace=Path(".")))
     assert result == "hi"
 
 
 async def test_execute_unknown_tool():
     reg = ToolRegistry()
-    result = await reg.execute(
-        "nope", {}, ToolContext(workspace=Path("."), config=None)
-    )
+    result = await reg.execute("nope", {}, ToolContext(workspace=Path(".")))
     assert result == "Unknown tool: nope"
 
 
@@ -78,9 +74,7 @@ async def test_execute_tool_error():
         """Boom."""
         raise ValueError("kaboom")
 
-    result = await reg.execute(
-        "boom", {}, ToolContext(workspace=Path("."), config=None)
-    )
+    result = await reg.execute("boom", {}, ToolContext(workspace=Path(".")))
     assert "Error: ValueError: kaboom" in result
 
 

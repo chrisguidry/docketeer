@@ -10,7 +10,6 @@ import pytest
 from anthropic.types import TextBlock, ToolUseBlock
 
 from docketeer.brain import Brain
-from docketeer.config import Config
 from docketeer.tools import ToolContext
 
 
@@ -22,20 +21,8 @@ def workspace(tmp_path: Path) -> Path:
 
 
 @pytest.fixture()
-def config(tmp_path: Path, workspace: Path) -> Config:
-    return Config(
-        rocketchat_url="http://localhost:3000",
-        rocketchat_username="testbot",
-        rocketchat_password="testpass",
-        anthropic_api_key="test-key",
-        data_dir=tmp_path,
-        brave_api_key="brave-test-key",
-    )
-
-
-@pytest.fixture()
-def tool_context(config: Config) -> ToolContext:
-    return ToolContext(workspace=config.workspace_path, config=config, room_id="room1")
+def tool_context(workspace: Path) -> ToolContext:
+    return ToolContext(workspace=workspace, room_id="room1")
 
 
 def make_text_block(text: str = "Hello!") -> TextBlock:
@@ -139,7 +126,5 @@ def mock_anthropic(fake_messages: FakeMessages) -> Iterator[MagicMock]:
 
 
 @pytest.fixture()
-def brain(
-    config: Config, tool_context: ToolContext, mock_anthropic: MagicMock
-) -> Brain:
-    return Brain(config, tool_context)
+def brain(tool_context: ToolContext, mock_anthropic: MagicMock) -> Brain:
+    return Brain(tool_context)

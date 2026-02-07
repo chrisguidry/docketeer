@@ -9,7 +9,7 @@ import httpx
 import pytest
 import respx
 
-from docketeer.chat import RocketClient, _parse_rc_timestamp
+from docketeer.chat import RocketChatClient, _parse_rc_timestamp
 
 
 def test_parse_rc_timestamp_dict():
@@ -44,12 +44,12 @@ def test_parse_rc_timestamp_other_type(value: Any):
     ],
 )
 def test_to_ws_url(url: str, expected: str):
-    client = RocketClient(url, "user", "pass")
+    client = RocketChatClient()
     assert client._to_ws_url(url) == expected
 
 
 @respx.mock
-async def test_send_message(rc: RocketClient):
+async def test_send_message(rc: RocketChatClient):
     respx.post("http://localhost:3000/api/v1/chat.postMessage").mock(
         return_value=httpx.Response(200, json={"success": True})
     )
@@ -57,7 +57,7 @@ async def test_send_message(rc: RocketClient):
 
 
 @respx.mock
-async def test_send_message_with_attachments(rc: RocketClient):
+async def test_send_message_with_attachments(rc: RocketChatClient):
     route = respx.post("http://localhost:3000/api/v1/chat.postMessage")
     route.mock(return_value=httpx.Response(200, json={"success": True}))
     await rc.send_message("room1", "check", attachments=[{"color": "green"}])
@@ -66,7 +66,7 @@ async def test_send_message_with_attachments(rc: RocketClient):
 
 
 @respx.mock
-async def test_upload_file(rc: RocketClient, tmp_path: Any):
+async def test_upload_file(rc: RocketChatClient, tmp_path: Any):
     f = tmp_path / "test.txt"
     f.write_text("content")
 
@@ -81,7 +81,7 @@ async def test_upload_file(rc: RocketClient, tmp_path: Any):
 
 
 @respx.mock
-async def test_fetch_attachment_relative_url(rc: RocketClient):
+async def test_fetch_attachment_relative_url(rc: RocketChatClient):
     respx.get("http://localhost:3000/file-upload/abc.png").mock(
         return_value=httpx.Response(200, content=b"imagedata")
     )
@@ -90,7 +90,7 @@ async def test_fetch_attachment_relative_url(rc: RocketClient):
 
 
 @respx.mock
-async def test_fetch_attachment_absolute_url(rc: RocketClient):
+async def test_fetch_attachment_absolute_url(rc: RocketChatClient):
     respx.get("https://cdn.example.com/img.png").mock(
         return_value=httpx.Response(200, content=b"img")
     )
@@ -99,7 +99,7 @@ async def test_fetch_attachment_absolute_url(rc: RocketClient):
 
 
 @respx.mock
-async def test_fetch_message_success(rc: RocketClient):
+async def test_fetch_message_success(rc: RocketChatClient):
     respx.get("http://localhost:3000/api/v1/chat.getMessage").mock(
         return_value=httpx.Response(
             200, json={"message": {"_id": "m1", "msg": "hello"}}
@@ -111,7 +111,7 @@ async def test_fetch_message_success(rc: RocketClient):
 
 
 @respx.mock
-async def test_fetch_message_failure(rc: RocketClient):
+async def test_fetch_message_failure(rc: RocketChatClient):
     respx.get("http://localhost:3000/api/v1/chat.getMessage").mock(
         return_value=httpx.Response(500)
     )
@@ -120,7 +120,7 @@ async def test_fetch_message_failure(rc: RocketClient):
 
 
 @respx.mock
-async def test_fetch_room_history(rc: RocketClient):
+async def test_fetch_room_history(rc: RocketChatClient):
     respx.get("http://localhost:3000/api/v1/dm.history").mock(
         return_value=httpx.Response(
             200,
@@ -133,7 +133,7 @@ async def test_fetch_room_history(rc: RocketClient):
 
 
 @respx.mock
-async def test_fetch_room_history_failure(rc: RocketClient):
+async def test_fetch_room_history_failure(rc: RocketChatClient):
     respx.get("http://localhost:3000/api/v1/dm.history").mock(
         return_value=httpx.Response(500)
     )
@@ -141,7 +141,7 @@ async def test_fetch_room_history_failure(rc: RocketClient):
 
 
 @respx.mock
-async def test_list_dm_rooms(rc: RocketClient):
+async def test_list_dm_rooms(rc: RocketChatClient):
     respx.get("http://localhost:3000/api/v1/dm.list").mock(
         return_value=httpx.Response(200, json={"ims": [{"_id": "r1"}, {"_id": "r2"}]})
     )
@@ -150,7 +150,7 @@ async def test_list_dm_rooms(rc: RocketClient):
 
 
 @respx.mock
-async def test_list_dm_rooms_failure(rc: RocketClient):
+async def test_list_dm_rooms_failure(rc: RocketChatClient):
     respx.get("http://localhost:3000/api/v1/dm.list").mock(
         return_value=httpx.Response(500)
     )
@@ -158,7 +158,7 @@ async def test_list_dm_rooms_failure(rc: RocketClient):
 
 
 @respx.mock
-async def test_set_status_success(rc: RocketClient):
+async def test_set_status_success(rc: RocketChatClient):
     respx.post("http://localhost:3000/api/v1/users.setStatus").mock(
         return_value=httpx.Response(200, json={"success": True})
     )
@@ -166,7 +166,7 @@ async def test_set_status_success(rc: RocketClient):
 
 
 @respx.mock
-async def test_set_status_retry(rc: RocketClient):
+async def test_set_status_retry(rc: RocketChatClient):
     route = respx.post("http://localhost:3000/api/v1/users.setStatus")
     route.side_effect = [
         httpx.Response(500),
@@ -177,7 +177,7 @@ async def test_set_status_retry(rc: RocketClient):
 
 
 @respx.mock
-async def test_set_status_all_retries_fail(rc: RocketClient):
+async def test_set_status_all_retries_fail(rc: RocketChatClient):
     respx.post("http://localhost:3000/api/v1/users.setStatus").mock(
         side_effect=httpx.HTTPError("fail")
     )
@@ -185,28 +185,29 @@ async def test_set_status_all_retries_fail(rc: RocketClient):
         await rc.set_status("online")
 
 
-async def test_send_typing(rc: RocketClient):
+async def test_send_typing(rc: RocketChatClient):
     rc._ddp = AsyncMock()
     await rc.send_typing("room1", True)
     rc._ddp.call.assert_awaited_once_with(
-        "stream-notify-room", ["room1/user-activity", "bot", ["user-typing"], {}]
+        "stream-notify-room",
+        ["room1/user-activity", rc.username, ["user-typing"], {}],
     )
 
 
-async def test_send_typing_false(rc: RocketClient):
+async def test_send_typing_false(rc: RocketChatClient):
     rc._ddp = AsyncMock()
     await rc.send_typing("room1", False)
     rc._ddp.call.assert_awaited_once_with(
-        "stream-notify-room", ["room1/user-activity", "bot", [], {}]
+        "stream-notify-room", ["room1/user-activity", rc.username, [], {}]
     )
 
 
-async def test_send_typing_no_ddp(rc: RocketClient):
+async def test_send_typing_no_ddp(rc: RocketChatClient):
     rc._ddp = None
     await rc.send_typing("room1", True)
 
 
-async def test_send_typing_exception_swallowed(rc: RocketClient):
+async def test_send_typing_exception_swallowed(rc: RocketChatClient):
     rc._ddp = AsyncMock()
     rc._ddp.call.side_effect = Exception("connection lost")
     await rc.send_typing("room1", True)

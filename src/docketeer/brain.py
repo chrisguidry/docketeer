@@ -13,7 +13,7 @@ from typing import Any, cast
 import anthropic
 from anthropic.types import ToolUseBlock
 
-from docketeer.config import Config
+from docketeer import environment
 from docketeer.people import build_person_map, load_person_context
 from docketeer.prompt import (
     BrainResponse,
@@ -27,6 +27,9 @@ from docketeer.prompt import (
 from docketeer.tools import ToolContext, registry
 
 log = logging.getLogger(__name__)
+
+ANTHROPIC_API_KEY = environment.get_str("ANTHROPIC_API_KEY")
+CLAUDE_MODEL = environment.get_str("CLAUDE_MODEL", "claude-opus-4-6")
 
 MAX_TOOL_ROUNDS = 10
 MAX_RESPONSE_TOKENS = 128_000
@@ -80,24 +83,25 @@ def _log_usage(response: anthropic.types.Message) -> None:
 
 
 class Brain:
-    def __init__(self, config: Config, tool_context: ToolContext) -> None:
-        self.config = config
-        self.client = anthropic.AsyncAnthropic(api_key=config.anthropic_api_key)
+    def __init__(self, tool_context: ToolContext) -> None:
+        self.client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
         self.tool_context = tool_context
+        self._workspace = tool_context.workspace
+        self._audit_path = tool_context.workspace.parent / "audit"
         self._conversations: dict[str, list[dict[str, Any]]] = defaultdict(list)
         self._room_token_counts: dict[str, int] = {}
         self._room_info: dict[str, RoomInfo] = {}
         self._person_map: dict[str, str] = {}
 
-        soul_path = config.workspace_path / "SOUL.md"
+        soul_path = self._workspace / "SOUL.md"
         first_run = not soul_path.exists()
-        ensure_template(config.workspace_path, "soul.md")
+        ensure_template(self._workspace, "soul.md")
         if first_run:
-            ensure_template(config.workspace_path, "bootstrap.md")
+            ensure_template(self._workspace, "bootstrap.md")
 
-        ensure_template(config.workspace_path, "cycles.md")
+        ensure_template(self._workspace, "cycles.md")
 
-        self._person_map = build_person_map(config.workspace_path)
+        self._person_map = build_person_map(self._workspace)
         log.info("Person map: %s", self._person_map)
 
     def set_room_info(self, room_id: str, info: RoomInfo) -> None:
@@ -106,7 +110,7 @@ class Brain:
 
     def rebuild_person_map(self) -> None:
         """Rebuild the username→person-file mapping after a people/ write."""
-        self._person_map = build_person_map(self.config.workspace_path)
+        self._person_map = build_person_map(self._workspace)
         log.info("Rebuilt person map: %s", self._person_map)
 
     def load_history(self, room_id: str, messages: list[HistoryMessage]) -> int:
@@ -138,13 +142,13 @@ class Brain:
         """Process a message and return a response with tool call info."""
         current_time = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M %Z")
         person_context = load_person_context(
-            self.config.workspace_path,
+            self._workspace,
             content.username,
             self._person_map,
         )
         room_info = self._room_info.get(room_id)
         system = build_system_blocks(
-            self.config.workspace_path,
+            self._workspace,
             current_time,
             content.username,
             person_context=person_context,
@@ -231,7 +235,7 @@ class Brain:
     ) -> anthropic.types.Message:
         """Stream a response from Claude, optionally firing a callback on first text."""
         async with self.client.messages.stream(
-            model=self.config.claude_model,
+            model=CLAUDE_MODEL,
             max_tokens=MAX_RESPONSE_TOKENS,
             system=system,
             messages=messages,
@@ -255,7 +259,7 @@ class Brain:
             log.info("Tool result: %s", result[:100])
 
             _audit_log(
-                self.config.audit_path,
+                self._audit_path,
                 block.name,
                 block.input,
                 result,
@@ -327,7 +331,7 @@ class Brain:
     async def _measure_context(self, room_id: str, system: Any, tools: Any) -> int:
         """Count tokens for the current conversation state."""
         result = await self.client.messages.count_tokens(
-            model=self.config.claude_model,
+            model=CLAUDE_MODEL,
             system=system,
             tools=tools,
             messages=cast(Any, self._conversations[room_id]),

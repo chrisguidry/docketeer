@@ -13,13 +13,16 @@ from typing import Any, get_type_hints
 
 import httpx
 
+from docketeer import environment
+
 log = logging.getLogger(__name__)
+
+BRAVE_API_KEY = environment.get_str("BRAVE_API_KEY")
 
 
 @dataclass
 class ToolContext:
     workspace: Path
-    config: Any
     username: str = ""
     room_id: str = ""
     on_people_write: Callable[[], None] | None = None
@@ -326,8 +329,7 @@ async def web_search(ctx: ToolContext, query: str, count: int = 5) -> str:
     query: search query
     count: number of results (default 5)
     """
-    api_key = ctx.config.brave_api_key
-    if not api_key:
+    if not BRAVE_API_KEY:
         return (
             "Error: Brave Search API key not configured (set DOCKETEER_BRAVE_API_KEY)"
         )
@@ -338,7 +340,7 @@ async def web_search(ctx: ToolContext, query: str, count: int = 5) -> str:
             response = await client.get(
                 "https://api.search.brave.com/res/v1/web/search",
                 params={"q": query, "count": count},
-                headers={"X-Subscription-Token": api_key},
+                headers={"X-Subscription-Token": BRAVE_API_KEY},
                 timeout=30,
             )
             if response.status_code == 429:

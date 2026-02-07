@@ -12,9 +12,14 @@ from typing import Any
 
 import httpx
 
+from docketeer import environment
 from docketeer.ddp import DDPClient
 
 log = logging.getLogger(__name__)
+
+ROCKETCHAT_URL = environment.get_str("ROCKETCHAT_URL")
+ROCKETCHAT_USERNAME = environment.get_str("ROCKETCHAT_USERNAME")
+ROCKETCHAT_PASSWORD = environment.get_str("ROCKETCHAT_PASSWORD")
 
 
 @dataclass
@@ -106,13 +111,13 @@ class ChatClient(ABC):
     async def send_typing(self, room_id: str, typing: bool) -> None: ...
 
 
-class RocketClient(ChatClient):
+class RocketChatClient(ChatClient):
     """Hybrid Rocket Chat client: DDP for subscriptions, async REST for actions."""
 
-    def __init__(self, url: str, username: str, password: str) -> None:
-        self.url = url.rstrip("/")
-        self.username = username
-        self.password = password
+    def __init__(self) -> None:
+        self.url = ROCKETCHAT_URL.rstrip("/")
+        self.username = ROCKETCHAT_USERNAME
+        self.password = ROCKETCHAT_PASSWORD
         self._ddp: DDPClient | None = None
         self._http: httpx.AsyncClient | None = None
         self._user_id: str | None = None
@@ -123,6 +128,7 @@ class RocketClient(ChatClient):
 
     async def connect(self) -> None:
         """Connect via DDP and authenticate via REST."""
+        log.info("Connecting to Rocket Chat at %s...", self.url)
         ws_url = self._to_ws_url(self.url)
         self._ddp = DDPClient(url=ws_url)
         await self._ddp.connect()

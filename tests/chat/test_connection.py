@@ -5,11 +5,11 @@ from unittest.mock import AsyncMock, patch
 import httpx
 import respx
 
-from docketeer.chat import RocketClient
+from docketeer.chat import RocketChatClient
 
 
 async def test_close():
-    client = RocketClient("http://localhost:3000", "bot", "pass")
+    client = RocketChatClient()
     client._http = httpx.AsyncClient()
     client._ddp = AsyncMock()
     await client.close()
@@ -17,12 +17,12 @@ async def test_close():
 
 
 async def test_close_no_connections():
-    client = RocketClient("http://localhost:3000", "bot", "pass")
+    client = RocketChatClient()
     await client.close()
 
 
 def test_user_id_property():
-    client = RocketClient("http://localhost:3000", "bot", "pass")
+    client = RocketChatClient()
     assert client.user_id == ""
     client._user_id = "uid123"
     assert client.user_id == "uid123"
@@ -30,7 +30,7 @@ def test_user_id_property():
 
 @respx.mock
 async def test_connect():
-    client = RocketClient("http://localhost:3000", "bot", "pass")
+    client = RocketChatClient()
 
     with patch("docketeer.chat.DDPClient") as mock_ddp_cls:
         ddp = AsyncMock()
@@ -59,7 +59,7 @@ async def test_connect():
 
 
 async def test_subscribe_to_my_messages():
-    client = RocketClient("http://localhost:3000", "bot", "pass")
+    client = RocketChatClient()
     client._user_id = "uid_bot"
     ddp = AsyncMock()
     client._ddp = ddp
@@ -68,13 +68,13 @@ async def test_subscribe_to_my_messages():
 
 
 async def test_subscribe_to_my_messages_no_ddp():
-    client = RocketClient("http://localhost:3000", "bot", "pass")
+    client = RocketChatClient()
     client._ddp = None
     await client.subscribe_to_my_messages()
 
 
 async def test_subscribe_to_my_messages_no_user_id():
-    client = RocketClient("http://localhost:3000", "bot", "pass")
+    client = RocketChatClient()
     client._ddp = AsyncMock()
     client._user_id = None
     await client.subscribe_to_my_messages()
