@@ -1,6 +1,6 @@
 .venv/
 .envrc.private
-.claude/
+.claude/settings.local.json
 __pycache__/
 *.pyc
 *.egg-info/
