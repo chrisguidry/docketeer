@@ -113,7 +113,7 @@ def main() -> None:
     members = get_workspace_members(root)
     reverse_deps = build_reverse_deps(root, members)
 
-    if base_ref == "0" * 40:
+    if not base_ref or base_ref == "0" * 40:
         affected = sorted(members)
     else:
         changed_files = get_changed_files(base_ref)
