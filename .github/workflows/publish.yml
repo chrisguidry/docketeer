@@ -1,0 +1,55 @@
+name: Publish to PyPI
+
+on:
+  release:
+    types: [created]
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: Run CI
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    name: "Publish ${{ matrix.package }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: ci
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - package: docketeer
+            environment: pypi-docketeer
+          - package: docketeer-rocketchat
+            environment: pypi-docketeer-rocketchat
+          - package: docketeer-web
+            environment: pypi-docketeer-web
+    environment:
+      name: ${{ matrix.environment }}
+      url: https://pypi.org/p/${{ matrix.package }}
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install uv and set Python version
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: "**/pyproject.toml"
+
+      - name: Build package
+        run: uv build --directory ${{ matrix.package }}
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: ${{ matrix.package }}/dist/

@@ -231,7 +231,6 @@ wheels = [
 
 [[package]]
 name = "docketeer"
-version = "0.1.0"
 source = { editable = "docketeer" }
 dependencies = [
     { name = "anthropic" },

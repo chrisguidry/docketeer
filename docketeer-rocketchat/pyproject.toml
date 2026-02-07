@@ -1,6 +1,6 @@
 [project]
 name = "docketeer-rocketchat"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Rocket Chat backend for Docketeer"
 authors = [
     { name = "Chris Guidry", email = "chris@theguidrys.us" }
@@ -16,8 +16,12 @@ dependencies = [
 rocketchat = "docketeer_rocketchat"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+raw-options.root = ".."
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/docketeer_rocketchat"]

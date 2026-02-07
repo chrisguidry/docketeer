@@ -1,8 +1,8 @@
 [project]
 name = "docketeer"
-version = "0.1.0"
+dynamic = ["version"]
 description = "A reasonably sized autonomous AI construction kit"
-readme = "../README.md"
+readme = "README.md"
 authors = [
     { name = "Chris Guidry", email = "chris@theguidrys.us" }
 ]
@@ -18,8 +18,12 @@ dependencies = [
 docketeer = "docketeer.main:run"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+raw-options.root = ".."
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/docketeer"]
