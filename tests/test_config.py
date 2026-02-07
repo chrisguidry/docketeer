@@ -74,22 +74,3 @@ def test_audit_path():
         data_dir=Path("/data"),
     )
     assert cfg.audit_path == Path("/data/audit")
-
-
-@pytest.mark.parametrize(
-    ("url", "expected"),
-    [
-        ("https://chat.example.com", "wss://chat.example.com/websocket"),
-        ("http://chat.example.com", "ws://chat.example.com/websocket"),
-        ("chat.example.com", "chat.example.com/websocket"),
-    ],
-)
-def test_rocketchat_ws_url(url: str, expected: str):
-    cfg = Config(
-        rocketchat_url=url,
-        rocketchat_username="",
-        rocketchat_password="",
-        anthropic_api_key="",
-        data_dir=Path("/data"),
-    )
-    assert cfg.rocketchat_ws_url == expected

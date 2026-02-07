@@ -91,11 +91,3 @@ class MemoryChat(ChatClient):
 
     async def set_status(self, status: str, message: str = "") -> None:
         self.status_changes.append((status, message))
-
-    def inject_message(self, msg: IncomingMessage) -> None:
-        """Queue a message for incoming_messages() to yield."""
-        self._incoming.put_nowait(msg)
-
-    def stop_incoming(self) -> None:
-        """Signal incoming_messages() to stop."""
-        self._incoming.put_nowait(None)

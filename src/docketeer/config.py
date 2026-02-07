@@ -42,13 +42,3 @@ class Config:
     @property
     def audit_path(self) -> Path:
         return self.data_dir / "audit"
-
-    @property
-    def rocketchat_ws_url(self) -> str:
-        """Convert HTTP URL to websocket URL."""
-        url = self.rocketchat_url.rstrip("/")
-        if url.startswith("https://"):
-            return url.replace("https://", "wss://") + "/websocket"
-        elif url.startswith("http://"):
-            return url.replace("http://", "ws://") + "/websocket"
-        return url + "/websocket"

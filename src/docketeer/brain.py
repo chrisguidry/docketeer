@@ -24,6 +24,7 @@ MAX_TOOL_ROUNDS = 10
 MAX_RESPONSE_TOKENS = 128_000
 CONTEXT_BUDGET = 180_000
 COMPACT_THRESHOLD = 140_000
+COMPACT_MODEL = "claude-haiku-4-5-20251001"
 MIN_RECENT_MESSAGES = 6
 
 
@@ -247,54 +248,8 @@ class Brain:
             tool_blocks = [b for b in response.content if isinstance(b, ToolUseBlock)]
 
             if tool_blocks:
-                tool_results = []
-                for block in tool_blocks:
-                    log.info("Tool call: %s(%s)", block.name, block.input)
-                    result = await registry.execute(
-                        block.name, block.input, self.tool_context
-                    )
-                    is_error = result.startswith("Error:")
-                    log.info("Tool result: %s", result[:100])
-
-                    _audit_log(
-                        self.config.audit_path,
-                        block.name,
-                        block.input,
-                        result,
-                        is_error,
-                    )
-
-                    tool_results.append(
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": block.id,
-                            "content": result,
-                            "is_error": is_error,
-                        }
-                    )
-
-                # Move cache breakpoint to the latest tool result so
-                # subsequent rounds reuse the conversation prefix.
-                # Strip any previous tool-result breakpoints first to
-                # stay within the API's 4-breakpoint limit.
-                for prev_msg in messages:
-                    if prev_msg["role"] != "user" or not isinstance(
-                        prev_msg["content"], list
-                    ):
-                        continue
-                    for block in prev_msg["content"]:
-                        if (
-                            isinstance(block, dict)
-                            and block.get("type") == "tool_result"
-                        ):
-                            block.pop("cache_control", None)
-
-                tool_results[-1] = {
-                    **tool_results[-1],
-                    "cache_control": {"type": "ephemeral"},
-                }
-
-                # Add assistant message and tool results to conversation
+                tool_results = await self._execute_tools(tool_blocks)
+                self._update_cache_breakpoints(messages, tool_results)
                 messages.append({"role": "assistant", "content": response.content})
                 messages.append({"role": "user", "content": tool_results})
             elif response.stop_reason == "max_tokens":
@@ -303,18 +258,7 @@ class Brain:
             else:
                 break
 
-        # Extract text from final response
-        reply_parts = []
-        for block in response.content:
-            if hasattr(block, "text"):
-                reply_parts.append(block.text)
-
-        if response.stop_reason == "max_tokens" and not tool_blocks:
-            reply_parts.append(
-                "\n\n(I hit my response length limit — ask me to continue if I got cut off)"
-            )
-
-        reply = "\n".join(reply_parts).strip() if reply_parts else "(no response)"
+        reply = self._build_reply(response, bool(tool_blocks))
 
         self._conversations[room_id].append({"role": "assistant", "content": reply})
 
@@ -344,6 +288,71 @@ class Brain:
             tools=tools,
         ) as stream:
             return stream.get_final_message()
+
+    async def _execute_tools(
+        self, tool_blocks: list[ToolUseBlock]
+    ) -> list[dict[str, Any]]:
+        """Run each tool, log calls/results, write audit log, return tool_result dicts."""
+        tool_results = []
+        for block in tool_blocks:
+            log.info("Tool call: %s(%s)", block.name, block.input)
+            result = await registry.execute(block.name, block.input, self.tool_context)
+            is_error = result.startswith("Error:")
+            log.info("Tool result: %s", result[:100])
+
+            _audit_log(
+                self.config.audit_path,
+                block.name,
+                block.input,
+                result,
+                is_error,
+            )
+
+            tool_results.append(
+                {
+                    "type": "tool_result",
+                    "tool_use_id": block.id,
+                    "content": result,
+                    "is_error": is_error,
+                }
+            )
+        return tool_results
+
+    def _update_cache_breakpoints(
+        self, messages: list[dict[str, Any]], tool_results: list[dict[str, Any]]
+    ) -> None:
+        """Move the cache breakpoint to the latest tool result.
+
+        Strips any previous tool-result breakpoints first to stay within the
+        API's 4-breakpoint limit.
+        """
+        for prev_msg in messages:
+            if prev_msg["role"] != "user" or not isinstance(prev_msg["content"], list):
+                continue
+            for block in prev_msg["content"]:
+                if isinstance(block, dict) and block.get("type") == "tool_result":
+                    block.pop("cache_control", None)
+
+        tool_results[-1] = {
+            **tool_results[-1],
+            "cache_control": {"type": "ephemeral"},
+        }
+
+    def _build_reply(
+        self, response: anthropic.types.Message, had_tool_use: bool
+    ) -> str:
+        """Extract the final reply text from a response."""
+        reply_parts = []
+        for block in response.content:
+            if hasattr(block, "text"):
+                reply_parts.append(block.text)
+
+        if response.stop_reason == "max_tokens" and not had_tool_use:
+            reply_parts.append(
+                "\n\n(I hit my response length limit — ask me to continue if I got cut off)"
+            )
+
+        return "\n".join(reply_parts).strip() if reply_parts else "(no response)"
 
     def _measure_context(self, room_id: str, system: Any, tools: Any) -> int:
         """Count tokens for the current conversation state."""
@@ -377,29 +386,8 @@ class Brain:
         if not transcript.strip():
             return
 
-        try:
-            summary_response = self.client.messages.create(
-                model="claude-haiku-4-5-20251001",
-                max_tokens=1024,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": (
-                            "Summarize this conversation into a concise recap. "
-                            "Preserve key facts, decisions, and context that would "
-                            "be needed to continue the conversation naturally. "
-                            "Be brief but thorough.\n\n"
-                            f"{transcript}"
-                        ),
-                    }
-                ],
-            )
-            first_block = summary_response.content[0]
-            summary = (
-                first_block.text if hasattr(first_block, "text") else str(first_block)
-            )
-        except Exception:
-            log.exception("Summarization failed, falling back to truncation")
+        summary = self._summarize_transcript(transcript)
+        if summary is None:
             self._conversations[room_id] = recent_messages
             return
 
@@ -418,6 +406,34 @@ class Brain:
             new_count,
             tokens,
         )
+
+    def _summarize_transcript(self, transcript: str) -> str | None:
+        """Ask Haiku for a conversation summary, or None on failure."""
+        try:
+            summary_response = self.client.messages.create(
+                model=COMPACT_MODEL,
+                max_tokens=1024,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": (
+                            "Summarize this conversation into a concise recap. "
+                            "Preserve key facts, decisions, and context that would "
+                            "be needed to continue the conversation naturally. "
+                            "Be brief but thorough.\n\n"
+                            f"{transcript}"
+                        ),
+                    }
+                ],
+            )
+            first_block = summary_response.content[0]
+            text = (
+                first_block.text if hasattr(first_block, "text") else str(first_block)
+            )
+            return str(text)
+        except Exception:
+            log.exception("Summarization failed, falling back to truncation")
+            return None
 
     def _build_content(self, content: MessageContent) -> list[dict] | str:
         """Build content blocks for Claude."""
