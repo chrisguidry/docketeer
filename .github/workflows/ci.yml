@@ -1,0 +1,80 @@
+name: Docketeer CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  prek:
+    name: Prek checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv and set Python version
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: "**/pyproject.toml"
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run prek
+        uses: j178/prek-action@v1
+
+  prepare-matrix:
+    name: Determine affected packages
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.affected.outputs.matrix }}
+      has-packages: ${{ steps.affected.outputs.has-packages }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Determine base ref
+        id: base
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "ref=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=${{ github.event.before }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Find affected packages
+        id: affected
+        run: python3 .github/scripts/affected-packages.py "${{ steps.base.outputs.ref }}"
+
+  test:
+    name: "Test (${{ matrix.package }})"
+    needs: prepare-matrix
+    if: needs.prepare-matrix.outputs.has-packages == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJson(needs.prepare-matrix.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv and set Python version
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: "**/pyproject.toml"
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run tests
+        run: uv run --directory ${{ matrix.package }} pytest
