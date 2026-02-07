@@ -3,10 +3,10 @@
 from datetime import datetime
 
 from docketeer.brain import Brain, BrainResponse, MessageContent
-from docketeer.chat import RocketClient
+from docketeer.chat import ChatClient
 
 _brain: Brain | None = None
-_client: RocketClient | None = None
+_client: ChatClient | None = None
 
 
 def set_brain(brain: Brain) -> None:
@@ -14,7 +14,7 @@ def set_brain(brain: Brain) -> None:
     _brain = brain
 
 
-def set_client(client: RocketClient) -> None:
+def set_client(client: ChatClient) -> None:
     global _client
     _client = client
 
@@ -25,9 +25,9 @@ def get_brain() -> Brain:
     return _brain
 
 
-def get_client() -> RocketClient:
+def get_client() -> ChatClient:
     if _client is None:
-        raise RuntimeError("RocketClient not initialized — call set_client() first")
+        raise RuntimeError("ChatClient not initialized — call set_client() first")
     return _client
 
 

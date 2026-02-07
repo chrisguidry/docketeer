@@ -3,7 +3,8 @@
 import asyncio
 import logging
 import mimetypes
-from collections.abc import AsyncIterator
+from abc import ABC, abstractmethod
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -48,7 +49,53 @@ def _parse_rc_timestamp(ts: Any) -> datetime | None:
     return None
 
 
-class RocketClient:
+class ChatClient(ABC):
+    """Abstract chat client interface for testing and alternative backends."""
+
+    username: str
+    user_id: str
+
+    @abstractmethod
+    async def connect(self) -> None: ...
+
+    @abstractmethod
+    async def close(self) -> None: ...
+
+    @abstractmethod
+    async def subscribe_to_my_messages(self) -> None: ...
+
+    @abstractmethod
+    def incoming_messages(self) -> AsyncGenerator[IncomingMessage, None]: ...
+
+    @abstractmethod
+    async def send_message(
+        self, room_id: str, text: str, attachments: list[dict[str, Any]] | None = None
+    ) -> None: ...
+
+    @abstractmethod
+    async def upload_file(
+        self, room_id: str, file_path: str, message: str = ""
+    ) -> None: ...
+
+    @abstractmethod
+    async def fetch_attachment(self, url: str) -> bytes: ...
+
+    @abstractmethod
+    async def fetch_message(self, message_id: str) -> dict[str, Any] | None: ...
+
+    @abstractmethod
+    async def fetch_room_history(
+        self, room_id: str, count: int = 20
+    ) -> list[dict[str, Any]]: ...
+
+    @abstractmethod
+    async def list_dm_rooms(self) -> list[dict[str, Any]]: ...
+
+    @abstractmethod
+    async def set_status(self, status: str, message: str = "") -> None: ...
+
+
+class RocketClient(ChatClient):
     """Hybrid Rocket Chat client: DDP for subscriptions, async REST for actions."""
 
     def __init__(self, url: str, username: str, password: str) -> None:
@@ -58,6 +105,10 @@ class RocketClient:
         self._ddp: DDPClient | None = None
         self._http: httpx.AsyncClient | None = None
         self._user_id: str | None = None
+
+    @property
+    def user_id(self) -> str:
+        return self._user_id or ""
 
     async def connect(self) -> None:
         """Connect via DDP and authenticate via REST."""
@@ -188,7 +239,7 @@ class RocketClient:
     async def set_status(self, status: str, message: str = "") -> None:
         """Set the bot's presence status (online, busy, away, offline)."""
         delay = 1
-        for attempt in range(4):
+        for attempt in range(4):  # pragma: no branch
             try:
                 await self._post("users.setStatus", status=status, message=message)
                 return
@@ -202,7 +253,7 @@ class RocketClient:
                 await asyncio.sleep(delay)
                 delay *= 2
 
-    async def incoming_messages(self) -> AsyncIterator[IncomingMessage]:
+    async def incoming_messages(self) -> AsyncGenerator[IncomingMessage, None]:
         """Yield incoming messages from subscriptions."""
         if not self._ddp:
             return

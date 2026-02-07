@@ -25,7 +25,7 @@ def test_get_brain_raises_before_set():
 
 
 def test_get_client_raises_before_set():
-    with pytest.raises(RuntimeError, match="RocketClient not initialized"):
+    with pytest.raises(RuntimeError, match="ChatClient not initialized"):
         tasks.get_client()
 
 

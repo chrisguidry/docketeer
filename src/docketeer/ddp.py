@@ -71,6 +71,8 @@ class DDPClient:
                 else:
                     await self._events.put(msg)
         except websockets.ConnectionClosed:
+            pass
+        finally:
             await self._events.put({"msg": "disconnected"})
 
     async def call(self, method: str, params: list[Any]) -> dict[str, Any]:

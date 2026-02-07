@@ -1,0 +1,294 @@
+"""Tests for incoming_messages and _parse_message_event."""
+
+from collections.abc import AsyncGenerator
+from typing import Any
+from unittest.mock import AsyncMock
+
+import httpx
+import respx
+
+from docketeer.chat import RocketClient
+
+
+async def test_incoming_messages_filters():
+    """Own messages, empty text, and unparsable events are skipped."""
+    client = RocketClient("http://localhost:3000", "bot", "pass")
+    client._user_id = "bot_uid"
+
+    ddp = AsyncMock()
+    events = [
+        # own message
+        {
+            "msg": "changed",
+            "fields": {
+                "args": [
+                    {
+                        "_id": "m1",
+                        "msg": "my own",
+                        "rid": "r1",
+                        "u": {"_id": "bot_uid", "username": "bot"},
+                    }
+                ]
+            },
+        },
+        # empty text, no attachments
+        {
+            "msg": "changed",
+            "fields": {
+                "args": [
+                    {
+                        "_id": "m2",
+                        "msg": "",
+                        "rid": "r1",
+                        "u": {"_id": "user1", "username": "alice"},
+                    }
+                ]
+            },
+        },
+        # not a "changed" event
+        {"msg": "added"},
+        # valid message
+        {
+            "msg": "changed",
+            "fields": {
+                "args": [
+                    {
+                        "_id": "m3",
+                        "msg": "hello",
+                        "rid": "r1",
+                        "u": {"_id": "user1", "username": "alice"},
+                    }
+                ]
+            },
+        },
+        {"msg": "disconnected"},
+    ]
+
+    async def fake_events() -> AsyncGenerator[dict[str, Any], None]:
+        for e in events:
+            yield e
+
+    ddp.events = fake_events
+    client._ddp = ddp
+
+    results = []
+    async for msg in client.incoming_messages():
+        results.append(msg)
+    assert len(results) == 1
+    assert results[0].text == "hello"
+
+
+async def test_incoming_messages_dedup():
+    """Duplicate message IDs are skipped."""
+    client = RocketClient("http://localhost:3000", "bot", "pass")
+    client._user_id = "bot_uid"
+
+    ddp = AsyncMock()
+    events = [
+        {
+            "msg": "changed",
+            "fields": {
+                "args": [
+                    {
+                        "_id": "m1",
+                        "msg": "hello",
+                        "rid": "r1",
+                        "u": {"_id": "user1", "username": "alice"},
+                    }
+                ]
+            },
+        },
+        {
+            "msg": "changed",
+            "fields": {
+                "args": [
+                    {
+                        "_id": "m1",
+                        "msg": "hello again",
+                        "rid": "r1",
+                        "u": {"_id": "user1", "username": "alice"},
+                    }
+                ]
+            },
+        },
+        {"msg": "disconnected"},
+    ]
+
+    async def fake_events() -> AsyncGenerator[dict[str, Any], None]:
+        for e in events:
+            yield e
+
+    ddp.events = fake_events
+    client._ddp = ddp
+
+    results = []
+    async for msg in client.incoming_messages():
+        results.append(msg)
+    assert len(results) == 1
+
+
+async def test_incoming_messages_no_ddp():
+    """No DDP connection means immediate return."""
+    client = RocketClient("http://localhost:3000", "bot", "pass")
+    client._ddp = None
+    results = []
+    async for msg in client.incoming_messages():
+        results.append(msg)
+    assert results == []
+
+
+async def test_parse_message_event_changed(parser: RocketClient):
+    event = {
+        "msg": "changed",
+        "fields": {
+            "args": [
+                {
+                    "_id": "m1",
+                    "msg": "hi",
+                    "rid": "r1",
+                    "u": {"_id": "u1", "username": "alice", "name": "Alice"},
+                    "ts": "2026-02-06T10:00:00Z",
+                }
+            ]
+        },
+    }
+    msg = await parser._parse_message_event(event)
+    assert msg is not None
+    assert msg.text == "hi"
+    assert msg.username == "alice"
+    assert msg.display_name == "Alice"
+
+
+async def test_parse_message_event_not_changed(parser: RocketClient):
+    assert await parser._parse_message_event({"msg": "added"}) is None
+
+
+async def test_parse_message_event_no_args(parser: RocketClient):
+    event = {"msg": "changed", "fields": {"args": []}}
+    assert await parser._parse_message_event(event) is None
+
+
+async def test_parse_message_event_non_dict_args(parser: RocketClient):
+    event = {"msg": "changed", "fields": {"args": ["not a dict"]}}
+    assert await parser._parse_message_event(event) is None
+
+
+async def test_parse_message_event_system_message(parser: RocketClient):
+    event = {
+        "msg": "changed",
+        "fields": {"args": [{"_id": "m1", "t": "uj", "rid": "r1", "u": {"_id": "u1"}}]},
+    }
+    assert await parser._parse_message_event(event) is None
+
+
+@respx.mock
+async def test_parse_message_event_with_payload_fetch(parser: RocketClient):
+    parser._http = httpx.AsyncClient(base_url="http://localhost:3000/api/v1", timeout=5)
+    respx.get("http://localhost:3000/api/v1/chat.getMessage").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "message": {
+                    "_id": "m1",
+                    "msg": "full message",
+                    "rid": "r1",
+                    "u": {"_id": "u1", "username": "alice", "name": "Alice"},
+                }
+            },
+        )
+    )
+    event = {
+        "msg": "changed",
+        "fields": {
+            "args": [
+                {
+                    "payload": {
+                        "_id": "m1",
+                        "rid": "r1",
+                        "sender": {"_id": "u1", "username": "alice"},
+                    },
+                }
+            ]
+        },
+    }
+    msg = await parser._parse_message_event(event)
+    assert msg is not None
+    assert msg.text == "full message"
+
+
+@respx.mock
+async def test_parse_message_event_payload_fetch_returns_none(parser: RocketClient):
+    """When fetch_message returns None, fall back to payload data."""
+    parser._http = httpx.AsyncClient(base_url="http://localhost:3000/api/v1", timeout=5)
+    respx.get("http://localhost:3000/api/v1/chat.getMessage").mock(
+        return_value=httpx.Response(500)
+    )
+    event = {
+        "msg": "changed",
+        "fields": {
+            "args": [
+                {
+                    "payload": {
+                        "_id": "m1",
+                        "rid": "r1",
+                        "sender": {"_id": "u1", "username": "alice"},
+                    },
+                }
+            ]
+        },
+    }
+    msg = await parser._parse_message_event(event)
+    assert msg is not None
+    assert msg.username == "alice"
+    assert msg.room_id == "r1"
+
+
+async def test_parse_message_event_attachment_without_image_url(parser: RocketClient):
+    """Attachments without image_url are skipped."""
+    event = {
+        "msg": "changed",
+        "fields": {
+            "args": [
+                {
+                    "_id": "m1",
+                    "msg": "look",
+                    "rid": "r1",
+                    "u": {"_id": "u1", "username": "alice"},
+                    "attachments": [
+                        {"title": "file.txt", "type": "application/text"},
+                    ],
+                }
+            ]
+        },
+    }
+    msg = await parser._parse_message_event(event)
+    assert msg is not None
+    assert msg.attachments == []
+
+
+async def test_parse_message_event_with_attachments(parser: RocketClient):
+    event = {
+        "msg": "changed",
+        "fields": {
+            "args": [
+                {
+                    "_id": "m1",
+                    "msg": "look",
+                    "rid": "r1",
+                    "u": {"_id": "u1", "username": "alice"},
+                    "attachments": [
+                        {
+                            "image_url": "/uploads/pic.png",
+                            "image_type": "image/png",
+                            "title": "pic.png",
+                        }
+                    ],
+                }
+            ]
+        },
+    }
+    msg = await parser._parse_message_event(event)
+    assert msg is not None
+    assert msg.attachments is not None
+    assert len(msg.attachments) == 1
+    assert msg.attachments[0].url == "/uploads/pic.png"

@@ -121,10 +121,6 @@ def _safe_path(workspace: Path, path: str) -> Path:
     return resolved
 
 
-# ---------------------------------------------------------------------------
-# Tool definitions
-# ---------------------------------------------------------------------------
-
 registry = ToolRegistry()
 
 
@@ -224,11 +220,6 @@ async def search_files(ctx: ToolContext, query: str, path: str = "") -> str:
     return "\n".join(matches)
 
 
-# ---------------------------------------------------------------------------
-# Journal tools
-# ---------------------------------------------------------------------------
-
-
 def _journal_dir(workspace: Path) -> Path:
     return workspace / "journal"
 
@@ -326,11 +317,6 @@ async def journal_search(ctx: ToolContext, query: str) -> str:
     if not matches:
         return f"No journal entries matching '{query}'"
     return "\n".join(matches)
-
-
-# ---------------------------------------------------------------------------
-# Web tools
-# ---------------------------------------------------------------------------
 
 
 @registry.tool

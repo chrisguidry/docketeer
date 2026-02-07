@@ -27,6 +27,7 @@ dev = [
     "pytest-asyncio",
     "pytest-cov",
     "pytest-xdist",
+    "respx>=0.22.0",
     "ruff",
     "ty",
 ]
@@ -94,11 +95,10 @@ parametrize-values-type = "list"
 parametrize-values-row-type = "tuple"
 
 [tool.pytest.ini_options]
-minversion = "7.0"
+minversion = "9.0"
 addopts = [
     "--import-mode=importlib",
     "--cov=src/docketeer",
-    "--cov=tests",
     "--cov-branch",
     "--cov-report=term-missing",
 ]
@@ -109,10 +109,11 @@ filterwarnings = [
 
 [tool.coverage.run]
 branch = true
-source = ["src/docketeer", "tests"]
+source = ["src/docketeer"]
+omit = ["src/docketeer/__main__.py", "src/docketeer/testing.py"]
 
 [tool.coverage.report]
-fail_under = 5
+fail_under = 100
 precision = 2
 skip_empty = true
 skip_covered = true

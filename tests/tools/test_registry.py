@@ -1,0 +1,184 @@
+"""Tests for tool registry, schema generation, path safety, and param docs."""
+
+from pathlib import Path
+
+import pytest
+
+from docketeer.tools import (
+    ToolContext,
+    ToolRegistry,
+    _parse_param_docs,
+    _safe_path,
+    _schema_from_hints,
+)
+
+
+def test_tool_registration():
+    reg = ToolRegistry()
+
+    @reg.tool
+    async def greet(ctx: ToolContext, name: str) -> str:
+        """Say hello.
+
+        name: person to greet
+        """
+        return f"Hello {name}"
+
+    assert "greet" in reg._tools
+    assert reg._schemas["greet"]["name"] == "greet"
+    assert reg._schemas["greet"]["description"] == "Say hello."
+
+
+def test_definitions_returns_all():
+    reg = ToolRegistry()
+
+    @reg.tool
+    async def tool_a(ctx: ToolContext) -> str:
+        """Tool A."""
+        return "a"
+
+    @reg.tool
+    async def tool_b(ctx: ToolContext) -> str:
+        """Tool B."""
+        return "b"
+
+    defs = reg.definitions()
+    assert len(defs) == 2
+    names = {d["name"] for d in defs}
+    assert names == {"tool_a", "tool_b"}
+
+
+async def test_execute_success():
+    reg = ToolRegistry()
+
+    @reg.tool
+    async def echo(ctx: ToolContext, text: str) -> str:
+        """Echo text."""
+        return text
+
+    result = await reg.execute(
+        "echo", {"text": "hi"}, ToolContext(workspace=Path("."), config=None)
+    )
+    assert result == "hi"
+
+
+async def test_execute_unknown_tool():
+    reg = ToolRegistry()
+    result = await reg.execute(
+        "nope", {}, ToolContext(workspace=Path("."), config=None)
+    )
+    assert result == "Unknown tool: nope"
+
+
+async def test_execute_tool_error():
+    reg = ToolRegistry()
+
+    @reg.tool
+    async def boom(ctx: ToolContext) -> str:
+        """Boom."""
+        raise ValueError("kaboom")
+
+    result = await reg.execute(
+        "boom", {}, ToolContext(workspace=Path("."), config=None)
+    )
+    assert "Error: ValueError: kaboom" in result
+
+
+def test_schema_from_hints_types():
+    async def fn(
+        ctx: ToolContext, name: str, age: int, active: bool, score: float
+    ) -> str:
+        """Test.
+
+        name: the name
+        age: the age
+        active: is active
+        score: the score
+        """
+        return ""
+
+    schema = _schema_from_hints(fn)
+    assert schema["properties"]["name"]["type"] == "string"
+    assert schema["properties"]["age"]["type"] == "integer"
+    assert schema["properties"]["active"]["type"] == "boolean"
+    assert schema["properties"]["score"]["type"] == "number"
+
+
+def test_schema_from_hints_required_vs_default():
+    async def fn(
+        ctx: ToolContext, required_param: str, optional_param: str = "default"
+    ) -> str:
+        """Test."""
+        return ""
+
+    schema = _schema_from_hints(fn)
+    assert "required_param" in schema["required"]
+    assert "optional_param" not in schema["required"]
+    assert schema["properties"]["optional_param"]["default"] == "default"
+
+
+def test_schema_from_hints_skips_ctx():
+    async def fn(ctx: ToolContext, name: str) -> str:
+        """Test."""
+        return ""
+
+    schema = _schema_from_hints(fn)
+    assert "ctx" not in schema["properties"]
+
+
+def test_parse_param_docs():
+    docstring = """Do something.
+
+    name: the person name
+    age: their age
+    """
+    result = _parse_param_docs(docstring)
+    assert result == {"name": "the person name", "age": "their age"}
+
+
+def test_parse_param_docs_stops_at_separator():
+    docstring = """Do something.
+
+    name: before separator
+    ---
+    age: after separator
+    """
+    result = _parse_param_docs(docstring)
+    assert "name" in result
+    assert "age" not in result
+
+
+def test_parse_param_docs_skips_comments():
+    docstring = """Do something.
+
+    # This is a comment
+    name: the name
+    """
+    result = _parse_param_docs(docstring)
+    assert result == {"name": "the name"}
+
+
+def test_parse_param_docs_skips_invalid_identifier():
+    docstring = """Do something.
+
+    valid_name: a good param
+    123-bad: not a valid identifier
+    also_valid: another param
+    """
+    result = _parse_param_docs(docstring)
+    assert result == {"valid_name": "a good param", "also_valid": "another param"}
+    assert "123-bad" not in result
+
+
+def test_safe_path_within_workspace(tmp_path: Path):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    result = _safe_path(workspace, "sub/file.txt")
+    assert str(result).startswith(str(workspace.resolve()))
+
+
+def test_safe_path_traversal_blocked(tmp_path: Path):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    with pytest.raises(ValueError, match="outside workspace"):
+        _safe_path(workspace, "../../../etc/passwd")

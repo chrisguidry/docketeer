@@ -14,7 +14,12 @@ from docket import Docket, Worker
 
 from docketeer import tasks
 from docketeer.brain import Brain, BrainResponse, HistoryMessage, MessageContent
-from docketeer.chat import IncomingMessage, RocketClient, _parse_rc_timestamp
+from docketeer.chat import (
+    ChatClient,
+    IncomingMessage,
+    RocketClient,
+    _parse_rc_timestamp,
+)
 from docketeer.config import Config
 from docketeer.tools import ToolContext, _safe_path, registry
 
@@ -42,7 +47,7 @@ def _acquire_lock(data_dir: Path) -> None:
         sys.exit(1)
 
 
-def _register_chat_tools(client: RocketClient, tool_context: ToolContext) -> None:
+def _register_chat_tools(client: ChatClient, tool_context: ToolContext) -> None:
     """Register tools that need the chat client."""
 
     @registry.tool
@@ -73,7 +78,9 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
         key: str = "",
         silent: bool = False,
     ) -> str:
-        """Schedule a future task — reminder, follow-up, or background work. The time must be in the future — add the delay to the current time shown in your system prompt.
+        """Schedule a future task — reminder, follow-up, or background work. The time
+        must be in the future — add the delay to the current time shown in your system
+        prompt.
 
         prompt: what to do when the task fires (be specific — future-you needs context)
         when: ISO 8601 datetime in the future (e.g. 2026-02-07T15:00:00-05:00)
@@ -137,7 +144,7 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
         return f"{len(lines)} task(s):\n" + "\n".join(lines)
 
 
-async def main() -> None:
+async def main() -> None:  # pragma: no cover
     config = Config.from_env()
     _acquire_lock(config.data_dir)
 
@@ -192,7 +199,7 @@ async def main() -> None:
                 log.info("Disconnected.")
 
 
-async def load_all_history(client: RocketClient, brain: Brain) -> None:
+async def load_all_history(client: ChatClient, brain: Brain) -> None:
     """Load conversation history for all DM rooms."""
     rooms = await client.list_dm_rooms()
     log.info("Found %d DM rooms", len(rooms))
@@ -221,7 +228,7 @@ def _format_timestamp(ts: Any) -> str:
 
 
 async def fetch_history_for_brain(
-    client: RocketClient, room_id: str
+    client: ChatClient, room_id: str
 ) -> list[HistoryMessage]:
     """Fetch room history and convert to Brain's format."""
     raw_history = await client.fetch_room_history(room_id, count=20)
@@ -237,7 +244,7 @@ async def fetch_history_for_brain(
 
         user = msg.get("u", {})
         username = user.get("username", "unknown")
-        is_bot = user.get("_id") == client._user_id
+        is_bot = user.get("_id") == client.user_id
         role = "assistant" if is_bot else "user"
         timestamp = _format_timestamp(msg.get("ts"))
 
@@ -254,7 +261,7 @@ async def fetch_history_for_brain(
 
 
 async def handle_message(
-    client: RocketClient, brain: Brain, msg: IncomingMessage
+    client: ChatClient, brain: Brain, msg: IncomingMessage
 ) -> None:
     """Handle an incoming message."""
     log.info("Message from %s in %s: %s", msg.username, msg.room_id, msg.text[:50])
@@ -275,7 +282,7 @@ async def handle_message(
         await client.set_status("online")
 
 
-async def build_content(client: RocketClient, msg: IncomingMessage) -> MessageContent:
+async def build_content(client: ChatClient, msg: IncomingMessage) -> MessageContent:
     """Build MessageContent from an IncomingMessage, fetching any attachments."""
     images = []
 
@@ -300,7 +307,7 @@ async def build_content(client: RocketClient, msg: IncomingMessage) -> MessageCo
 
 
 async def send_response(
-    client: RocketClient, room_id: str, response: BrainResponse
+    client: ChatClient, room_id: str, response: BrainResponse
 ) -> None:
     """Send response to Rocket Chat."""
     await client.send_message(room_id, response.text)
@@ -319,7 +326,7 @@ def run() -> None:
         asyncio.run(main())
 
 
-def run_dev() -> None:
+def run_dev() -> None:  # pragma: no cover
     """Run with live reload on file changes."""
     from watchfiles import run_process
 
@@ -329,7 +336,7 @@ def run_dev() -> None:
     run_process(src_path, target=_run_main)
 
 
-def _run_main() -> None:
+def _run_main() -> None:  # pragma: no cover
     """Target function for watchfiles subprocess."""
     asyncio.run(main())
 
