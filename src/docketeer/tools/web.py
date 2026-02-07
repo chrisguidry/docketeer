@@ -8,7 +8,8 @@ from importlib.metadata import version
 import httpx
 
 from docketeer import environment
-from docketeer.tools import ToolContext, _safe_path, registry
+
+from . import ToolContext, _safe_path, registry
 
 log = logging.getLogger(__name__)
 

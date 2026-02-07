@@ -7,7 +7,7 @@ import pytest
 import respx
 
 from docketeer.tools import ToolContext, registry
-from docketeer.web import _format_headers, _human_size, _is_readable_content_type
+from docketeer.tools.web import _format_headers, _human_size, _is_readable_content_type
 
 # --- helper tests ---
 
@@ -90,7 +90,7 @@ async def test_web_search_success(tool_context: ToolContext):
 
 @respx.mock
 async def test_web_search_no_api_key(tool_context: ToolContext):
-    with patch("docketeer.web.BRAVE_API_KEY", ""):
+    with patch("docketeer.tools.web.BRAVE_API_KEY", ""):
         result = await registry.execute("web_search", {"query": "test"}, tool_context)
     assert "Brave Search API key not configured" in result
 
