@@ -8,7 +8,12 @@ from docketeer.chat import Attachment, IncomingMessage
 from docketeer.main import build_content, handle_message, run, send_response
 from docketeer.prompt import BrainResponse, HistoryMessage
 from docketeer.testing import MemoryChat
-from tests.conftest import FakeMessage, FakeMessages, make_text_block
+from tests.conftest import (
+    FakeMessage,
+    FakeMessages,
+    make_text_block,
+    make_tool_use_block,
+)
 
 
 async def test_handle_message_existing_room(
@@ -60,7 +65,7 @@ async def test_handle_message_new_room(
     assert info.members == ["alice"]
 
 
-async def test_handle_message_sets_status(
+async def test_handle_message_text_only_no_status_change(
     chat: MemoryChat, brain: Brain, fake_messages: FakeMessages
 ):
     brain.load_history("room1", [HistoryMessage(role="user", username="a", text="x")])
@@ -76,9 +81,7 @@ async def test_handle_message_sets_status(
         is_direct=True,
     )
     await handle_message(chat, brain, msg)
-    statuses = [s[0] for s in chat.status_changes]
-    assert statuses[0] == "away"
-    assert statuses[-1] == "online"
+    assert chat.status_changes == []
 
 
 async def test_build_content_text_only(chat: MemoryChat):
@@ -150,6 +153,11 @@ async def test_send_response(chat: MemoryChat):
     assert chat.sent_messages[0].room_id == "room1"
 
 
+async def test_send_response_empty_skips_message(chat: MemoryChat):
+    await send_response(chat, "room1", BrainResponse(text=""))
+    assert chat.sent_messages == []
+
+
 def test_run_normal_mode():
     with (
         patch("docketeer.main.argparse.ArgumentParser.parse_args") as mock_args,
@@ -160,6 +168,53 @@ def test_run_normal_mode():
         mock_run.assert_called_once()
         coro = mock_run.call_args[0][0]
         coro.close()
+
+
+async def test_handle_message_sends_typing_events(
+    chat: MemoryChat, brain: Brain, fake_messages: FakeMessages
+):
+    brain.load_history("room1", [HistoryMessage(role="user", username="a", text="x")])
+    fake_messages.responses = [FakeMessage(content=[make_text_block(text="reply")])]
+
+    msg = IncomingMessage(
+        message_id="m1",
+        user_id="u1",
+        username="alice",
+        display_name="Alice",
+        text="hi",
+        room_id="room1",
+        is_direct=True,
+    )
+    await handle_message(chat, brain, msg)
+    # Should have typing=True (on first text) then typing=False (after process)
+    assert ("room1", True) in chat.typing_events
+    assert ("room1", False) in chat.typing_events
+
+
+async def test_handle_message_tool_use_status_changes(
+    chat: MemoryChat, brain: Brain, fake_messages: FakeMessages
+):
+    brain.load_history("room1", [HistoryMessage(role="user", username="a", text="x")])
+    fake_messages.responses = [
+        FakeMessage(
+            content=[make_tool_use_block(name="list_files", input={"path": ""})],
+        ),
+        FakeMessage(content=[make_text_block(text="Done!")]),
+    ]
+
+    msg = IncomingMessage(
+        message_id="m1",
+        user_id="u1",
+        username="alice",
+        display_name="Alice",
+        text="list files",
+        room_id="room1",
+        is_direct=True,
+    )
+    await handle_message(chat, brain, msg)
+    statuses = [s[0] for s in chat.status_changes]
+    # on_tool_start sets away, on_tool_end sets online — only around tool execution
+    assert statuses == ["away", "online"]
 
 
 def test_run_dev_mode():

@@ -94,6 +94,17 @@ class ChatClient(ABC):
     @abstractmethod
     async def set_status(self, status: str, message: str = "") -> None: ...
 
+    async def set_status_busy(self) -> None:
+        """Signal that the bot is busy (e.g. executing tools)."""
+        await self.set_status("away")
+
+    async def set_status_available(self) -> None:
+        """Signal that the bot is idle and ready."""
+        await self.set_status("online")
+
+    @abstractmethod
+    async def send_typing(self, room_id: str, typing: bool) -> None: ...
+
 
 class RocketClient(ChatClient):
     """Hybrid Rocket Chat client: DDP for subscriptions, async REST for actions."""
@@ -252,6 +263,19 @@ class RocketClient(ChatClient):
                 log.debug("Status %s rate-limited, retrying in %ds", status, delay)
                 await asyncio.sleep(delay)
                 delay *= 2
+
+    async def send_typing(self, room_id: str, typing: bool) -> None:
+        """Send a typing indicator to a room via the user-activity stream."""
+        if not self._ddp:
+            return
+        activities = ["user-typing"] if typing else []
+        try:
+            await self._ddp.call(
+                "stream-notify-room",
+                [f"{room_id}/user-activity", self.username, activities, {}],
+            )
+        except Exception:
+            log.warning("Failed to send typing indicator to %s", room_id)
 
     async def incoming_messages(self) -> AsyncGenerator[IncomingMessage, None]:
         """Yield incoming messages from subscriptions."""

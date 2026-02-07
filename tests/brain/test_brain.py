@@ -1,9 +1,9 @@
 """Tests for the Brain class."""
 
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from docketeer.brain import Brain
+from docketeer.brain import Brain, ProcessCallbacks
 from docketeer.config import Config
 from docketeer.prompt import HistoryMessage, MessageContent
 from docketeer.tools import ToolContext
@@ -190,6 +190,19 @@ async def test_process_empty_response(brain: Brain, fake_messages: Any):
     assert response.text == "(no response)"
 
 
+async def test_process_tool_only_returns_empty(brain: Brain, fake_messages: Any):
+    """When Claude uses a tool then returns no text, the response is empty (not posted)."""
+    fake_messages.responses = [
+        FakeMessage(
+            content=[make_tool_use_block(name="journal_add", input={"entry": "hi"})],
+        ),
+        FakeMessage(content=[]),
+    ]
+    content = MessageContent(username="chris", text="thanks")
+    response = await brain.process("room1", content)
+    assert response.text == ""
+
+
 async def test_process_triggers_compaction(brain: Brain, fake_messages: Any):
     brain._room_token_counts["room1"] = 150_000
     for i in range(10):
@@ -219,7 +232,7 @@ async def test_process_exhausts_tool_rounds(brain: Brain, fake_messages: Any):
     content = MessageContent(username="chris", text="keep going")
     with patch("docketeer.brain.MAX_TOOL_ROUNDS", 3):
         response = await brain.process("room1", content)
-    assert response.text == "(no response)"
+    assert response.text == ""
 
 
 async def test_process_multi_tool_results_in_history(brain: Brain, fake_messages: Any):
@@ -322,6 +335,57 @@ async def test_compact_history_summarization_failure(brain: Brain, fake_messages
         brain._conversations["room1"].append(
             {"role": "user" if i % 2 == 0 else "assistant", "content": f"msg {i}"}
         )
-    fake_messages.create = MagicMock(side_effect=Exception("API error"))
+    fake_messages.create = AsyncMock(side_effect=Exception("API error"))
     await brain._compact_history("room1", [], [])
     assert len(brain._conversations["room1"]) == 6
+
+
+async def test_on_first_text_fires_on_text_response(brain: Brain, fake_messages: Any):
+    fake_messages.responses = [FakeMessage(content=[make_text_block(text="Hi!")])]
+    on_first_text = AsyncMock()
+    callbacks = ProcessCallbacks(on_first_text=on_first_text)
+    content = MessageContent(username="chris", text="hello")
+    await brain.process("room1", content, callbacks=callbacks)
+    on_first_text.assert_awaited_once()
+
+
+async def test_on_first_text_not_fired_on_tool_only_round(
+    brain: Brain, fake_messages: Any
+):
+    fake_messages.responses = [
+        FakeMessage(
+            content=[make_tool_use_block(name="list_files", input={"path": ""})],
+        ),
+        FakeMessage(content=[make_text_block(text="Done!")]),
+    ]
+    on_first_text = AsyncMock()
+    callbacks = ProcessCallbacks(on_first_text=on_first_text)
+    content = MessageContent(username="chris", text="list files")
+    await brain.process("room1", content, callbacks=callbacks)
+    # on_first_text fires on the second round (text response), not the first (tool-only)
+    on_first_text.assert_awaited_once()
+
+
+async def test_on_tool_start_end_fire_around_tool_execution(
+    brain: Brain, fake_messages: Any
+):
+    fake_messages.responses = [
+        FakeMessage(
+            content=[make_tool_use_block(name="list_files", input={"path": ""})],
+        ),
+        FakeMessage(content=[make_text_block(text="Done!")]),
+    ]
+    on_tool_start = AsyncMock()
+    on_tool_end = AsyncMock()
+    callbacks = ProcessCallbacks(on_tool_start=on_tool_start, on_tool_end=on_tool_end)
+    content = MessageContent(username="chris", text="do stuff")
+    await brain.process("room1", content, callbacks=callbacks)
+    on_tool_start.assert_awaited_once()
+    on_tool_end.assert_awaited_once()
+
+
+async def test_process_with_no_callbacks(brain: Brain, fake_messages: Any):
+    fake_messages.responses = [FakeMessage(content=[make_text_block(text="Hi!")])]
+    content = MessageContent(username="chris", text="hello")
+    response = await brain.process("room1", content, callbacks=None)
+    assert response.text == "Hi!"

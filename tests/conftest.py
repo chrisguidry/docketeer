@@ -63,22 +63,44 @@ class FakeMessage:
     usage: FakeUsage = field(default_factory=FakeUsage)
 
 
+class _AsyncTextIterator:
+    """Async iterator over text blocks in a FakeMessage."""
+
+    def __init__(self, content: list) -> None:
+        self._texts = [b.text for b in content if hasattr(b, "text")]
+        self._index = 0
+
+    def __aiter__(self) -> "_AsyncTextIterator":
+        return self
+
+    async def __anext__(self) -> str:
+        if self._index >= len(self._texts):
+            raise StopAsyncIteration
+        text = self._texts[self._index]
+        self._index += 1
+        return text
+
+
 class FakeStream:
     def __init__(self, message: FakeMessage) -> None:
         self._message = message
 
-    def __enter__(self) -> "FakeStream":
+    async def __aenter__(self) -> "FakeStream":
         return self
 
-    def __exit__(self, *_args: object) -> None:
+    async def __aexit__(self, *_args: object) -> None:
         pass
 
-    def get_final_message(self) -> FakeMessage:
+    @property
+    def text_stream(self) -> _AsyncTextIterator:
+        return _AsyncTextIterator(self._message.content)
+
+    async def get_final_message(self) -> FakeMessage:
         return self._message
 
 
 class FakeMessages:
-    """Drop-in for anthropic.Anthropic().messages with configurable responses."""
+    """Drop-in for anthropic.AsyncAnthropic().messages with configurable responses."""
 
     def __init__(self) -> None:
         self.responses: list[FakeMessage] = [FakeMessage()]
@@ -91,12 +113,12 @@ class FakeMessages:
         self._call_count += 1
         return FakeStream(msg)
 
-    def count_tokens(self, **_kwargs: Any) -> MagicMock:
+    async def count_tokens(self, **_kwargs: Any) -> MagicMock:
         m = MagicMock()
         m.input_tokens = 1000
         return m
 
-    def create(self, **kwargs: Any) -> FakeMessage:
+    async def create(self, **kwargs: Any) -> FakeMessage:
         self.last_kwargs = kwargs
         msg = self.responses[min(self._call_count, len(self.responses) - 1)]
         self._call_count += 1
@@ -112,7 +134,7 @@ def fake_messages() -> FakeMessages:
 def mock_anthropic(fake_messages: FakeMessages) -> Iterator[MagicMock]:
     mock_client = MagicMock()
     mock_client.messages = fake_messages
-    with patch("docketeer.brain.anthropic.Anthropic", return_value=mock_client):
+    with patch("docketeer.brain.anthropic.AsyncAnthropic", return_value=mock_client):
         yield mock_client
 
 

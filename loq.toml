@@ -1,0 +1,7 @@
+default_max_lines = 500
+respect_gitignore = true
+exclude = [
+    "**/vendor/**",
+    "**/__init__.py",
+    "*.lock",
+]

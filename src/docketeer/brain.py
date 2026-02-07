@@ -1,10 +1,11 @@
 """Claude reasoning loop with tool use."""
 
-import asyncio
 import base64
 import json
 import logging
 from collections import defaultdict
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
@@ -33,6 +34,15 @@ CONTEXT_BUDGET = 180_000
 COMPACT_THRESHOLD = 140_000
 COMPACT_MODEL = "claude-haiku-4-5-20251001"
 MIN_RECENT_MESSAGES = 6
+
+
+@dataclass
+class ProcessCallbacks:
+    """Optional callbacks fired during process() for typing/presence signals."""
+
+    on_first_text: Callable[[], Awaitable[None]] | None = None
+    on_tool_start: Callable[[], Awaitable[None]] | None = None
+    on_tool_end: Callable[[], Awaitable[None]] | None = None
 
 
 def _audit_log(
@@ -72,7 +82,7 @@ def _log_usage(response: anthropic.types.Message) -> None:
 class Brain:
     def __init__(self, config: Config, tool_context: ToolContext) -> None:
         self.config = config
-        self.client = anthropic.Anthropic(api_key=config.anthropic_api_key)
+        self.client = anthropic.AsyncAnthropic(api_key=config.anthropic_api_key)
         self.tool_context = tool_context
         self._conversations: dict[str, list[dict[str, Any]]] = defaultdict(list)
         self._room_token_counts: dict[str, int] = {}
@@ -117,7 +127,12 @@ class Brain:
         """Check if we have history for a room."""
         return room_id in self._conversations
 
-    async def process(self, room_id: str, content: MessageContent) -> BrainResponse:
+    async def process(
+        self,
+        room_id: str,
+        content: MessageContent,
+        callbacks: ProcessCallbacks | None = None,
+    ) -> BrainResponse:
         """Process a message and return a response with tool call info."""
         current_time = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M %Z")
         person_context = load_person_context(
@@ -159,12 +174,13 @@ class Brain:
         log.debug("Processing message with %d history messages", len(messages))
 
         # Agentic loop: keep calling Claude until no more tool use
-        tool_blocks = []
+        on_first_text = callbacks.on_first_text if callbacks else None
+        used_tools = False
         rounds = 0
         for _ in range(MAX_TOOL_ROUNDS):
             rounds += 1
-            response = await asyncio.to_thread(
-                self._stream_message, system, messages, tools
+            response = await self._stream_message(
+                system, messages, tools, on_first_text=on_first_text
             )
 
             _log_usage(response)
@@ -173,7 +189,12 @@ class Brain:
             tool_blocks = [b for b in response.content if isinstance(b, ToolUseBlock)]
 
             if tool_blocks:
+                used_tools = True
+                if callbacks and callbacks.on_tool_start:
+                    await callbacks.on_tool_start()
                 tool_results = await self._execute_tools(tool_blocks)
+                if callbacks and callbacks.on_tool_end:
+                    await callbacks.on_tool_end()
                 self._update_cache_breakpoints(messages, tool_results)
                 messages.append({"role": "assistant", "content": response.content})
                 messages.append({"role": "user", "content": tool_results})
@@ -183,11 +204,12 @@ class Brain:
             else:
                 break
 
-        reply = self._build_reply(response, bool(tool_blocks), rounds)
+        reply = self._build_reply(response, used_tools, rounds)
 
-        self._conversations[room_id].append({"role": "assistant", "content": reply})
+        if reply:
+            self._conversations[room_id].append({"role": "assistant", "content": reply})
 
-        tokens = self._measure_context(room_id, system, tools)
+        tokens = await self._measure_context(room_id, system, tools)
         log.info(
             "Context: %d / %d tokens for room %s",
             tokens,
@@ -198,21 +220,26 @@ class Brain:
         log.debug("Response: %s", reply[:100])
         return BrainResponse(text=reply)
 
-    def _stream_message(
+    async def _stream_message(
         self,
         system: Any,
         messages: Any,
         tools: Any,
+        on_first_text: Callable[[], Awaitable[None]] | None = None,
     ) -> anthropic.types.Message:
-        """Run the synchronous streaming call (meant to be called via asyncio.to_thread)."""
-        with self.client.messages.stream(
+        """Stream a response from Claude, optionally firing a callback on first text."""
+        async with self.client.messages.stream(
             model=self.config.claude_model,
             max_tokens=MAX_RESPONSE_TOKENS,
             system=system,
             messages=messages,
             tools=tools,
         ) as stream:
-            return stream.get_final_message()
+            if on_first_text:
+                async for _text in stream.text_stream:
+                    await on_first_text()
+                    break
+            return await stream.get_final_message()
 
     async def _execute_tools(
         self, tool_blocks: list[ToolUseBlock]
@@ -278,6 +305,9 @@ class Brain:
             )
 
         if not reply_parts:
+            if had_tool_use:
+                log.info("Tool-only response, no text to send (rounds=%d)", rounds)
+                return ""
             block_types = [
                 getattr(b, "type", type(b).__name__) for b in response.content
             ]
@@ -292,9 +322,9 @@ class Brain:
 
         return "\n".join(reply_parts).strip()
 
-    def _measure_context(self, room_id: str, system: Any, tools: Any) -> int:
+    async def _measure_context(self, room_id: str, system: Any, tools: Any) -> int:
         """Count tokens for the current conversation state."""
-        result = self.client.messages.count_tokens(
+        result = await self.client.messages.count_tokens(
             model=self.config.claude_model,
             system=system,
             tools=tools,
@@ -324,7 +354,7 @@ class Brain:
         if not transcript.strip():
             return
 
-        summary = self._summarize_transcript(transcript)
+        summary = await self._summarize_transcript(transcript)
         if summary is None:
             self._conversations[room_id] = recent_messages
             return
@@ -336,7 +366,7 @@ class Brain:
         ]
 
         new_count = len(self._conversations[room_id])
-        tokens = self._measure_context(room_id, system, tools)
+        tokens = await self._measure_context(room_id, system, tools)
         log.info(
             "Compacted room %s: %d messages → %d (%d tokens)",
             room_id,
@@ -345,10 +375,10 @@ class Brain:
             tokens,
         )
 
-    def _summarize_transcript(self, transcript: str) -> str | None:
+    async def _summarize_transcript(self, transcript: str) -> str | None:
         """Ask Haiku for a conversation summary, or None on failure."""
         try:
-            summary_response = self.client.messages.create(
+            summary_response = await self.client.messages.create(
                 model=COMPACT_MODEL,
                 max_tokens=1024,
                 messages=[

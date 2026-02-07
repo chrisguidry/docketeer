@@ -13,7 +13,7 @@ from typing import Any
 from docket import Docket, Worker
 
 from docketeer import tasks
-from docketeer.brain import Brain
+from docketeer.brain import Brain, ProcessCallbacks
 from docketeer.chat import (
     ChatClient,
     IncomingMessage,
@@ -292,13 +292,23 @@ async def handle_message(
             ),
         )
 
-    await client.set_status("away")
+    content = await build_content(client, msg)
+
+    async def _on_tool_start() -> None:
+        await client.send_typing(msg.room_id, False)
+        await client.set_status_busy()
+
+    callbacks = ProcessCallbacks(
+        on_first_text=lambda: client.send_typing(msg.room_id, True),
+        on_tool_start=_on_tool_start,
+        on_tool_end=lambda: client.set_status_available(),
+    )
+
     try:
-        content = await build_content(client, msg)
-        response = await brain.process(msg.room_id, content)
-        await send_response(client, msg.room_id, response)
+        response = await brain.process(msg.room_id, content, callbacks=callbacks)
     finally:
-        await client.set_status("online")
+        await client.send_typing(msg.room_id, False)
+    await send_response(client, msg.room_id, response)
 
 
 async def build_content(client: ChatClient, msg: IncomingMessage) -> MessageContent:
@@ -328,8 +338,9 @@ async def build_content(client: ChatClient, msg: IncomingMessage) -> MessageCont
 async def send_response(
     client: ChatClient, room_id: str, response: BrainResponse
 ) -> None:
-    """Send response to Rocket Chat."""
-    await client.send_message(room_id, response.text)
+    """Send response to Rocket Chat (skips empty responses from tool-only turns)."""
+    if response.text:
+        await client.send_message(room_id, response.text)
 
 
 def run() -> None:

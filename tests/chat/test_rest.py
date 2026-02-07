@@ -183,3 +183,30 @@ async def test_set_status_all_retries_fail(rc: RocketClient):
     )
     with patch("docketeer.chat.asyncio.sleep", new_callable=AsyncMock):
         await rc.set_status("online")
+
+
+async def test_send_typing(rc: RocketClient):
+    rc._ddp = AsyncMock()
+    await rc.send_typing("room1", True)
+    rc._ddp.call.assert_awaited_once_with(
+        "stream-notify-room", ["room1/user-activity", "bot", ["user-typing"], {}]
+    )
+
+
+async def test_send_typing_false(rc: RocketClient):
+    rc._ddp = AsyncMock()
+    await rc.send_typing("room1", False)
+    rc._ddp.call.assert_awaited_once_with(
+        "stream-notify-room", ["room1/user-activity", "bot", [], {}]
+    )
+
+
+async def test_send_typing_no_ddp(rc: RocketClient):
+    rc._ddp = None
+    await rc.send_typing("room1", True)
+
+
+async def test_send_typing_exception_swallowed(rc: RocketClient):
+    rc._ddp = AsyncMock()
+    rc._ddp.call.side_effect = Exception("connection lost")
+    await rc.send_typing("room1", True)

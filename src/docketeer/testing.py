@@ -38,6 +38,7 @@ class MemoryChat(ChatClient):
         self.sent_messages: list[SentMessage] = []
         self.uploaded_files: list[UploadedFile] = []
         self.status_changes: list[tuple[str, str]] = []
+        self.typing_events: list[tuple[str, bool]] = []
         self._incoming: asyncio.Queue[IncomingMessage | None] = asyncio.Queue()
         self._room_history: dict[str, list[dict[str, Any]]] = {}
         self._dm_rooms: list[dict[str, Any]] = []
@@ -91,3 +92,6 @@ class MemoryChat(ChatClient):
 
     async def set_status(self, status: str, message: str = "") -> None:
         self.status_changes.append((status, message))
+
+    async def send_typing(self, room_id: str, typing: bool) -> None:
+        self.typing_events.append((room_id, typing))
