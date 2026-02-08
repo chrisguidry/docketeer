@@ -19,6 +19,7 @@ dev = [
     { name = "docketeer-monty", editable = "docketeer-monty" },
     { name = "docketeer-rocketchat", editable = "docketeer-rocketchat" },
     { name = "docketeer-web", editable = "docketeer-web" },
+    { name = "loq" },
     { name = "prek" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -478,6 +479,21 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/d2/73/a009f41c5eed71c49bec53036c4b33555afcdee70682a18c6f66e396c039/jiter-0.13.0-graalpy312-graalpy250_312_native-macosx_11_0_arm64.whl", hash = "sha256:ff732bd0a0e778f43d5009840f20b935e79087b4dc65bd36f1cd0f9b04b8ff7f", size = 303808, upload-time = "2026-02-02T12:37:52.092Z" },
     { url = "https://files.pythonhosted.org/packages/c4/10/528b439290763bff3d939268085d03382471b442f212dca4ff5f12802d43/jiter-0.13.0-graalpy312-graalpy250_312_native-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:ab44b178f7981fcaea7e0a5df20e773c663d06ffda0198f1a524e91b2fde7e59", size = 337384, upload-time = "2026-02-02T12:37:53.582Z" },
     { url = "https://files.pythonhosted.org/packages/67/8a/a342b2f0251f3dac4ca17618265d93bf244a2a4d089126e81e4c1056ac50/jiter-0.13.0-graalpy312-graalpy250_312_native-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:7bb00b6d26db67a05fe3e12c76edc75f32077fb51deed13822dc648fa373bc19", size = 343768, upload-time = "2026-02-02T12:37:55.055Z" },
+]
+
+[[package]]
+name = "loq"
+version = "0.1.0a7"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d8/9f/27aacd5b1566ebbec1531ead263fa1f60899b8a7cd6aa1a710c34b05a5b8/loq-0.1.0a7.tar.gz", hash = "sha256:576f70f45d466accf6a4c1020e430f0fc008047eeae1889952bd981f9da12bf0", size = 63997, upload-time = "2026-01-22T04:42:14.476Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fc/e5/b55110b86951b184019bfe7290ee73115b932b3bb0d4428bbe20c68d2f31/loq-0.1.0a7-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:47d40a9792397f8f100e7c2984d56227bd05c7f3d6817e8e26a7af88cbff0b26", size = 1336455, upload-time = "2026-01-22T04:42:23.812Z" },
+    { url = "https://files.pythonhosted.org/packages/0a/b9/519e83707c3819349e4497a4b30e9a814d155eb1317a25425cac73cb8045/loq-0.1.0a7-py3-none-macosx_11_0_arm64.whl", hash = "sha256:178393fa15968082aafb54c24d2015eef7090b0668ca6715e3e3c390bdeeea46", size = 1259828, upload-time = "2026-01-22T04:42:21.951Z" },
+    { url = "https://files.pythonhosted.org/packages/84/28/e9730ef5cf29baef96a015a514752d7142f48287ac7efc8bdd09794d2b28/loq-0.1.0a7-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:f9527526e4cffb12c84207cd2a92ccfa90968e137908b4329d9f6e07ba0cb575", size = 1278762, upload-time = "2026-01-22T04:42:12.887Z" },
+    { url = "https://files.pythonhosted.org/packages/90/48/be790e0542fa660ec84f863e0440570442e167fc5c65d8ad36bd93e5f315/loq-0.1.0a7-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:9ed89b64ab1de6be9936d274b95f946a1b6f052493e1a1f1db3aac70852b3e0c", size = 1374495, upload-time = "2026-01-22T04:42:16.588Z" },
+    { url = "https://files.pythonhosted.org/packages/29/8b/74e6e39ac302ff722acd2c154f5f6b3c28f750f914e859158b1333b2330e/loq-0.1.0a7-py3-none-musllinux_1_2_aarch64.whl", hash = "sha256:e54a96e61c9aafebfa873e5a897132e611b457892f149809380625d4fa9c1147", size = 1318652, upload-time = "2026-01-22T04:42:19.229Z" },
+    { url = "https://files.pythonhosted.org/packages/57/b2/ae6bae30259715db7d97c7c7f929d5a210dd2a59b2564a020899fba8a7e5/loq-0.1.0a7-py3-none-musllinux_1_2_x86_64.whl", hash = "sha256:a21ab864964823678b8478fef83f42c2634662f736cf8b552de09736f52ca91f", size = 1440332, upload-time = "2026-01-22T04:42:17.897Z" },
+    { url = "https://files.pythonhosted.org/packages/6b/48/11ed2d491b353cb7c159398a3017a64a5c424c85979a2eb805ded6763739/loq-0.1.0a7-py3-none-win_amd64.whl", hash = "sha256:a5d0f98e9613ffab868aacc1e1277ca3f7d39158c55aa3d0e534865591592da7", size = 1334210, upload-time = "2026-01-22T04:42:20.748Z" },
 ]
 
 [[package]]

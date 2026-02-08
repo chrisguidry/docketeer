@@ -9,6 +9,7 @@ dev = [
     "docketeer-rocketchat",
     "docketeer-web",
     "codespell",
+    "loq",
     "prek",
     "pytest",
     "pytest-asyncio",
