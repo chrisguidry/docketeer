@@ -43,6 +43,7 @@ packages = ["src/docketeer_git"]
 docketeer = { workspace = true }
 
 [tool.pytest_env]
+DOCKETEER_ANTHROPIC_API_KEY = "test-key"
 DOCKETEER_DATA_DIR = "{tmp_path}"
 
 [tool.pytest.ini_options]
