@@ -9,8 +9,21 @@ from unittest.mock import MagicMock, patch
 import pytest
 from anthropic.types import TextBlock, ToolUseBlock
 
+from docketeer import environment
 from docketeer.brain import Brain
 from docketeer.tools import ToolContext
+
+
+@pytest.fixture(autouse=True)
+def _isolated_data_dir(tmp_path: Path) -> Iterator[None]:
+    """Isolate tests from the real data directory."""
+    data_dir = tmp_path / "data"
+    with (
+        patch.object(environment, "DATA_DIR", data_dir),
+        patch.object(environment, "WORKSPACE_PATH", data_dir / "memory"),
+        patch.object(environment, "AUDIT_PATH", data_dir / "audit"),
+    ):
+        yield
 
 
 @pytest.fixture()

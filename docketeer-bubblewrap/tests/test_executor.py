@@ -8,6 +8,7 @@ from unittest.mock import patch
 import pytest
 
 from docketeer.executor import Mount
+from docketeer.toolshed import DiscoveredRuntime, RuntimeSpec, Toolshed
 from docketeer_bubblewrap import BubblewrapExecutor, create_executor
 from docketeer_bubblewrap.executor import (
     _build_args,
@@ -196,7 +197,7 @@ async def test_terminate(executor: BubblewrapExecutor):
     assert result.returncode != 0
 
 
-async def test_env_empty_by_default(executor: BubblewrapExecutor):
+async def test_env_includes_home_by_default(executor: BubblewrapExecutor):
     rp = await executor.start(["env"])
     result = await rp.wait()
     assert result.returncode == 0
@@ -205,9 +206,7 @@ async def test_env_empty_by_default(executor: BubblewrapExecutor):
         for line in result.stdout.decode().strip().splitlines()
         if "=" in line
     )
-    # PWD is set by the kernel, not inherited — that's fine
-    env_vars.pop("PWD", None)
-    assert env_vars == {}
+    assert env_vars["HOME"] == "/home/sandbox"
 
 
 async def test_env_passed_to_subprocess(executor: BubblewrapExecutor):
@@ -220,10 +219,29 @@ async def test_env_passed_to_subprocess(executor: BubblewrapExecutor):
     assert b"test_value" in result.stdout
 
 
+async def test_caller_env_overrides_home(executor: BubblewrapExecutor):
+    rp = await executor.start(
+        ["sh", "-c", "echo $HOME"],
+        env={"HOME": "/custom"},
+    )
+    result = await rp.wait()
+    assert result.returncode == 0
+    assert b"/custom" in result.stdout
+
+
+async def test_tmp_dir_always_cleaned_up(executor: BubblewrapExecutor):
+    rp = await executor.start(["true"])
+    assert isinstance(rp, _SandboxedProcess)
+    tmp_dir = Path(rp._tmp_ctx.name)
+    assert tmp_dir.exists()
+
+    await rp.wait()
+    assert not tmp_dir.exists()
+
+
 async def test_username_stubs_cleaned_up_after_wait(executor: BubblewrapExecutor):
     rp = await executor.start(["true"], username="nix")
     assert isinstance(rp, _SandboxedProcess)
-    assert rp._tmp_ctx is not None
     stub_dir = Path(rp._tmp_ctx.name)
     assert stub_dir.exists()
     assert (stub_dir / "passwd").exists()
@@ -231,13 +249,6 @@ async def test_username_stubs_cleaned_up_after_wait(executor: BubblewrapExecutor
 
     await rp.wait()
     assert not stub_dir.exists()
-
-
-async def test_no_cleanup_without_username(executor: BubblewrapExecutor):
-    rp = await executor.start(["true"])
-    assert isinstance(rp, _SandboxedProcess)
-    assert rp._tmp_ctx is None
-    await rp.wait()
 
 
 async def test_username_sets_identity(executor: BubblewrapExecutor):
@@ -258,3 +269,54 @@ async def test_network_isolated_by_default(executor: BubblewrapExecutor):
     )
     result = await rp.wait()
     assert result.returncode == 0
+
+
+async def test_home_dir_writable(executor: BubblewrapExecutor):
+    rp = await executor.start(
+        ["sh", "-c", "echo hello > $HOME/test.txt && cat $HOME/test.txt"],
+    )
+    result = await rp.wait()
+    assert result.returncode == 0
+    assert b"hello" in result.stdout
+
+
+async def test_home_uses_username_when_set(executor: BubblewrapExecutor):
+    rp = await executor.start(
+        ["sh", "-c", "echo $HOME"],
+        username="nix",
+    )
+    result = await rp.wait()
+    assert result.returncode == 0
+    assert b"/home/nix" in result.stdout
+
+
+# --- Toolshed integration ---
+
+
+async def test_toolshed_mounts_and_env(tmp_path: Path):
+    if not has_bwrap:
+        pytest.skip("bwrap not on PATH")
+
+    node_root = tmp_path / "node"
+    node_bin = node_root / "bin"
+    node_bin.mkdir(parents=True)
+    (node_bin / "node").write_text("#!/bin/sh\necho node")
+
+    cache_root = tmp_path / "cache"
+    spec = RuntimeSpec("node", ["node"], "NPM_CONFIG_CACHE")
+    rt = DiscoveredRuntime(spec=spec, install_root=node_root)
+    toolshed = Toolshed(runtimes=[rt], cache_root=cache_root)
+
+    executor = BubblewrapExecutor(toolshed=toolshed)
+    rp = await executor.start(["env"])
+    result = await rp.wait()
+    assert result.returncode == 0
+
+    env_vars = dict(
+        line.split("=", 1)
+        for line in result.stdout.decode().strip().splitlines()
+        if "=" in line
+    )
+    assert "NPM_CONFIG_CACHE" in env_vars
+    assert env_vars["NPM_CONFIG_CACHE"] == "/cache/node"
+    assert str(node_bin) in env_vars["PATH"]

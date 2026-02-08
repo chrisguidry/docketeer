@@ -66,6 +66,15 @@ repos:
         pass_filenames: false
         require_serial: true
 
+      - id: pytest-docketeer-mcp
+        name: pytest (docketeer-mcp)
+        entry: uv run --no-sync --directory docketeer-mcp pytest
+        language: system
+        types: [python]
+        files: ^docketeer/src/|^docketeer-mcp/
+        pass_filenames: false
+        require_serial: true
+
       - id: pytest-docketeer-monty
         name: pytest (docketeer-monty)
         entry: uv run --no-sync --directory docketeer-monty pytest

@@ -1,5 +1,5 @@
 [tool.uv.workspace]
-members = ["docketeer", "docketeer-agentskills", "docketeer-bubblewrap", "docketeer-git", "docketeer-monty", "docketeer-rocketchat", "docketeer-web"]
+members = ["docketeer", "docketeer-agentskills", "docketeer-bubblewrap", "docketeer-git", "docketeer-mcp", "docketeer-monty", "docketeer-rocketchat", "docketeer-web"]
 
 [dependency-groups]
 dev = [
@@ -7,6 +7,7 @@ dev = [
     "docketeer-agentskills",
     "docketeer-bubblewrap",
     "docketeer-git",
+    "docketeer-mcp",
     "docketeer-monty",
     "docketeer-rocketchat",
     "docketeer-web",
@@ -28,6 +29,7 @@ docketeer = { workspace = true }
 docketeer-agentskills = { workspace = true }
 docketeer-bubblewrap = { workspace = true }
 docketeer-git = { workspace = true }
+docketeer-mcp = { workspace = true }
 docketeer-monty = { workspace = true }
 docketeer-rocketchat = { workspace = true }
 docketeer-web = { workspace = true }
@@ -75,7 +77,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["docketeer", "docketeer_agentskills", "docketeer_bubblewrap", "docketeer_git", "docketeer_monty", "docketeer_rocketchat", "docketeer_web"]
+known-first-party = ["docketeer", "docketeer_agentskills", "docketeer_bubblewrap", "docketeer_git", "docketeer_mcp", "docketeer_monty", "docketeer_rocketchat", "docketeer_web"]
 
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**/*.py" = ["ANN201"]

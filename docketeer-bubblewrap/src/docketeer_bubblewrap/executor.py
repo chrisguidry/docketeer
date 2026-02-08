@@ -7,6 +7,7 @@ import tempfile
 from pathlib import Path
 
 from docketeer.executor import CommandExecutor, CompletedProcess, Mount, RunningProcess
+from docketeer.toolshed import Toolshed
 
 SYSTEM_RO_BINDS = [
     "/usr",
@@ -26,24 +27,24 @@ class _SandboxedProcess(RunningProcess):
     def __init__(
         self,
         process: asyncio.subprocess.Process,
-        tmp_ctx: tempfile.TemporaryDirectory[str] | None,
+        tmp_ctx: tempfile.TemporaryDirectory[str],
     ) -> None:
         super().__init__(process)
         self._tmp_ctx = tmp_ctx
 
     async def wait(self) -> CompletedProcess:
         result = await super().wait()
-        if self._tmp_ctx:
-            self._tmp_ctx.cleanup()
+        self._tmp_ctx.cleanup()
         return result
 
 
 class BubblewrapExecutor(CommandExecutor):
     """Runs commands inside a bubblewrap sandbox."""
 
-    def __init__(self) -> None:
+    def __init__(self, toolshed: Toolshed | None = None) -> None:
         if not shutil.which("bwrap"):
             raise RuntimeError("bwrap not found on PATH")
+        self._toolshed = toolshed
 
     async def start(
         self,
@@ -54,14 +55,30 @@ class BubblewrapExecutor(CommandExecutor):
         network_access: bool = False,
         username: str | None = None,
     ) -> RunningProcess:
-        tmp_ctx: tempfile.TemporaryDirectory[str] | None = None
-        tmp_dir: Path | None = None
-        if username:
-            tmp_ctx = tempfile.TemporaryDirectory()
-            tmp_dir = Path(tmp_ctx.name)
+        tmp_ctx = tempfile.TemporaryDirectory()
+        tmp_dir = Path(tmp_ctx.name)
+
+        # Merge mounts: toolshed → HOME → caller
+        merged_mounts: list[Mount] = []
+        if self._toolshed:
+            merged_mounts.extend(self._toolshed.mounts())
+
+        sandbox_home = Path(f"/home/{username}") if username else Path("/home/sandbox")
+        merged_mounts.append(Mount(source=tmp_dir, target=sandbox_home, writable=True))
+
+        if mounts:
+            merged_mounts.extend(mounts)
+
+        # Merge env: toolshed → HOME → caller
+        merged_env: dict[str, str] = {}
+        if self._toolshed:
+            merged_env.update(self._toolshed.env())
+        merged_env["HOME"] = str(sandbox_home)
+        if env:
+            merged_env.update(env)
 
         args = _build_args(
-            mounts=mounts or [],
+            mounts=merged_mounts,
             network_access=network_access,
             username=username,
             tmp_dir=tmp_dir,
@@ -73,7 +90,7 @@ class BubblewrapExecutor(CommandExecutor):
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            env=env or {},
+            env=merged_env,
         )
         return _SandboxedProcess(process, tmp_ctx)
 

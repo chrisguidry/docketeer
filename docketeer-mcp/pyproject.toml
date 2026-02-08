@@ -1,7 +1,7 @@
 [project]
-name = "docketeer-git"
+name = "docketeer-mcp"
 dynamic = ["version"]
-description = "Git-backed workspace backup plugin for Docketeer"
+description = "MCP server support for Docketeer"
 readme = "README.md"
 authors = [
     { name = "Chris Guidry", email = "guid@omg.lol" }
@@ -12,12 +12,11 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
-    "Topic :: System :: Archiving :: Backup",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
     "docketeer",
-    "pydocket",
+    "fastmcp>=3.0.0b2",
 ]
 
 [project.urls]
@@ -25,8 +24,11 @@ Homepage = "https://github.com/chrisguidry/docketeer"
 Repository = "https://github.com/chrisguidry/docketeer"
 Issues = "https://github.com/chrisguidry/docketeer/issues"
 
-[project.entry-points."docketeer.tasks"]
-git = "docketeer_git:task_collections"
+[project.entry-points."docketeer.tools"]
+mcp = "docketeer_mcp"
+
+[project.entry-points."docketeer.prompt"]
+mcp = "docketeer_mcp.prompt:provide_mcp_catalog"
 
 [build-system]
 requires = ["hatchling", "hatch-vcs"]
@@ -37,7 +39,7 @@ source = "vcs"
 raw-options.root = ".."
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/docketeer_git"]
+packages = ["src/docketeer_mcp"]
 
 [tool.uv.sources]
 docketeer = { workspace = true }
@@ -49,7 +51,7 @@ DOCKETEER_ANTHROPIC_API_KEY = "test-key"
 minversion = "9.0"
 addopts = [
     "--import-mode=importlib",
-    "--cov=docketeer_git",
+    "--cov=docketeer_mcp",
     "--cov-branch",
     "--cov-report=term-missing",
     "--cov-fail-under=100",
