@@ -25,6 +25,8 @@ jobs:
             environment: pypi-docketeer
           - package: docketeer-agentskills
             environment: pypi-docketeer-agentskills
+          - package: docketeer-git
+            environment: pypi-docketeer-git
           - package: docketeer-monty
             environment: pypi-docketeer-monty
           - package: docketeer-rocketchat

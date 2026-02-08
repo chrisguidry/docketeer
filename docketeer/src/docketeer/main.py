@@ -15,6 +15,7 @@ from docket import Docket, Worker
 from docketeer import environment, tasks
 from docketeer.brain import Brain, ProcessCallbacks
 from docketeer.chat import ChatClient, IncomingMessage
+from docketeer.dependencies import set_brain, set_client
 from docketeer.prompt import BrainResponse, MessageContent, RoomInfo
 from docketeer.tools import ToolContext, registry
 
@@ -56,6 +57,25 @@ def _discover_chat_backend() -> tuple[ChatClient, Any]:
     client = module.create_client()
     register_fn = getattr(module, "register_tools", None)
     return client, register_fn
+
+
+def _register_task_plugins(docket: Docket) -> None:
+    """Discover and register plugin-contributed task collections."""
+    for collection in _load_task_collections():
+        docket.register_collection(collection)
+
+
+def _load_task_collections() -> list[str]:
+    """Load task collection paths from all docketeer.tasks entry points."""
+    from importlib.metadata import entry_points
+
+    collections: list[str] = []
+    for ep in entry_points(group="docketeer.tasks"):
+        try:
+            collections.extend(ep.load())
+        except Exception:
+            log.warning("Failed to load task plugin: %s", ep.name, exc_info=True)
+    return collections
 
 
 def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
@@ -151,11 +171,12 @@ async def main() -> None:  # pragma: no cover
     tool_context.on_people_write = brain.rebuild_person_map
 
     # Make brain/client available to docket task handlers
-    tasks.set_brain(brain)
-    tasks.set_client(client)
+    set_brain(brain)
+    set_client(client)
 
     async with Docket(name=DOCKET_NAME, url=DOCKET_URL) as docket:
         docket.register_collection("docketeer.tasks:docketeer_tasks")
+        _register_task_plugins(docket)
 
         # Register tools (chat + docket)
         if register_chat_tools:
@@ -314,14 +335,24 @@ def run() -> None:
         parser.print_help()
 
 
+def _task_collection_args() -> list[str]:
+    """Build --tasks args for the docket CLI, including plugin-contributed tasks."""
+    args = ["--tasks", "docketeer.tasks:docketeer_tasks"]
+    for collection in _load_task_collections():
+        args.extend(["--tasks", collection])
+    return args
+
+
 def run_snapshot() -> None:  # pragma: no cover
     """Exec `docket snapshot` with the right env vars."""
     import os
 
     os.environ["DOCKET_NAME"] = DOCKET_NAME
     os.environ["DOCKET_URL"] = DOCKET_URL
-    os.environ["DOCKET_TASKS"] = "docketeer.tasks:docketeer_tasks"
-    os.execvp("docket", ["docket", "snapshot"])
+    os.execvp(
+        "docket",
+        ["docket", "snapshot", *_task_collection_args()],
+    )
 
 
 def run_dev() -> None:  # pragma: no cover

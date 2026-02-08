@@ -10,7 +10,10 @@ import pytest
 from docketeer.main import (
     _acquire_lock,
     _discover_chat_backend,
+    _load_task_collections,
     _register_docket_tools,
+    _register_task_plugins,
+    _task_collection_args,
 )
 from docketeer.testing import MemoryChat
 from docketeer.tools import ToolContext, registry
@@ -200,3 +203,63 @@ async def test_register_docket_tools_list_scheduled_long_running_prompt(
     result = await registry.execute("list_scheduled", {}, tool_context)
     assert "..." in result
     assert "RUNNING" in result
+
+
+def test_load_task_collections_single_plugin():
+    ep = MagicMock()
+    ep.load.return_value = ["docketeer_git:git_tasks"]
+    with patch("importlib.metadata.entry_points", return_value=[ep]):
+        assert _load_task_collections() == ["docketeer_git:git_tasks"]
+
+
+def test_load_task_collections_multiple_from_one_plugin():
+    ep = MagicMock()
+    ep.load.return_value = ["pkg:tasks_a", "pkg:tasks_b"]
+    with patch("importlib.metadata.entry_points", return_value=[ep]):
+        assert _load_task_collections() == ["pkg:tasks_a", "pkg:tasks_b"]
+
+
+def test_load_task_collections_no_plugins():
+    with patch("importlib.metadata.entry_points", return_value=[]):
+        assert _load_task_collections() == []
+
+
+def test_load_task_collections_handles_failure():
+    ep = MagicMock()
+    ep.name = "broken"
+    ep.load.side_effect = ImportError("oops")
+    with patch("importlib.metadata.entry_points", return_value=[ep]):
+        assert _load_task_collections() == []
+
+
+def test_register_task_plugins_registers_collections(mock_docket: MagicMock):
+    ep = MagicMock()
+    ep.load.return_value = ["docketeer_git:git_tasks"]
+    with patch("importlib.metadata.entry_points", return_value=[ep]):
+        _register_task_plugins(mock_docket)
+    mock_docket.register_collection.assert_called_once_with("docketeer_git:git_tasks")
+
+
+def test_register_task_plugins_no_plugins(mock_docket: MagicMock):
+    with patch("importlib.metadata.entry_points", return_value=[]):
+        _register_task_plugins(mock_docket)
+    mock_docket.register_collection.assert_not_called()
+
+
+def test_task_collection_args_core_only():
+    with patch("importlib.metadata.entry_points", return_value=[]):
+        args = _task_collection_args()
+    assert args == ["--tasks", "docketeer.tasks:docketeer_tasks"]
+
+
+def test_task_collection_args_with_plugins():
+    ep = MagicMock()
+    ep.load.return_value = ["docketeer_git:git_tasks"]
+    with patch("importlib.metadata.entry_points", return_value=[ep]):
+        args = _task_collection_args()
+    assert args == [
+        "--tasks",
+        "docketeer.tasks:docketeer_tasks",
+        "--tasks",
+        "docketeer_git:git_tasks",
+    ]

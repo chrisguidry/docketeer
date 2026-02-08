@@ -6,6 +6,7 @@ requires-python = ">=3.12"
 members = [
     "docketeer",
     "docketeer-agentskills",
+    "docketeer-git",
     "docketeer-monty",
     "docketeer-rocketchat",
     "docketeer-web",
@@ -16,6 +17,7 @@ dev = [
     { name = "codespell" },
     { name = "docketeer", editable = "docketeer" },
     { name = "docketeer-agentskills", editable = "docketeer-agentskills" },
+    { name = "docketeer-git", editable = "docketeer-git" },
     { name = "docketeer-monty", editable = "docketeer-monty" },
     { name = "docketeer-rocketchat", editable = "docketeer-rocketchat" },
     { name = "docketeer-web", editable = "docketeer-web" },
@@ -264,6 +266,20 @@ dependencies = [
 requires-dist = [
     { name = "docketeer", editable = "docketeer" },
     { name = "pyyaml" },
+]
+
+[[package]]
+name = "docketeer-git"
+source = { editable = "docketeer-git" }
+dependencies = [
+    { name = "docketeer" },
+    { name = "pydocket" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "docketeer", editable = "docketeer" },
+    { name = "pydocket" },
 ]
 
 [[package]]

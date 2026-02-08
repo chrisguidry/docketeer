@@ -57,6 +57,15 @@ repos:
         pass_filenames: false
         require_serial: true
 
+      - id: pytest-docketeer-git
+        name: pytest (docketeer-git)
+        entry: uv run --no-sync --directory docketeer-git pytest
+        language: system
+        types: [python]
+        files: ^docketeer/src/|^docketeer-git/
+        pass_filenames: false
+        require_serial: true
+
       - id: pytest-docketeer-monty
         name: pytest (docketeer-monty)
         entry: uv run --no-sync --directory docketeer-monty pytest

@@ -2,7 +2,6 @@
 
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
 
 from docketeer.brain import Brain
 from docketeer.cycles import (
@@ -58,39 +57,41 @@ def test_build_cycle_prompt_without_guidance(workspace: Path):
     assert result == REVERIE_PROMPT
 
 
-async def test_reverie_calls_brain(brain: Brain, fake_messages: Any):
-    with patch("docketeer.tasks.get_brain", return_value=brain):
-        await reverie()
+async def test_reverie_calls_brain(brain: Brain, workspace: Path, fake_messages: Any):
+    await reverie(brain=brain, workspace=workspace)
     assert "__tasks__" in brain._conversations
     msgs = brain._conversations["__tasks__"]
     assert any(REVERIE_PROMPT in str(m.get("content", "")) for m in msgs)
 
 
-async def test_consolidation_calls_brain(brain: Brain, fake_messages: Any):
-    with patch("docketeer.tasks.get_brain", return_value=brain):
-        await consolidation()
+async def test_consolidation_calls_brain(
+    brain: Brain, workspace: Path, fake_messages: Any
+):
+    await consolidation(brain=brain, workspace=workspace)
     assert "__tasks__" in brain._conversations
     msgs = brain._conversations["__tasks__"]
     assert any(CONSOLIDATION_PROMPT in str(m.get("content", "")) for m in msgs)
 
 
-async def test_reverie_empty_response(brain: Brain, fake_messages: Any):
+async def test_reverie_empty_response(
+    brain: Brain, workspace: Path, fake_messages: Any
+):
     fake_messages.responses = [
         FakeMessage(content=[make_tool_use_block(name="list_files", input={})]),
         FakeMessage(content=[]),
     ]
-    with patch("docketeer.tasks.get_brain", return_value=brain):
-        await reverie()
+    await reverie(brain=brain, workspace=workspace)
     assert "__tasks__" in brain._conversations
 
 
-async def test_consolidation_empty_response(brain: Brain, fake_messages: Any):
+async def test_consolidation_empty_response(
+    brain: Brain, workspace: Path, fake_messages: Any
+):
     fake_messages.responses = [
         FakeMessage(content=[make_tool_use_block(name="list_files", input={})]),
         FakeMessage(content=[]),
     ]
-    with patch("docketeer.tasks.get_brain", return_value=brain):
-        await consolidation()
+    await consolidation(brain=brain, workspace=workspace)
     assert "__tasks__" in brain._conversations
 
 

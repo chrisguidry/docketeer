@@ -7,6 +7,8 @@ from pathlib import Path
 from docket.dependencies import Cron, Perpetual
 
 from docketeer import environment
+from docketeer.brain import Brain
+from docketeer.dependencies import CurrentBrain, WorkspacePath
 from docketeer.prompt import MessageContent
 
 log = logging.getLogger(__name__)
@@ -62,12 +64,11 @@ def _build_cycle_prompt(base: str, workspace: Path, section: str) -> str:
 
 async def reverie(
     perpetual: Perpetual = Perpetual(every=REVERIE_INTERVAL, automatic=True),
+    brain: Brain = CurrentBrain(),
+    workspace: Path = WorkspacePath(),
 ) -> None:
     """Periodic receptive internal processing cycle."""
-    from docketeer.tasks import get_brain
-
-    brain = get_brain()
-    prompt = _build_cycle_prompt(REVERIE_PROMPT, brain._workspace, "Reverie")
+    prompt = _build_cycle_prompt(REVERIE_PROMPT, workspace, "Reverie")
     now = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M")
     content = MessageContent(username="system", timestamp=now, text=prompt)
     response = await brain.process("__tasks__", content)
@@ -77,14 +78,11 @@ async def reverie(
 
 async def consolidation(
     cron: Cron = Cron(CONSOLIDATION_CRON, automatic=True),
+    brain: Brain = CurrentBrain(),
+    workspace: Path = WorkspacePath(),
 ) -> None:
     """Daily memory integration and reflection cycle."""
-    from docketeer.tasks import get_brain
-
-    brain = get_brain()
-    prompt = _build_cycle_prompt(
-        CONSOLIDATION_PROMPT, brain._workspace, "Consolidation"
-    )
+    prompt = _build_cycle_prompt(CONSOLIDATION_PROMPT, workspace, "Consolidation")
     now = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M")
     content = MessageContent(username="system", timestamp=now, text=prompt)
     response = await brain.process("__tasks__", content)

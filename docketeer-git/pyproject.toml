@@ -1,0 +1,60 @@
+[project]
+name = "docketeer-git"
+dynamic = ["version"]
+description = "Git-backed workspace backup plugin for Docketeer"
+readme = "README.md"
+authors = [
+    { name = "Chris Guidry", email = "guid@omg.lol" }
+]
+license = "MIT"
+requires-python = ">=3.12"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: System :: Archiving :: Backup",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "docketeer",
+    "pydocket",
+]
+
+[project.urls]
+Homepage = "https://github.com/chrisguidry/docketeer"
+Repository = "https://github.com/chrisguidry/docketeer"
+Issues = "https://github.com/chrisguidry/docketeer/issues"
+
+[project.entry-points."docketeer.tasks"]
+git = "docketeer_git:task_collections"
+
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+raw-options.root = ".."
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/docketeer_git"]
+
+[tool.uv.sources]
+docketeer = { workspace = true }
+
+[tool.pytest_env]
+DOCKETEER_DATA_DIR = "{tmp_path}"
+
+[tool.pytest.ini_options]
+minversion = "9.0"
+addopts = [
+    "--import-mode=importlib",
+    "--cov=docketeer_git",
+    "--cov-branch",
+    "--cov-report=term-missing",
+    "--cov-fail-under=100",
+]
+asyncio_mode = "auto"
+filterwarnings = [
+    "error",
+]

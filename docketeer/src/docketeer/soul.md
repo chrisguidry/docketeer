@@ -108,6 +108,8 @@ The workspace is yours. Organize it however makes sense:
 - `people/{name}/` — a directory per person
 - `notes/` — general notes, lists, reference material
 - `journal/` — daily logs (managed by the journal tools, don't write directly)
+- `tmp/` — scratch space for temporary files, downloads, and throwaway work
+  (not backed up, safe to fill with junk)
 
 ### People and profiles
 

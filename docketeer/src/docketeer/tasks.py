@@ -5,39 +5,17 @@ from datetime import datetime
 from docketeer.brain import Brain
 from docketeer.chat import ChatClient
 from docketeer.cycles import consolidation, reverie
+from docketeer.dependencies import CurrentBrain, CurrentChatClient
 from docketeer.prompt import BrainResponse, MessageContent
 
-_brain: Brain | None = None
-_client: ChatClient | None = None
 
-
-def set_brain(brain: Brain) -> None:
-    global _brain
-    _brain = brain
-
-
-def set_client(client: ChatClient) -> None:
-    global _client
-    _client = client
-
-
-def get_brain() -> Brain:
-    if _brain is None:
-        raise RuntimeError("Brain not initialized — call set_brain() first")
-    return _brain
-
-
-def get_client() -> ChatClient:
-    if _client is None:
-        raise RuntimeError("ChatClient not initialized — call set_client() first")
-    return _client
-
-
-async def nudge(prompt: str, room_id: str = "") -> None:
+async def nudge(
+    prompt: str,
+    room_id: str = "",
+    brain: Brain = CurrentBrain(),
+    client: ChatClient = CurrentChatClient(),
+) -> None:
     """Nudge the brain with a prompt, optionally sending the response to a room."""
-    brain = get_brain()
-    client = get_client()
-
     now = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M")
     content = MessageContent(username="system", timestamp=now, text=prompt)
 
