@@ -5,7 +5,7 @@ from typing import Any, Literal
 
 import pydantic_monty
 
-from docketeer.tools import ToolContext, registry
+from docketeer.tools import ToolContext, ToolParam, registry
 
 log = logging.getLogger(__name__)
 
@@ -20,16 +20,18 @@ def _format_output(result: Any, stdout: list[str]) -> str:
     return "\n".join(parts) or "(no output)"
 
 
-def _available_tools() -> list[dict]:
+def _available_tools() -> list[ToolParam]:
     """Get tool definitions excluding run_python itself."""
     return [d for d in registry.definitions() if d["name"] != "run_python"]
 
 
-def _build_external_functions(tools: list[dict], ctx: ToolContext) -> dict[str, Any]:
+def _build_external_functions(
+    tools: list[ToolParam], ctx: ToolContext
+) -> dict[str, Any]:
     """Build async wrapper functions that bridge Monty calls to the tool registry."""
     functions: dict[str, Any] = {}
     for tool in tools:
-        param_names = list(tool["input_schema"].get("properties", {}).keys())
+        param_names = list(tool["input_schema"].get("properties", {}).keys())  # type: ignore[union-attr]
         tool_name = tool["name"]
 
         async def wrapper(

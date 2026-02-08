@@ -23,6 +23,8 @@ jobs:
         include:
           - package: docketeer
             environment: pypi-docketeer
+          - package: docketeer-agentskills
+            environment: pypi-docketeer-agentskills
           - package: docketeer-monty
             environment: pypi-docketeer-monty
           - package: docketeer-rocketchat

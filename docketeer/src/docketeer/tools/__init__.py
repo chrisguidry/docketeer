@@ -8,6 +8,8 @@ from pathlib import Path
 from types import FunctionType
 from typing import Any, get_type_hints
 
+from anthropic.types import ToolParam
+
 log = logging.getLogger(__name__)
 
 
@@ -24,7 +26,7 @@ class ToolContext:
 class ToolRegistry:
     def __init__(self) -> None:
         self._tools: dict[str, Callable] = {}
-        self._schemas: dict[str, dict] = {}
+        self._schemas: dict[str, ToolParam] = {}
 
     def tool[F: FunctionType](self, fn: F) -> F:
         """Decorator that registers a tool and derives its schema."""
@@ -38,7 +40,7 @@ class ToolRegistry:
         }
         return fn
 
-    def definitions(self) -> list[dict]:
+    def definitions(self) -> list[ToolParam]:
         """Return tool definitions for the Anthropic API."""
         return list(self._schemas.values())
 

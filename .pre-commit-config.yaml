@@ -25,7 +25,7 @@ repos:
     hooks:
       - id: loq
         name: loq (max 500 lines)
-        entry: uv tool run loq check docketeer/src/ docketeer/tests/ docketeer-monty/src/ docketeer-monty/tests/ docketeer-web/src/ docketeer-web/tests/ docketeer-rocketchat/src/ docketeer-rocketchat/tests/
+        entry: uv run --no-sync loq check
         language: system
         types: [python]
         pass_filenames: false
@@ -45,6 +45,15 @@ repos:
         language: system
         types: [python]
         files: ^docketeer/
+        pass_filenames: false
+        require_serial: true
+
+      - id: pytest-docketeer-agentskills
+        name: pytest (docketeer-agentskills)
+        entry: uv run --no-sync --directory docketeer-agentskills pytest
+        language: system
+        types: [python]
+        files: ^docketeer/src/|^docketeer-agentskills/
         pass_filenames: false
         require_serial: true
 

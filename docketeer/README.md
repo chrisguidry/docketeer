@@ -46,13 +46,15 @@ the agent's files and journal, and a plugin system based on standard Python
 
 ## Plugins
 
-Docketeer discovers plugins through two entry point groups:
+Docketeer discovers plugins through three entry point groups:
 
 - **`docketeer.chat`** — chat backends (how the agent talks to people)
 - **`docketeer.tools`** — tool plugins (what the agent can do)
+- **`docketeer.prompt`** — system prompt providers (contribute blocks to the system prompt)
 
 Available plugins:
 
+- [docketeer-agentskills](https://pypi.org/project/docketeer-agentskills/) — Agent Skills support
 - [docketeer-rocketchat](https://pypi.org/project/docketeer-rocketchat/) — Rocket Chat backend
 - [docketeer-web](https://pypi.org/project/docketeer-web/) — web search, HTTP requests, file downloads
 - [docketeer-monty](https://pypi.org/project/docketeer-monty/) — sandboxed Python execution

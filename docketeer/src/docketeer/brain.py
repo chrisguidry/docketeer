@@ -8,10 +8,20 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, cast
 
 import anthropic
-from anthropic.types import ToolUseBlock
+from anthropic.types import (
+    Base64ImageSourceParam,
+    CacheControlEphemeralParam,
+    ContentBlockParam,
+    ImageBlockParam,
+    MessageParam,
+    TextBlock,
+    TextBlockParam,
+    ToolParam,
+    ToolResultBlockParam,
+    ToolUseBlock,
+)
 
 from docketeer import environment
 from docketeer.people import build_person_map, load_person_context
@@ -20,6 +30,7 @@ from docketeer.prompt import (
     HistoryMessage,
     MessageContent,
     RoomInfo,
+    SystemBlock,
     build_system_blocks,
     ensure_template,
     extract_text,
@@ -70,13 +81,13 @@ def _audit_log(
 def _log_usage(response: anthropic.types.Message) -> None:
     """Log token usage including cache stats."""
     u = response.usage
-    cache_read = getattr(u, "cache_read_input_tokens", 0) or 0
-    cache_write = getattr(u, "cache_creation_input_tokens", 0) or 0
+    cr = getattr(u, "cache_read_input_tokens", 0) or 0
+    cw = getattr(u, "cache_creation_input_tokens", 0) or 0
     log.info(
         "Tokens: %d in (%d cache-read, %d cache-write, %d uncached), %d out",
-        cache_read + cache_write + u.input_tokens,
-        cache_read,
-        cache_write,
+        cr + cw + u.input_tokens,
+        cr,
+        cw,
         u.input_tokens,
         u.output_tokens,
     )
@@ -88,7 +99,7 @@ class Brain:
         self.tool_context = tool_context
         self._workspace = tool_context.workspace
         self._audit_path = tool_context.workspace.parent / "audit"
-        self._conversations: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        self._conversations: dict[str, list[MessageParam]] = defaultdict(list)
         self._room_token_counts: dict[str, int] = {}
         self._room_info: dict[str, RoomInfo] = {}
         self._person_map: dict[str, str] = {}
@@ -125,10 +136,7 @@ class Brain:
             else:
                 content = msg.text
             self._conversations[room_id].append(
-                {
-                    "role": msg.role,
-                    "content": content,
-                }
+                MessageParam(role=msg.role, content=content)
             )
         return len(messages)
 
@@ -162,7 +170,7 @@ class Brain:
         tools = registry.definitions()
         if tools:
             tools = [*tools]
-            tools[-1] = {**tools[-1], "cache_control": {"type": "ephemeral"}}
+            tools[-1]["cache_control"] = CacheControlEphemeralParam(type="ephemeral")
 
         # Update tool context with current message info
         self.tool_context.username = content.username
@@ -176,7 +184,9 @@ class Brain:
         user_content = self._build_content(content)
 
         # Add to conversation history
-        self._conversations[room_id].append({"role": "user", "content": user_content})
+        self._conversations[room_id].append(
+            MessageParam(role="user", content=user_content)
+        )
 
         messages = self._conversations[room_id]
 
@@ -205,8 +215,10 @@ class Brain:
                 if callbacks and callbacks.on_tool_end:
                     await callbacks.on_tool_end()
                 self._update_cache_breakpoints(messages, tool_results)
-                messages.append({"role": "assistant", "content": response.content})
-                messages.append({"role": "user", "content": tool_results})
+                messages.append(
+                    MessageParam(role="assistant", content=response.content)
+                )
+                messages.append(MessageParam(role="user", content=tool_results))
             elif response.stop_reason == "max_tokens":
                 log.warning("Response truncated at %d tokens", MAX_RESPONSE_TOKENS)
                 break
@@ -216,7 +228,9 @@ class Brain:
         reply = self._build_reply(response, used_tools, rounds)
 
         if reply:
-            self._conversations[room_id].append({"role": "assistant", "content": reply})
+            self._conversations[room_id].append(
+                MessageParam(role="assistant", content=reply)
+            )
 
         tokens = await self._measure_context(room_id, system, tools)
         log.info(
@@ -231,16 +245,16 @@ class Brain:
 
     async def _stream_message(
         self,
-        system: Any,
-        messages: Any,
-        tools: Any,
+        system: list[SystemBlock],
+        messages: list[MessageParam],
+        tools: list[ToolParam],
         on_first_text: Callable[[], Awaitable[None]] | None = None,
     ) -> anthropic.types.Message:
         """Stream a response from Claude, optionally firing a callback on first text."""
         async with self.client.messages.stream(
             model=CLAUDE_MODEL,
             max_tokens=MAX_RESPONSE_TOKENS,
-            system=system,
+            system=[b.to_api_dict() for b in system],
             messages=messages,
             tools=tools,
         ) as stream:
@@ -252,9 +266,9 @@ class Brain:
 
     async def _execute_tools(
         self, tool_blocks: list[ToolUseBlock]
-    ) -> list[dict[str, Any]]:
+    ) -> list[ToolResultBlockParam]:
         """Run each tool, log calls/results, write audit log, return tool_result dicts."""
-        tool_results = []
+        tool_results: list[ToolResultBlockParam] = []
         for block in tool_blocks:
             log.info("Tool call: %s(%s)", block.name, block.input)
             result = await registry.execute(block.name, block.input, self.tool_context)
@@ -280,33 +294,25 @@ class Brain:
         return tool_results
 
     def _update_cache_breakpoints(
-        self, messages: list[dict[str, Any]], tool_results: list[dict[str, Any]]
+        self, messages: list[MessageParam], tool_results: list[ToolResultBlockParam]
     ) -> None:
-        """Move the cache breakpoint to the latest tool result.
-
-        Strips any previous tool-result breakpoints first to stay within the
-        API's 4-breakpoint limit.
-        """
+        """Move the cache breakpoint to the latest tool result."""
         for prev_msg in messages:
             if prev_msg["role"] != "user" or not isinstance(prev_msg["content"], list):
                 continue
             for block in prev_msg["content"]:
                 if isinstance(block, dict) and block.get("type") == "tool_result":
-                    block.pop("cache_control", None)
+                    block.pop("cache_control", None)  # type: ignore[misc]
 
-        tool_results[-1] = {
-            **tool_results[-1],
-            "cache_control": {"type": "ephemeral"},
-        }
+        tool_results[-1]["cache_control"] = CacheControlEphemeralParam(type="ephemeral")
 
     def _build_reply(
         self, response: anthropic.types.Message, had_tool_use: bool, rounds: int
     ) -> str:
         """Extract the final reply text from a response."""
-        reply_parts = []
-        for block in response.content:
-            if hasattr(block, "text"):
-                reply_parts.append(block.text)
+        reply_parts = [
+            block.text for block in response.content if isinstance(block, TextBlock)
+        ]
 
         if response.stop_reason == "max_tokens" and not had_tool_use:
             reply_parts.append(
@@ -317,13 +323,11 @@ class Brain:
             if had_tool_use:
                 log.info("Tool-only response, no text to send (rounds=%d)", rounds)
                 return ""
-            block_types = [
-                getattr(b, "type", type(b).__name__) for b in response.content
-            ]
+            types = [getattr(b, "type", type(b).__name__) for b in response.content]
             log.warning(
-                "No text in response: stop_reason=%s, blocks=%s, rounds=%d/%d",
+                "No text in response: stop=%s, blocks=%s, rounds=%d/%d",
                 response.stop_reason,
-                block_types,
+                types,
                 rounds,
                 MAX_TOOL_ROUNDS,
             )
@@ -331,18 +335,22 @@ class Brain:
 
         return "\n".join(reply_parts).strip()
 
-    async def _measure_context(self, room_id: str, system: Any, tools: Any) -> int:
+    async def _measure_context(
+        self, room_id: str, system: list[SystemBlock], tools: list[ToolParam]
+    ) -> int:
         """Count tokens for the current conversation state."""
         result = await self.client.messages.count_tokens(
             model=CLAUDE_MODEL,
-            system=system,
+            system=[b.to_api_dict() for b in system],
             tools=tools,
-            messages=cast(Any, self._conversations[room_id]),
+            messages=self._conversations[room_id],
         )
         self._room_token_counts[room_id] = result.input_tokens
         return result.input_tokens
 
-    async def _compact_history(self, room_id: str, system: Any, tools: Any) -> None:
+    async def _compact_history(
+        self, room_id: str, system: list[SystemBlock], tools: list[ToolParam]
+    ) -> None:
         """Summarize older messages to free up context space."""
         messages = self._conversations[room_id]
         if len(messages) <= MIN_RECENT_MESSAGES:
@@ -353,12 +361,11 @@ class Brain:
         recent_messages = messages[-MIN_RECENT_MESSAGES:]
 
         # Build a transcript of the old messages for summarization
-        transcript_lines = []
-        for msg in old_messages:
-            text = extract_text(msg["content"])
-            if text:
-                transcript_lines.append(f"{msg['role']}: {text}")
-        transcript = "\n".join(transcript_lines)
+        transcript = "\n".join(
+            f"{msg['role']}: {text}"
+            for msg in old_messages
+            if (text := extract_text(msg["content"]))
+        )
 
         if not transcript.strip():
             return
@@ -369,18 +376,20 @@ class Brain:
             return
 
         self._conversations[room_id] = [
-            {"role": "user", "content": f"[Earlier conversation summary]\n{summary}"},
-            {"role": "assistant", "content": "Got it, I have that context."},
+            MessageParam(
+                role="user",
+                content=f"[Earlier conversation summary]\n{summary}",
+            ),
+            MessageParam(role="assistant", content="Got it, I have that context."),
             *recent_messages,
         ]
 
-        new_count = len(self._conversations[room_id])
         tokens = await self._measure_context(room_id, system, tools)
         log.info(
-            "Compacted room %s: %d messages → %d (%d tokens)",
+            "Compacted room %s: %d → %d messages (%d tokens)",
             room_id,
             old_count,
-            new_count,
+            len(self._conversations[room_id]),
             tokens,
         )
 
@@ -391,23 +400,20 @@ class Brain:
                 model=COMPACT_MODEL,
                 max_tokens=1024,
                 messages=[
-                    {
-                        "role": "user",
-                        "content": (
+                    MessageParam(
+                        role="user",
+                        content=(
                             "Summarize this conversation into a concise recap. "
                             "Preserve key facts, decisions, and context that would "
                             "be needed to continue the conversation naturally. "
                             "Be brief but thorough.\n\n"
                             f"{transcript}"
                         ),
-                    }
+                    )
                 ],
             )
-            first_block = summary_response.content[0]
-            text = (
-                first_block.text if hasattr(first_block, "text") else str(first_block)
-            )
-            return str(text)
+            block = summary_response.content[0]
+            return block.text if isinstance(block, TextBlock) else str(block)
         except Exception:
             log.exception("Summarization failed, falling back to truncation")
             return None
@@ -419,19 +425,19 @@ class Brain:
             model=COMPACT_MODEL,
             max_tokens=2048,
             messages=[
-                {
-                    "role": "user",
-                    "content": (
+                MessageParam(
+                    role="user",
+                    content=(
                         f"Summarize this web page{focus}. "
                         "Preserve key facts, URLs, numbers, and any structured data. "
                         "Omit navigation, ads, and boilerplate.\n\n"
                         f"{text}"
                     ),
-                }
+                )
             ],
         )
-        first_block = response.content[0]
-        return str(first_block.text if hasattr(first_block, "text") else first_block)
+        block = response.content[0]
+        return block.text if isinstance(block, TextBlock) else str(block)
 
     async def _classify_response(
         self, url: str, status_code: int, headers: str
@@ -441,9 +447,9 @@ class Brain:
             model=COMPACT_MODEL,
             max_tokens=8,
             messages=[
-                {
-                    "role": "user",
-                    "content": (
+                MessageParam(
+                    role="user",
+                    content=(
                         "Given this HTTP response, is the body likely readable text "
                         "(HTML, JSON, plain text, etc.) that would be useful to read? "
                         "Answer only 'true' or 'false'.\n\n"
@@ -451,44 +457,39 @@ class Brain:
                         f"Status: {status_code}\n"
                         f"Headers:\n{headers}"
                     ),
-                }
+                )
             ],
         )
-        first_block = response.content[0]
-        answer = str(first_block.text) if hasattr(first_block, "text") else ""
+        block = response.content[0]
+        answer = block.text if isinstance(block, TextBlock) else ""
         return answer.strip().lower() == "true"
 
-    def _build_content(self, content: MessageContent) -> list[dict] | str:
+    def _build_content(self, content: MessageContent) -> list[ContentBlockParam] | str:
         """Build content blocks for Claude."""
-        blocks = []
+        blocks: list[ContentBlockParam] = []
         prefix = f"[{content.timestamp}] " if content.timestamp else ""
+        empty = f"{prefix}@{content.username}: (empty message)"
 
         for media_type, data in content.images:
             blocks.append(
-                {
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": media_type,
-                        "data": base64.b64encode(data).decode("utf-8"),
-                    },
-                }
+                ImageBlockParam(
+                    type="image",
+                    source=Base64ImageSourceParam(
+                        type="base64",
+                        media_type=media_type,  # type: ignore[arg-type]
+                        data=base64.b64encode(data).decode("utf-8"),
+                    ),
+                )
             )
 
         text = f"{prefix}@{content.username}: {content.text}" if content.text else ""
 
         if text:
-            blocks.append({"type": "text", "text": text})
-
-        if not blocks:
-            blocks.append(
-                {
-                    "type": "text",
-                    "text": f"{prefix}@{content.username}: (empty message)",
-                }
-            )
+            blocks.append(TextBlockParam(type="text", text=text))
+        elif not blocks:
+            blocks.append(TextBlockParam(type="text", text=empty))
 
         if len(blocks) == 1 and blocks[0]["type"] == "text":
-            return text or f"{prefix}@{content.username}: (empty message)"
+            return text or empty
 
         return blocks

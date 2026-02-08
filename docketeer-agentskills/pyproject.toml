@@ -1,0 +1,62 @@
+[project]
+name = "docketeer-agentskills"
+dynamic = ["version"]
+description = "Agent Skills plugin for Docketeer"
+readme = "README.md"
+authors = [
+    { name = "Chris Guidry", email = "guid@omg.lol" }
+]
+license = "MIT"
+requires-python = ">=3.12"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "docketeer",
+    "pyyaml",
+]
+
+[project.urls]
+Homepage = "https://github.com/chrisguidry/docketeer"
+Repository = "https://github.com/chrisguidry/docketeer"
+Issues = "https://github.com/chrisguidry/docketeer/issues"
+
+[project.entry-points."docketeer.tools"]
+agentskills = "docketeer_agentskills"
+
+[project.entry-points."docketeer.prompt"]
+agentskills = "docketeer_agentskills.prompt:provide_skill_catalog"
+
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+raw-options.root = ".."
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/docketeer_agentskills"]
+
+[tool.uv.sources]
+docketeer = { workspace = true }
+
+[tool.pytest_env]
+DOCKETEER_ANTHROPIC_API_KEY = "test-key"
+
+[tool.pytest.ini_options]
+minversion = "9.0"
+addopts = [
+    "--import-mode=importlib",
+    "--cov=docketeer_agentskills",
+    "--cov-branch",
+    "--cov-report=term-missing",
+    "--cov-fail-under=100",
+]
+asyncio_mode = "auto"
+filterwarnings = [
+    "error",
+]

@@ -2,10 +2,43 @@
 
 import importlib.resources
 import logging
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
+from importlib.metadata import entry_points
 from pathlib import Path
+from typing import Literal
+
+from anthropic.types import CacheControlEphemeralParam, TextBlockParam
 
 log = logging.getLogger(__name__)
+
+
+@dataclass
+class SystemBlock:
+    """A text block in the system prompt."""
+
+    text: str
+    cache_control: CacheControlEphemeralParam | None = None
+
+    def to_api_dict(self) -> TextBlockParam:
+        """Serialize for the Anthropic API system parameter."""
+        d = TextBlockParam(type="text", text=self.text)
+        if self.cache_control:
+            d["cache_control"] = self.cache_control
+        return d
+
+
+def _load_prompt_providers() -> list[Callable[[Path], list[SystemBlock]]]:
+    providers = []
+    for ep in entry_points(group="docketeer.prompt"):
+        try:
+            providers.append(ep.load())
+        except Exception:
+            log.warning("Failed to load prompt plugin: %s", ep.name, exc_info=True)
+    return providers
+
+
+_prompt_providers = _load_prompt_providers()
 
 
 @dataclass
@@ -32,7 +65,7 @@ class MessageContent:
 class HistoryMessage:
     """A message from conversation history."""
 
-    role: str
+    role: Literal["user", "assistant"]
     username: str
     text: str
     timestamp: str = ""
@@ -62,7 +95,7 @@ def build_system_blocks(
     username: str,
     person_context: str = "",
     room_info: RoomInfo | None = None,
-) -> list[dict]:
+) -> list[SystemBlock]:
     """Build system prompt as content blocks for prompt caching.
 
     The stable SOUL.md content is cached; the dynamic time/username/person
@@ -75,13 +108,18 @@ def build_system_blocks(
     if bootstrap_path.exists():
         stable_text += "\n\n" + bootstrap_path.read_text()
 
-    blocks = [
-        {
-            "type": "text",
-            "text": stable_text,
-            "cache_control": {"type": "ephemeral"},
-        },
+    blocks: list[SystemBlock] = [
+        SystemBlock(
+            text=stable_text,
+            cache_control=CacheControlEphemeralParam(type="ephemeral"),
+        ),
     ]
+
+    for provider in _prompt_providers:
+        try:
+            blocks.extend(provider(workspace))
+        except Exception:
+            log.warning("Prompt provider %s failed", provider, exc_info=True)
 
     dynamic_parts = [f"Current time: {current_time}"]
     if room_info:
@@ -98,12 +136,12 @@ def build_system_blocks(
     if person_context:
         dynamic_parts.append(f"\n## What I know about @{username}\n\n{person_context}")
 
-    blocks.append({"type": "text", "text": "\n".join(dynamic_parts)})
+    blocks.append(SystemBlock(text="\n".join(dynamic_parts)))
 
     return blocks
 
 
-def extract_text(content: str | list) -> str:
+def extract_text(content: str | Iterable) -> str:
     """Pull plain text from message content, skipping images and tool results."""
     if isinstance(content, str):
         return content

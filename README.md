@@ -70,6 +70,7 @@ made up of several packages:
 | Package | Description |
 |---------|-------------|
 | [docketeer](docketeer/) | Core agent engine — workspace, journal, scheduling, plugin discovery |
+| [docketeer-agentskills](docketeer-agentskills/) | [Agent Skills](https://agentskills.io/specification) — install, manage, and use packaged agent expertise |
 | [docketeer-rocketchat](docketeer-rocketchat/) | Rocket Chat backend for messaging |
 | [docketeer-web](docketeer-web/) | Web search, HTTP requests, file downloads |
 | [docketeer-monty](docketeer-monty/) | Sandboxed Python execution via [Monty](https://github.com/pydantic/monty) |

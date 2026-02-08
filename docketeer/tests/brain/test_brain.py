@@ -3,6 +3,8 @@
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from anthropic.types import Base64ImageSourceParam, ImageBlockParam, MessageParam
+
 from docketeer.brain import Brain, ProcessCallbacks
 from docketeer.prompt import HistoryMessage, MessageContent
 from docketeer.tools import ToolContext
@@ -330,7 +332,19 @@ async def test_compact_history_few_messages(brain: Brain, fake_messages: Any):
 
 async def test_compact_history_empty_transcript(brain: Brain, fake_messages: Any):
     brain._conversations["room1"] = [
-        {"role": "user", "content": [{"type": "image", "source": {}}]},
+        MessageParam(
+            role="user",
+            content=[
+                ImageBlockParam(
+                    type="image",
+                    source=Base64ImageSourceParam(
+                        type="base64",
+                        media_type="image/png",
+                        data="",
+                    ),
+                )
+            ],
+        ),
     ] * 10
     await brain._compact_history("room1", [], [])
     assert len(brain._conversations["room1"]) == 10
@@ -338,22 +352,26 @@ async def test_compact_history_empty_transcript(brain: Brain, fake_messages: Any
 
 async def test_compact_history_success(brain: Brain, fake_messages: Any):
     for i in range(12):
+        role = "user" if i % 2 == 0 else "assistant"
         brain._conversations["room1"].append(
-            {"role": "user" if i % 2 == 0 else "assistant", "content": f"msg {i}"}
+            MessageParam(role=role, content=f"msg {i}")
         )
     fake_messages.responses = [
         FakeMessage(content=[make_text_block(text="Conversation summary")])
     ]
     await brain._compact_history("room1", [], [])
     msgs = brain._conversations["room1"]
-    assert msgs[0]["content"].startswith("[Earlier conversation summary]")
+    content0 = msgs[0]["content"]
+    assert isinstance(content0, str)
+    assert content0.startswith("[Earlier conversation summary]")
     assert msgs[1]["content"] == "Got it, I have that context."
 
 
 async def test_compact_history_summarization_failure(brain: Brain, fake_messages: Any):
     for i in range(12):
+        role = "user" if i % 2 == 0 else "assistant"
         brain._conversations["room1"].append(
-            {"role": "user" if i % 2 == 0 else "assistant", "content": f"msg {i}"}
+            MessageParam(role=role, content=f"msg {i}")
         )
     fake_messages.create = AsyncMock(side_effect=Exception("API error"))
     await brain._compact_history("room1", [], [])

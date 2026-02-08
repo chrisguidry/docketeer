@@ -36,10 +36,10 @@ def test_build_system_blocks_without_person_context(workspace: Path):
     (workspace / "SOUL.md").write_text("I am the soul")
     blocks = build_system_blocks(workspace, "2026-02-06 10:00 EST", "chris")
     assert len(blocks) == 2
-    assert "I am the soul" in blocks[0]["text"]
-    assert blocks[0]["cache_control"] == {"type": "ephemeral"}
-    assert "Current time:" in blocks[1]["text"]
-    assert "@chris" in blocks[1]["text"]
+    assert "I am the soul" in blocks[0].text
+    assert blocks[0].cache_control == {"type": "ephemeral"}
+    assert "Current time:" in blocks[1].text
+    assert "@chris" in blocks[1].text
 
 
 def test_build_system_blocks_with_person_context(workspace: Path):
@@ -47,7 +47,7 @@ def test_build_system_blocks_with_person_context(workspace: Path):
     blocks = build_system_blocks(
         workspace, "2026-02-06 10:00", "chris", person_context="Chris likes coffee"
     )
-    dynamic = blocks[1]["text"]
+    dynamic = blocks[1].text
     assert "What I know about @chris" in dynamic
     assert "Chris likes coffee" in dynamic
 
@@ -56,7 +56,7 @@ def test_build_system_blocks_dm_room(workspace: Path):
     (workspace / "SOUL.md").write_text("soul")
     info = RoomInfo(room_id="r1", is_direct=True, members=["nix", "alice"])
     blocks = build_system_blocks(workspace, "2026-02-06 10:00", "alice", room_info=info)
-    dynamic = blocks[1]["text"]
+    dynamic = blocks[1].text
     assert "Room: DM with @nix" in dynamic
 
 
@@ -64,7 +64,7 @@ def test_build_system_blocks_dm_room_no_others(workspace: Path):
     (workspace / "SOUL.md").write_text("soul")
     info = RoomInfo(room_id="r1", is_direct=True, members=["alice"])
     blocks = build_system_blocks(workspace, "2026-02-06 10:00", "alice", room_info=info)
-    dynamic = blocks[1]["text"]
+    dynamic = blocks[1].text
     assert "Room: DM" in dynamic
 
 
@@ -74,7 +74,7 @@ def test_build_system_blocks_group_room_with_name(workspace: Path):
         room_id="r1", is_direct=False, members=["alice", "bob", "chris"], name="general"
     )
     blocks = build_system_blocks(workspace, "2026-02-06 10:00", "chris", room_info=info)
-    dynamic = blocks[1]["text"]
+    dynamic = blocks[1].text
     assert "Room: #general (with @alice, @bob)" in dynamic
 
 
@@ -82,7 +82,7 @@ def test_build_system_blocks_group_room_no_name(workspace: Path):
     (workspace / "SOUL.md").write_text("soul")
     info = RoomInfo(room_id="r1", is_direct=False, members=["alice", "bob"])
     blocks = build_system_blocks(workspace, "2026-02-06 10:00", "bob", room_info=info)
-    dynamic = blocks[1]["text"]
+    dynamic = blocks[1].text
     assert "Room: group chat (with @alice)" in dynamic
 
 
@@ -90,7 +90,7 @@ def test_build_system_blocks_group_room_no_others(workspace: Path):
     (workspace / "SOUL.md").write_text("soul")
     info = RoomInfo(room_id="r1", is_direct=False, members=["chris"], name="solo")
     blocks = build_system_blocks(workspace, "2026-02-06 10:00", "chris", room_info=info)
-    dynamic = blocks[1]["text"]
+    dynamic = blocks[1].text
     assert "Room: #solo" in dynamic
     assert "(with" not in dynamic
 
@@ -99,7 +99,7 @@ def test_build_system_blocks_with_bootstrap(workspace: Path):
     (workspace / "SOUL.md").write_text("soul")
     (workspace / "BOOTSTRAP.md").write_text("bootstrap instructions")
     blocks = build_system_blocks(workspace, "2026-02-06 10:00", "chris")
-    assert "bootstrap instructions" in blocks[0]["text"]
+    assert "bootstrap instructions" in blocks[0].text
 
 
 def test_audit_log_creates_dir_and_appends(tmp_path: Path):
