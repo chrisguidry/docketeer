@@ -11,8 +11,12 @@ Trigger rules (matching .pre-commit-config.yaml):
   - Changes in <member>/pyproject.toml → that member + reverse dependents
   - Changes in <member>/tests/ → just that member
 
+Each member's pyproject.toml may include CI metadata under [tool.docketeer.ci]:
+  apt-packages = ["bubblewrap"]    # system packages to install
+  sysctl = ["key=value"]           # sysctl settings to apply
+
 Outputs to $GITHUB_OUTPUT (or stdout if not set):
-  matrix=["docketeer", "docketeer-web", ...]
+  matrix=[{"package": "docketeer"}, {"package": "docketeer-bubblewrap", ...}]
   has-packages=true|false
 """
 
@@ -54,6 +58,20 @@ def build_reverse_deps(
             if dep in reverse:
                 reverse[dep].add(member)
     return reverse
+
+
+def get_ci_metadata(root: Path, member: str) -> dict[str, str]:
+    pyproject = root / member / "pyproject.toml"
+    with open(pyproject, "rb") as f:
+        data = tomllib.load(f)
+
+    ci = data.get("tool", {}).get("docketeer", {}).get("ci", {})
+    entry: dict[str, str] = {"package": member}
+    if apt_packages := ci.get("apt-packages"):
+        entry["apt_packages"] = " ".join(apt_packages)
+    if sysctl := ci.get("sysctl"):
+        entry["sysctl"] = " ".join(sysctl)
+    return entry
 
 
 def get_changed_files(base_ref: str) -> list[str]:
@@ -122,7 +140,8 @@ def main() -> None:
         else:
             affected = compute_affected(changed_files, members, reverse_deps)
 
-    matrix_json = json.dumps(affected)
+    matrix = [get_ci_metadata(root, member) for member in affected]
+    matrix_json = json.dumps(matrix)
     has_packages = "true" if affected else "false"
 
     github_output = os.environ.get("GITHUB_OUTPUT")

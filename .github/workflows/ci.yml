@@ -65,7 +65,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: ${{ fromJson(needs.prepare-matrix.outputs.matrix) }}
+        include: ${{ fromJson(needs.prepare-matrix.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v6
 
@@ -76,24 +76,13 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "**/pyproject.toml"
 
-      - name: System setup
-        run: |
-          declare -A extra_packages=(
-            [docketeer-bubblewrap]="bubblewrap"
-          )
-          declare -A required_sysctl=(
-            [docketeer-bubblewrap]="kernel.apparmor_restrict_unprivileged_userns=0"
-          )
+      - name: Install system packages
+        if: matrix.apt_packages
+        run: sudo apt-get install -y ${{ matrix.apt_packages }}
 
-          pkgs="${extra_packages[${{ matrix.package }}]:-}"
-          if [ -n "$pkgs" ]; then
-            sudo apt-get install -y $pkgs
-          fi
-
-          sysctl="${required_sysctl[${{ matrix.package }}]:-}"
-          if [ -n "$sysctl" ]; then
-            sudo sysctl $sysctl
-          fi
+      - name: Apply sysctl settings
+        if: matrix.sysctl
+        run: sudo sysctl ${{ matrix.sysctl }}
 
       - name: Install dependencies
         run: uv sync

@@ -41,6 +41,10 @@ packages = ["src/docketeer_bubblewrap"]
 [tool.uv.sources]
 docketeer = { workspace = true }
 
+[tool.docketeer.ci]
+apt-packages = ["bubblewrap"]
+sysctl = ["kernel.apparmor_restrict_unprivileged_userns=0"]
+
 [tool.pytest.ini_options]
 minversion = "9.0"
 addopts = [
