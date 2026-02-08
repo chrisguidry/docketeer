@@ -15,7 +15,7 @@ from docket import Docket, Worker
 
 from docketeer import environment, tasks
 from docketeer.brain import Brain, ProcessCallbacks
-from docketeer.chat import ChatClient, IncomingMessage
+from docketeer.chat import ChatClient, IncomingMessage, RoomMessage
 from docketeer.dependencies import set_brain, set_client, set_executor
 from docketeer.executor import CommandExecutor
 from docketeer.plugins import discover_all, discover_one
@@ -89,6 +89,53 @@ def _load_task_collections() -> list[str]:
     for plugin_collections in discover_all("docketeer.tasks"):
         collections.extend(plugin_collections)
     return collections
+
+
+def _format_room_message(msg: RoomMessage) -> str:
+    """Format a single RoomMessage for display."""
+    ts = msg.timestamp.astimezone().strftime("%Y-%m-%d %H:%M")
+    lines = [f"{ts} @{msg.username}: {msg.text}"]
+    if msg.attachments:
+        for att in msg.attachments:
+            label = att.title or "attachment"
+            lines.append(f"  [attachment: {label} ({att.media_type}) — {att.url}]")
+    return "\n".join(lines)
+
+
+def _register_core_chat_tools(client: ChatClient) -> None:
+    """Register chat tools that work with any chat provider."""
+
+    @registry.tool
+    async def room_messages(
+        ctx: ToolContext,
+        count: int = 50,
+        before: str = "",
+        after: str = "",
+        room_id: str = "",
+    ) -> str:
+        """Fetch recent messages from a chat room.
+
+        count: number of messages to retrieve (default 50)
+        before: only messages before this ISO 8601 datetime
+        after: only messages after this ISO 8601 datetime
+        room_id: room to fetch from (defaults to the current room)
+        """
+        target_room = room_id or ctx.room_id
+
+        before_dt = datetime.fromisoformat(before) if before else None
+        after_dt = datetime.fromisoformat(after) if after else None
+
+        messages = await client.fetch_messages(
+            target_room,
+            before=before_dt,
+            after=after_dt,
+            count=count,
+        )
+
+        if not messages:
+            return "No messages found."
+
+        return "\n".join(_format_room_message(m) for m in messages)
 
 
 def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
@@ -196,7 +243,8 @@ async def main() -> None:  # pragma: no cover
         docket.register_collection("docketeer.tasks:docketeer_tasks")
         _register_task_plugins(docket)
 
-        # Register tools (chat + docket)
+        # Register tools (core chat + provider-specific + docket)
+        _register_core_chat_tools(client)
         register_chat_tools(client, tool_context)
         _register_docket_tools(docket, tool_context)
 
@@ -251,7 +299,7 @@ async def load_all_history(client: ChatClient, brain: Brain) -> None:
         )
 
         log.info("  Loading history for DM with %s", room_label)
-        history = await client.fetch_history_as_messages(room_id)
+        history = await client.fetch_messages(room_id)
         count = brain.load_history(room_id, history)
         log.info("    Loaded %d messages", count)
 
@@ -265,7 +313,7 @@ async def handle_message(
     # Load history if this is a new room
     if not brain.has_history(msg.room_id):
         log.info("  New room, loading history...")
-        history = await client.fetch_history_as_messages(msg.room_id)
+        history = await client.fetch_messages(msg.room_id)
         count = brain.load_history(msg.room_id, history)
         log.info("    Loaded %d messages", count)
 

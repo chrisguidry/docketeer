@@ -10,8 +10,7 @@ from typing import Any
 
 import httpx
 
-from docketeer.chat import Attachment, ChatClient, IncomingMessage
-from docketeer.prompt import HistoryMessage
+from docketeer.chat import Attachment, ChatClient, IncomingMessage, RoomMessage
 from docketeer_rocketchat.ddp import DDPClient
 
 log = logging.getLogger(__name__)
@@ -152,42 +151,58 @@ class RocketChatClient(ChatClient):
             log.warning("Failed to fetch message %s: %s", message_id, e)
             return None
 
-    async def fetch_room_history(
-        self, room_id: str, count: int = 20
-    ) -> list[dict[str, Any]]:
-        """Fetch recent messages from a room."""
+    async def fetch_messages(
+        self,
+        room_id: str,
+        *,
+        before: datetime | None = None,
+        after: datetime | None = None,
+        count: int = 50,
+    ) -> list[RoomMessage]:
+        """Fetch messages from a room with optional time filtering."""
         try:
-            result = await self._get("dm.history", roomId=room_id, count=count)
-            messages = result.get("messages", [])
-            return list(reversed(messages))
+            params: dict[str, Any] = {"roomId": room_id, "count": count}
+            if after:
+                params["oldest"] = after.isoformat()
+            if before:
+                params["latest"] = before.isoformat()
+            result = await self._get("dm.history", **params)
+            raw_messages = list(reversed(result.get("messages", [])))
         except Exception as e:
-            log.warning("Failed to fetch room history for %s: %s", room_id, e)
+            log.warning("Failed to fetch messages for %s: %s", room_id, e)
             return []
 
-    async def fetch_history_as_messages(
-        self, room_id: str, count: int = 20
-    ) -> list[HistoryMessage]:
-        """Fetch room history and convert to HistoryMessage objects."""
-        raw_history = await self.fetch_room_history(room_id, count)
-        messages = []
-        for msg in raw_history:
+        messages: list[RoomMessage] = []
+        for msg in raw_messages:
             if msg.get("t"):
                 continue
             text = msg.get("msg", "")
-            if not text:
-                continue
             user = msg.get("u", {})
-            username = user.get("username", "unknown")
-            is_bot = user.get("_id") == self.user_id
-            role = "assistant" if is_bot else "user"
             dt = _parse_rc_timestamp(msg.get("ts"))
-            timestamp = dt.astimezone().strftime("%Y-%m-%d %H:%M") if dt else ""
+            if not dt:
+                continue
+
+            attachments = None
+            if raw_attachments := msg.get("attachments"):
+                attachments = []
+                for att in raw_attachments:
+                    if image_url := att.get("image_url"):
+                        attachments.append(
+                            Attachment(
+                                url=image_url,
+                                media_type=att.get("image_type", "image/png"),
+                                title=att.get("title", ""),
+                            )
+                        )
+
             messages.append(
-                HistoryMessage(
-                    role=role,
-                    username=username,
+                RoomMessage(
+                    message_id=msg.get("_id", ""),
+                    timestamp=dt,
+                    username=user.get("username", "unknown"),
+                    display_name=user.get("name", user.get("username", "unknown")),
                     text=text,
-                    timestamp=timestamp,
+                    attachments=attachments,
                 )
             )
         return messages

@@ -3,10 +3,10 @@
 import asyncio
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
-from docketeer.chat import ChatClient, IncomingMessage
-from docketeer.prompt import HistoryMessage
+from docketeer.chat import ChatClient, IncomingMessage, RoomMessage
 
 
 @dataclass
@@ -41,8 +41,7 @@ class MemoryChat(ChatClient):
         self.status_changes: list[tuple[str, str]] = []
         self.typing_events: list[tuple[str, bool]] = []
         self._incoming: asyncio.Queue[IncomingMessage | None] = asyncio.Queue()
-        self._room_history: dict[str, list[dict[str, Any]]] = {}
-        self._history_messages: dict[str, list[HistoryMessage]] = {}
+        self._room_messages: dict[str, list[RoomMessage]] = {}
         self._dm_rooms: list[dict[str, Any]] = []
         self._attachments: dict[str, bytes] = {}
         self._messages: dict[str, dict[str, Any]] = {}
@@ -84,15 +83,20 @@ class MemoryChat(ChatClient):
     async def fetch_message(self, message_id: str) -> dict[str, Any] | None:
         return self._messages.get(message_id)
 
-    async def fetch_room_history(
-        self, room_id: str, count: int = 20
-    ) -> list[dict[str, Any]]:
-        return self._room_history.get(room_id, [])[:count]
-
-    async def fetch_history_as_messages(
-        self, room_id: str, count: int = 20
-    ) -> list[HistoryMessage]:
-        return self._history_messages.get(room_id, [])[:count]
+    async def fetch_messages(
+        self,
+        room_id: str,
+        *,
+        before: datetime | None = None,
+        after: datetime | None = None,
+        count: int = 50,
+    ) -> list[RoomMessage]:
+        messages = self._room_messages.get(room_id, [])
+        if after:
+            messages = [m for m in messages if m.timestamp > after]
+        if before:
+            messages = [m for m in messages if m.timestamp < before]
+        return messages[:count]
 
     async def list_dm_rooms(self) -> list[dict[str, Any]]:
         return self._dm_rooms

@@ -22,11 +22,11 @@ from anthropic.types import (
 )
 
 from docketeer import environment
+from docketeer.chat import RoomMessage
 from docketeer.people import build_person_map, load_person_context
 from docketeer.prompt import (
     BrainResponse,
     CacheControl,
-    HistoryMessage,
     MessageContent,
     RoomInfo,
     SystemBlock,
@@ -126,16 +126,18 @@ class Brain:
         self._person_map = build_person_map(self._workspace)
         log.info("Rebuilt person map: %s", self._person_map)
 
-    def load_history(self, room_id: str, messages: list[HistoryMessage]) -> int:
+    def load_history(self, room_id: str, messages: list[RoomMessage]) -> int:
         """Load conversation history for a room. Returns count loaded."""
+        agent = self.tool_context.agent_username
         for msg in messages:
-            if msg.role == "user":
-                prefix = f"[{msg.timestamp}] " if msg.timestamp else ""
-                content = f"{prefix}@{msg.username}: {msg.text}"
+            role = "assistant" if msg.username == agent else "user"
+            if role == "user":
+                ts = msg.timestamp.astimezone().strftime("%Y-%m-%d %H:%M")
+                content = f"[{ts}] @{msg.username}: {msg.text}"
             else:
                 content = msg.text
             self._conversations[room_id].append(
-                MessageParam(role=msg.role, content=content)
+                MessageParam(role=role, content=content)
             )
         return len(messages)
 

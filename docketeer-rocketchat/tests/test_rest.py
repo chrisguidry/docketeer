@@ -1,7 +1,7 @@
 """Tests for timestamps, REST API methods, and status retries."""
 
 import json
-from datetime import UTC
+from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -9,6 +9,7 @@ import httpx
 import pytest
 import respx
 
+from docketeer.chat import RoomMessage
 from docketeer_rocketchat.client import RocketChatClient, _parse_rc_timestamp
 
 
@@ -120,97 +121,6 @@ async def test_fetch_message_failure(rc: RocketChatClient):
 
 
 @respx.mock
-async def test_fetch_room_history(rc: RocketChatClient):
-    respx.get("http://localhost:3000/api/v1/dm.history").mock(
-        return_value=httpx.Response(
-            200,
-            json={"messages": [{"msg": "third"}, {"msg": "second"}, {"msg": "first"}]},
-        )
-    )
-    result = await rc.fetch_room_history("room1")
-    assert result[0]["msg"] == "first"
-    assert result[-1]["msg"] == "third"
-
-
-@respx.mock
-async def test_fetch_room_history_failure(rc: RocketChatClient):
-    respx.get("http://localhost:3000/api/v1/dm.history").mock(
-        return_value=httpx.Response(500)
-    )
-    assert await rc.fetch_room_history("room1") == []
-
-
-@respx.mock
-async def test_fetch_history_as_messages(rc: RocketChatClient):
-    respx.get("http://localhost:3000/api/v1/dm.history").mock(
-        return_value=httpx.Response(
-            200,
-            json={
-                "messages": [
-                    {
-                        "msg": "hi back",
-                        "u": {"_id": "bot_uid", "username": "testbot"},
-                        "ts": "2026-02-06T10:01:00+00:00",
-                    },
-                    {
-                        "msg": "hello",
-                        "u": {"_id": "user1", "username": "alice"},
-                        "ts": "2026-02-06T10:00:00+00:00",
-                    },
-                ]
-            },
-        )
-    )
-    msgs = await rc.fetch_history_as_messages("room1")
-    assert len(msgs) == 2
-    assert msgs[0].role == "user"
-    assert msgs[0].username == "alice"
-    assert msgs[1].role == "assistant"
-    assert msgs[1].username == "testbot"
-    assert msgs[0].timestamp != ""
-
-
-@respx.mock
-async def test_fetch_history_as_messages_skips_system_and_empty(rc: RocketChatClient):
-    respx.get("http://localhost:3000/api/v1/dm.history").mock(
-        return_value=httpx.Response(
-            200,
-            json={
-                "messages": [
-                    {"msg": "", "t": "uj", "u": {"_id": "u1", "username": "alice"}},
-                    {"msg": "", "u": {"_id": "u1", "username": "alice"}},
-                    {
-                        "msg": "real",
-                        "u": {"_id": "user1", "username": "alice"},
-                        "ts": "2026-02-06T10:00:00+00:00",
-                    },
-                ]
-            },
-        )
-    )
-    msgs = await rc.fetch_history_as_messages("room1")
-    assert len(msgs) == 1
-    assert msgs[0].text == "real"
-
-
-@respx.mock
-async def test_fetch_history_as_messages_no_timestamp(rc: RocketChatClient):
-    respx.get("http://localhost:3000/api/v1/dm.history").mock(
-        return_value=httpx.Response(
-            200,
-            json={
-                "messages": [
-                    {"msg": "no ts", "u": {"_id": "user1", "username": "alice"}},
-                ]
-            },
-        )
-    )
-    msgs = await rc.fetch_history_as_messages("room1")
-    assert len(msgs) == 1
-    assert msgs[0].timestamp == ""
-
-
-@respx.mock
 async def test_list_dm_rooms(rc: RocketChatClient):
     respx.get("http://localhost:3000/api/v1/dm.list").mock(
         return_value=httpx.Response(200, json={"ims": [{"_id": "r1"}, {"_id": "r2"}]})
@@ -281,3 +191,175 @@ async def test_send_typing_exception_swallowed(rc: RocketChatClient):
     rc._ddp = AsyncMock()
     rc._ddp.call.side_effect = Exception("connection lost")
     await rc.send_typing("room1", True)
+
+
+# --- fetch_messages ---
+
+
+@respx.mock
+async def test_fetch_messages_by_count(rc: RocketChatClient):
+    respx.get("http://localhost:3000/api/v1/dm.history").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "messages": [
+                    {
+                        "_id": "m2",
+                        "msg": "second",
+                        "u": {"_id": "user1", "username": "alice", "name": "Alice"},
+                        "ts": "2026-02-08T12:01:00+00:00",
+                    },
+                    {
+                        "_id": "m1",
+                        "msg": "first",
+                        "u": {"_id": "user2", "username": "bob", "name": "Bob"},
+                        "ts": "2026-02-08T12:00:00+00:00",
+                    },
+                ]
+            },
+        )
+    )
+    msgs = await rc.fetch_messages("room1", count=10)
+    assert len(msgs) == 2
+    assert isinstance(msgs[0], RoomMessage)
+    assert msgs[0].message_id == "m1"
+    assert msgs[0].username == "bob"
+    assert msgs[0].display_name == "Bob"
+    assert msgs[0].text == "first"
+    assert msgs[1].message_id == "m2"
+
+
+@respx.mock
+async def test_fetch_messages_with_time_params(rc: RocketChatClient):
+    route = respx.get("http://localhost:3000/api/v1/dm.history")
+    route.mock(return_value=httpx.Response(200, json={"messages": []}))
+    await rc.fetch_messages(
+        "room1",
+        after=datetime(2026, 2, 8, 10, 0, tzinfo=UTC),
+        before=datetime(2026, 2, 8, 14, 0, tzinfo=UTC),
+    )
+    request = route.calls[0].request
+    assert "oldest" in str(request.url)
+    assert "latest" in str(request.url)
+
+
+@respx.mock
+async def test_fetch_messages_with_attachments(rc: RocketChatClient):
+    respx.get("http://localhost:3000/api/v1/dm.history").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "messages": [
+                    {
+                        "_id": "m1",
+                        "msg": "check this",
+                        "u": {"_id": "user1", "username": "alice", "name": "Alice"},
+                        "ts": "2026-02-08T12:00:00+00:00",
+                        "attachments": [
+                            {
+                                "image_url": "/file-upload/abc/pic.png",
+                                "image_type": "image/png",
+                                "title": "pic.png",
+                            },
+                        ],
+                    },
+                ]
+            },
+        )
+    )
+    msgs = await rc.fetch_messages("room1")
+    assert len(msgs) == 1
+    assert msgs[0].attachments is not None
+    assert len(msgs[0].attachments) == 1
+    assert msgs[0].attachments[0].url == "/file-upload/abc/pic.png"
+    assert msgs[0].attachments[0].media_type == "image/png"
+    assert msgs[0].attachments[0].title == "pic.png"
+
+
+@respx.mock
+async def test_fetch_messages_skips_system_messages(rc: RocketChatClient):
+    respx.get("http://localhost:3000/api/v1/dm.history").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "messages": [
+                    {
+                        "_id": "m1",
+                        "msg": "joined",
+                        "t": "uj",
+                        "u": {"_id": "u1", "username": "alice"},
+                    },
+                    {
+                        "_id": "m2",
+                        "msg": "real message",
+                        "u": {"_id": "u1", "username": "alice", "name": "Alice"},
+                        "ts": "2026-02-08T12:00:00+00:00",
+                    },
+                ]
+            },
+        )
+    )
+    msgs = await rc.fetch_messages("room1")
+    assert len(msgs) == 1
+    assert msgs[0].text == "real message"
+
+
+@respx.mock
+async def test_fetch_messages_skips_no_timestamp(rc: RocketChatClient):
+    respx.get("http://localhost:3000/api/v1/dm.history").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "messages": [
+                    {
+                        "_id": "m1",
+                        "msg": "no ts",
+                        "u": {"_id": "user1", "username": "alice"},
+                    },
+                    {
+                        "_id": "m2",
+                        "msg": "has ts",
+                        "u": {"_id": "user1", "username": "alice", "name": "Alice"},
+                        "ts": "2026-02-08T12:00:00+00:00",
+                    },
+                ]
+            },
+        )
+    )
+    msgs = await rc.fetch_messages("room1")
+    assert len(msgs) == 1
+    assert msgs[0].text == "has ts"
+
+
+@respx.mock
+async def test_fetch_messages_skips_non_image_attachments(rc: RocketChatClient):
+    respx.get("http://localhost:3000/api/v1/dm.history").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "messages": [
+                    {
+                        "_id": "m1",
+                        "msg": "check this",
+                        "u": {"_id": "user1", "username": "alice", "name": "Alice"},
+                        "ts": "2026-02-08T12:00:00+00:00",
+                        "attachments": [
+                            {"title": "some-file.pdf", "title_link": "/file.pdf"},
+                        ],
+                    },
+                ]
+            },
+        )
+    )
+    msgs = await rc.fetch_messages("room1")
+    assert len(msgs) == 1
+    assert msgs[0].attachments == []
+
+
+@respx.mock
+async def test_fetch_messages_failure(rc: RocketChatClient):
+    respx.get("http://localhost:3000/api/v1/dm.history").mock(
+        return_value=httpx.Response(500)
+    )
+    result = await rc.fetch_messages("room1")
+    assert result == []

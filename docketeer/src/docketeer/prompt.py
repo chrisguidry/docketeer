@@ -67,16 +67,6 @@ class MessageContent:
 
 
 @dataclass
-class HistoryMessage:
-    """A message from conversation history."""
-
-    role: Literal["user", "assistant"]
-    username: str
-    text: str
-    timestamp: str = ""
-
-
-@dataclass
 class BrainResponse:
     """Response from Brain."""
 

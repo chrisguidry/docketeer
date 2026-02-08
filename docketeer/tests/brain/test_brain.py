@@ -1,12 +1,14 @@
 """Tests for the Brain class."""
 
+from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from anthropic.types import Base64ImageSourceParam, ImageBlockParam, MessageParam
 
 from docketeer.brain import Brain, ProcessCallbacks
-from docketeer.prompt import HistoryMessage, MessageContent
+from docketeer.chat import RoomMessage
+from docketeer.prompt import MessageContent
 from docketeer.tools import ToolContext
 
 from ..conftest import FakeMessage, make_text_block, make_tool_use_block
@@ -71,33 +73,50 @@ def test_rebuild_person_map(brain: Brain):
 
 def test_load_history_user_messages(brain: Brain):
     msgs = [
-        HistoryMessage(
-            role="user", username="chris", text="hello", timestamp="2026-02-06 10:00"
+        RoomMessage(
+            message_id="m1",
+            timestamp=datetime(2026, 2, 6, 15, 0, tzinfo=UTC),
+            username="chris",
+            display_name="Chris",
+            text="hello",
         )
     ]
     count = brain.load_history("room1", msgs)
     assert count == 1
-    assert (
-        "[2026-02-06 10:00] @chris: hello"
-        in brain._conversations["room1"][0]["content"]
-    )
+    conv = brain._conversations["room1"][0]["content"]
+    assert "@chris: hello" in conv
+    assert "2026-02-06" in conv
 
 
 def test_load_history_assistant_messages(brain: Brain):
-    msgs = [HistoryMessage(role="assistant", username="nix", text="hi there")]
+    brain.tool_context.agent_username = "nix"
+    msgs = [
+        RoomMessage(
+            message_id="m1",
+            timestamp=datetime(2026, 2, 6, 15, 0, tzinfo=UTC),
+            username="nix",
+            display_name="Nix",
+            text="hi there",
+        )
+    ]
     brain.load_history("room1", msgs)
     assert brain._conversations["room1"][0]["content"] == "hi there"
 
 
-def test_load_history_no_timestamp(brain: Brain):
-    msgs = [HistoryMessage(role="user", username="chris", text="hey")]
-    brain.load_history("room1", msgs)
-    assert brain._conversations["room1"][0]["content"] == "@chris: hey"
-
-
 def test_has_history(brain: Brain):
     assert not brain.has_history("room1")
-    brain.load_history("room1", [HistoryMessage(role="user", username="x", text="y")])
+    brain.load_history(
+        "room1",
+        [
+            RoomMessage(
+                message_id="m1",
+                timestamp=datetime(2026, 2, 6, 15, 0, tzinfo=UTC),
+                username="x",
+                display_name="X",
+                text="y",
+            )
+        ],
+    )
     assert brain.has_history("room1")
 
 

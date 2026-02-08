@@ -6,9 +6,9 @@ from unittest.mock import patch
 import pytest
 
 from docketeer.brain import Brain
-from docketeer.chat import Attachment, IncomingMessage
+from docketeer.chat import Attachment, IncomingMessage, RoomMessage
 from docketeer.main import build_content, handle_message, run, send_response
-from docketeer.prompt import BrainResponse, HistoryMessage
+from docketeer.prompt import BrainResponse
 from docketeer.testing import MemoryChat
 
 from ..conftest import (
@@ -22,7 +22,18 @@ from ..conftest import (
 async def test_handle_message_existing_room(
     chat: MemoryChat, brain: Brain, fake_messages: FakeMessages
 ):
-    brain.load_history("room1", [HistoryMessage(role="user", username="a", text="old")])
+    brain.load_history(
+        "room1",
+        [
+            RoomMessage(
+                message_id="m0",
+                timestamp=datetime(2026, 2, 6, 10, 0, tzinfo=UTC),
+                username="a",
+                display_name="A",
+                text="old",
+            )
+        ],
+    )
     fake_messages.responses = [FakeMessage(content=[make_text_block(text="Got it!")])]
 
     msg = IncomingMessage(
@@ -43,9 +54,13 @@ async def test_handle_message_new_room(
     chat: MemoryChat, brain: Brain, fake_messages: FakeMessages
 ):
     fake_messages.responses = [FakeMessage(content=[make_text_block(text="Hello!")])]
-    chat._history_messages["new_room"] = [
-        HistoryMessage(
-            role="user", username="alice", text="old msg", timestamp="2026-02-06 10:00"
+    chat._room_messages["new_room"] = [
+        RoomMessage(
+            message_id="m0",
+            timestamp=datetime(2026, 2, 6, 15, 0, tzinfo=UTC),
+            username="alice",
+            display_name="Alice",
+            text="old msg",
         )
     ]
 
@@ -69,7 +84,18 @@ async def test_handle_message_new_room(
 async def test_handle_message_text_only_no_status_change(
     chat: MemoryChat, brain: Brain, fake_messages: FakeMessages
 ):
-    brain.load_history("room1", [HistoryMessage(role="user", username="a", text="x")])
+    brain.load_history(
+        "room1",
+        [
+            RoomMessage(
+                message_id="m0",
+                timestamp=datetime(2026, 2, 6, 10, 0, tzinfo=UTC),
+                username="a",
+                display_name="A",
+                text="x",
+            )
+        ],
+    )
     fake_messages.responses = [FakeMessage(content=[make_text_block(text="ok")])]
 
     msg = IncomingMessage(
@@ -173,7 +199,18 @@ def test_run_start():
 async def test_handle_message_sends_typing_events(
     chat: MemoryChat, brain: Brain, fake_messages: FakeMessages
 ):
-    brain.load_history("room1", [HistoryMessage(role="user", username="a", text="x")])
+    brain.load_history(
+        "room1",
+        [
+            RoomMessage(
+                message_id="m0",
+                timestamp=datetime(2026, 2, 6, 10, 0, tzinfo=UTC),
+                username="a",
+                display_name="A",
+                text="x",
+            )
+        ],
+    )
     fake_messages.responses = [FakeMessage(content=[make_text_block(text="reply")])]
 
     msg = IncomingMessage(
@@ -194,7 +231,18 @@ async def test_handle_message_sends_typing_events(
 async def test_handle_message_tool_use_status_changes(
     chat: MemoryChat, brain: Brain, fake_messages: FakeMessages
 ):
-    brain.load_history("room1", [HistoryMessage(role="user", username="a", text="x")])
+    brain.load_history(
+        "room1",
+        [
+            RoomMessage(
+                message_id="m0",
+                timestamp=datetime(2026, 2, 6, 10, 0, tzinfo=UTC),
+                username="a",
+                display_name="A",
+                text="x",
+            )
+        ],
+    )
     fake_messages.responses = [
         FakeMessage(
             content=[make_tool_use_block(name="list_files", input={"path": ""})],

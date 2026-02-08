@@ -1,9 +1,10 @@
 """Tests for history loading."""
 
+from datetime import UTC, datetime
+
 from docketeer.brain import Brain
-from docketeer.chat import ChatClient
+from docketeer.chat import RoomMessage
 from docketeer.main import load_all_history
-from docketeer.prompt import HistoryMessage
 from docketeer.testing import MemoryChat
 
 
@@ -12,15 +13,23 @@ async def test_load_all_history(chat: MemoryChat, brain: Brain):
         {"_id": "r1", "usernames": ["testbot", "alice"]},
         {"_id": "r2", "usernames": ["testbot", "bob"]},
     ]
-    chat._history_messages = {
+    chat._room_messages = {
         "r1": [
-            HistoryMessage(
-                role="user", username="alice", text="hi", timestamp="2026-02-06 10:00"
+            RoomMessage(
+                message_id="m1",
+                timestamp=datetime(2026, 2, 6, 15, 0, tzinfo=UTC),
+                username="alice",
+                display_name="Alice",
+                text="hi",
             )
         ],
         "r2": [
-            HistoryMessage(
-                role="user", username="bob", text="hey", timestamp="2026-02-06 11:00"
+            RoomMessage(
+                message_id="m2",
+                timestamp=datetime(2026, 2, 6, 16, 0, tzinfo=UTC),
+                username="bob",
+                display_name="Bob",
+                text="hey",
             )
         ],
     }
@@ -35,8 +44,3 @@ async def test_load_all_history(chat: MemoryChat, brain: Brain):
 async def test_load_all_history_skips_no_id(chat: MemoryChat, brain: Brain):
     chat._dm_rooms = [{"usernames": ["testbot", "alice"]}]
     await load_all_history(chat, brain)
-
-
-async def test_base_fetch_history_as_messages_returns_empty():
-    result = await ChatClient.fetch_history_as_messages(MemoryChat(), "room1")
-    assert result == []

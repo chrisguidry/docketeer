@@ -6,14 +6,24 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from docketeer.prompt import HistoryMessage
-
 
 @dataclass
 class Attachment:
     url: str
     media_type: str
     title: str = ""
+
+
+@dataclass
+class RoomMessage:
+    """A message from room history, with full context and attachment references."""
+
+    message_id: str
+    timestamp: datetime
+    username: str
+    display_name: str
+    text: str
+    attachments: list[Attachment] | None = None
 
 
 @dataclass
@@ -64,15 +74,14 @@ class ChatClient(ABC):
     async def fetch_message(self, message_id: str) -> dict[str, Any] | None: ...
 
     @abstractmethod
-    async def fetch_room_history(
-        self, room_id: str, count: int = 20
-    ) -> list[dict[str, Any]]: ...
-
-    async def fetch_history_as_messages(
-        self, room_id: str, count: int = 20
-    ) -> list[HistoryMessage]:
-        """Fetch room history as HistoryMessage objects for the brain."""
-        return []
+    async def fetch_messages(
+        self,
+        room_id: str,
+        *,
+        before: datetime | None = None,
+        after: datetime | None = None,
+        count: int = 50,
+    ) -> list[RoomMessage]: ...
 
     @abstractmethod
     async def list_dm_rooms(self) -> list[dict[str, Any]]: ...
