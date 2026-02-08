@@ -2,6 +2,7 @@
 
 import os
 import shutil
+import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
@@ -10,6 +11,7 @@ import pytest
 from docketeer.executor import Mount
 from docketeer_bubblewrap import BubblewrapExecutor, create_executor
 from docketeer_bubblewrap.executor import (
+    SYSTEM_RO_BINDS,
     _build_args,
     _probe_net_isolation,
     _SandboxedProcess,
@@ -17,6 +19,25 @@ from docketeer_bubblewrap.executor import (
 
 has_bwrap = shutil.which("bwrap") is not None
 requires_bwrap = pytest.mark.skipif(not has_bwrap, reason="bwrap not on PATH")
+
+
+def _bwrap_functional() -> bool:
+    """Test whether bwrap can actually create sandboxes (user namespaces must work)."""
+    if not has_bwrap:
+        return False
+    try:
+        args = ["bwrap", "--unshare-pid", "--dev", "/dev", "--proc", "/proc"]
+        for path in SYSTEM_RO_BINDS:
+            if Path(path).exists():
+                args.extend(["--ro-bind", path, path])
+        args.append("true")
+        result = subprocess.run(args, capture_output=True, timeout=5)
+        return result.returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return False
+
+
+bwrap_functional = _bwrap_functional()
 
 
 # --- Factory ---
@@ -60,6 +81,13 @@ def test_probe_net_isolation_skips_missing_paths():
 def test_probe_net_isolation_bwrap_missing():
     with patch("subprocess.run", side_effect=FileNotFoundError):
         assert _probe_net_isolation() is False
+
+
+@requires_bwrap
+def test_executor_with_net_isolation():
+    with patch("docketeer_bubblewrap.executor._probe_net_isolation", return_value=True):
+        executor = BubblewrapExecutor()
+    assert executor.can_isolate_net is True
 
 
 @requires_bwrap
@@ -187,8 +215,8 @@ def test_build_args_with_username_creates_group_file(tmp_path: Path):
 
 @pytest.fixture()
 def executor() -> BubblewrapExecutor:
-    if not has_bwrap:
-        pytest.skip("bwrap not on PATH")
+    if not bwrap_functional:
+        pytest.skip("bwrap not functional (user namespaces unavailable)")
     return BubblewrapExecutor()
 
 
@@ -294,6 +322,99 @@ async def test_username_sets_identity(executor: BubblewrapExecutor):
     lines = result.stdout.decode().strip().splitlines()
     assert lines[0] == "nix"
     assert lines[1] == "nix"
+
+
+def test_bwrap_diagnostics():
+    import subprocess
+
+    info: dict[str, object] = {}
+
+    info["bwrap_on_path"] = shutil.which("bwrap")
+
+    # What does the kernel say about user namespaces?
+    try:
+        info["user_ns_max"] = (
+            Path("/proc/sys/user/max_user_namespaces").read_text().strip()
+        )
+    except OSError as e:
+        info["user_ns_max"] = str(e)
+
+    try:
+        info["unprivileged_userns_clone"] = (
+            Path("/proc/sys/kernel/unprivileged_userns_clone").read_text().strip()
+        )
+    except OSError as e:
+        info["unprivileged_userns_clone"] = str(e)
+
+    # Can we create a user namespace at all (unshare)?
+    try:
+        result = subprocess.run(
+            ["unshare", "--user", "true"], capture_output=True, timeout=5
+        )
+        info["unshare_user"] = f"rc={result.returncode} stderr={result.stderr.decode()}"
+    except Exception as e:
+        info["unshare_user"] = str(e)
+
+    # Minimal bwrap (just --ro-bind / /)
+    try:
+        result = subprocess.run(
+            ["bwrap", "--ro-bind", "/", "/", "true"], capture_output=True, timeout=5
+        )
+        info["bwrap_ro_bind_root"] = (
+            f"rc={result.returncode} stderr={result.stderr.decode()}"
+        )
+    except Exception as e:
+        info["bwrap_ro_bind_root"] = str(e)
+
+    # bwrap with --unshare-pid (our minimal sandbox)
+    try:
+        args = ["bwrap", "--unshare-pid", "--dev", "/dev", "--proc", "/proc"]
+        for path in SYSTEM_RO_BINDS:
+            if Path(path).exists():
+                args.extend(["--ro-bind", path, path])
+        args.append("true")
+        result = subprocess.run(args, capture_output=True, timeout=5)
+        info["bwrap_unshare_pid"] = (
+            f"rc={result.returncode} stderr={result.stderr.decode()}"
+        )
+    except Exception as e:
+        info["bwrap_unshare_pid"] = str(e)
+
+    # bwrap with --unshare-net
+    try:
+        args = ["bwrap", "--unshare-net", "--dev", "/dev", "--proc", "/proc"]
+        for path in SYSTEM_RO_BINDS:
+            if Path(path).exists():
+                args.extend(["--ro-bind", path, path])
+        args.append("true")
+        result = subprocess.run(args, capture_output=True, timeout=5)
+        info["bwrap_unshare_net"] = (
+            f"rc={result.returncode} stderr={result.stderr.decode()}"
+        )
+    except Exception as e:
+        info["bwrap_unshare_net"] = str(e)
+
+    # AppArmor status
+    try:
+        info["apparmor"] = (
+            Path("/sys/module/apparmor/parameters/enabled").read_text().strip()
+        )
+    except OSError as e:
+        info["apparmor"] = str(e)
+
+    # Seccomp
+    try:
+        status = Path("/proc/self/status").read_text()
+        for line in status.splitlines():
+            if line.startswith("Seccomp:"):
+                info["seccomp"] = line
+    except OSError as e:
+        info["seccomp"] = str(e)
+
+    for key, value in sorted(info.items()):
+        print(f"{key}: {value}")
+
+    pytest.fail("diagnostic test — remove after inspecting CI output")
 
 
 async def test_network_denied_when_isolation_available(
