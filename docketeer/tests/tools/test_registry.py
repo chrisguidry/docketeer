@@ -28,7 +28,7 @@ def test_tool_registration():
 
     assert "greet" in reg._tools
     assert reg._schemas["greet"].name == "greet"
-    assert reg._schemas["greet"].description == "Say hello."
+    assert reg._schemas["greet"].description == "Say hello.\n\nname: person to greet"
 
 
 def test_definitions_returns_all():

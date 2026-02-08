@@ -63,7 +63,7 @@ class ToolRegistry:
         self._tools[name] = fn
         self._schemas[name] = ToolDefinition(
             name=name,
-            description=(fn.__doc__ or "").strip().split("\n")[0],
+            description=inspect.cleandoc(fn.__doc__ or ""),
             input_schema=schema,
         )
         return fn
