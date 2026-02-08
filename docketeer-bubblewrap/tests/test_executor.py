@@ -9,7 +9,11 @@ import pytest
 
 from docketeer.executor import Mount
 from docketeer_bubblewrap import BubblewrapExecutor, create_executor
-from docketeer_bubblewrap.executor import _build_args, _SandboxedProcess
+from docketeer_bubblewrap.executor import (
+    _build_args,
+    _probe_net_isolation,
+    _SandboxedProcess,
+)
 
 has_bwrap = shutil.which("bwrap") is not None
 requires_bwrap = pytest.mark.skipif(not has_bwrap, reason="bwrap not on PATH")
@@ -30,11 +34,48 @@ def test_create_executor_bwrap_missing():
             BubblewrapExecutor()
 
 
+# --- Network isolation probe ---
+
+
+@requires_bwrap
+def test_probe_net_isolation():
+    # Should match the executor's detection on this machine
+    executor = BubblewrapExecutor()
+    assert executor.can_isolate_net == _probe_net_isolation()
+
+
+def test_probe_net_isolation_when_unavailable():
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value.returncode = 1
+        assert _probe_net_isolation() is False
+
+
+def test_probe_net_isolation_skips_missing_paths():
+    with patch("docketeer_bubblewrap.executor.SYSTEM_RO_BINDS", ["/no/such/path"]):
+        # Should still work (just fewer binds), or fail gracefully
+        result = _probe_net_isolation()
+        assert isinstance(result, bool)
+
+
+def test_probe_net_isolation_bwrap_missing():
+    with patch("subprocess.run", side_effect=FileNotFoundError):
+        assert _probe_net_isolation() is False
+
+
+@requires_bwrap
+def test_executor_without_net_isolation():
+    with patch(
+        "docketeer_bubblewrap.executor._probe_net_isolation", return_value=False
+    ):
+        executor = BubblewrapExecutor()
+    assert executor.can_isolate_net is False
+
+
 # --- _build_args ---
 
 
 def test_build_args_default_flags():
-    args = _build_args(mounts=[], network_access=False)
+    args = _build_args(mounts=[], network_access=False, can_isolate_net=True)
     assert args[0] == "bwrap"
     assert "--die-with-parent" in args
     assert "--unshare-pid" in args
@@ -48,7 +89,13 @@ def test_build_args_default_flags():
 
 
 def test_build_args_network_access():
-    args = _build_args(mounts=[], network_access=True)
+    args = _build_args(mounts=[], network_access=True, can_isolate_net=True)
+    assert "--unshare-net" not in args
+    assert "--unshare-pid" in args
+
+
+def test_build_args_no_unshare_net_without_capability():
+    args = _build_args(mounts=[], network_access=False, can_isolate_net=False)
     assert "--unshare-net" not in args
     assert "--unshare-pid" in args
 
@@ -249,7 +296,11 @@ async def test_username_sets_identity(executor: BubblewrapExecutor):
     assert lines[1] == "nix"
 
 
-async def test_network_denied_by_default(executor: BubblewrapExecutor):
+async def test_network_denied_when_isolation_available(
+    executor: BubblewrapExecutor,
+):
+    if not executor.can_isolate_net:
+        pytest.skip("CAP_NET_ADMIN not available")
     rp = await executor.start(
         ["sh", "-c", "cat /proc/net/if_inet6 2>/dev/null || echo no-network"],
     )
