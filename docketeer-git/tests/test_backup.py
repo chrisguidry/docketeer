@@ -95,7 +95,9 @@ async def test_multiple_changes(workspace: Path):
 async def test_pushes_when_remote_configured(workspace: Path):
     remote = workspace.parent / "remote.git"
     subprocess.run(
-        ["git", "init", "--bare", str(remote)], check=True, capture_output=True
+        ["git", "init", "--bare", "-b", "main", str(remote)],
+        check=True,
+        capture_output=True,
     )
 
     (workspace / "note.md").write_text("push me")
