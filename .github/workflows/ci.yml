@@ -76,20 +76,24 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "**/pyproject.toml"
 
-      - name: Install system dependencies
+      - name: System setup
         run: |
-          # Map workspace packages to any apt packages they need for testing
           declare -A extra_packages=(
             [docketeer-bubblewrap]="bubblewrap"
           )
+          declare -A required_sysctl=(
+            [docketeer-bubblewrap]="kernel.apparmor_restrict_unprivileged_userns=0"
+          )
+
           pkgs="${extra_packages[${{ matrix.package }}]:-}"
           if [ -n "$pkgs" ]; then
             sudo apt-get install -y $pkgs
           fi
 
-      - name: Enable unprivileged user namespaces
-        if: matrix.package == 'docketeer-bubblewrap'
-        run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0
+          sysctl="${required_sysctl[${{ matrix.package }}]:-}"
+          if [ -n "$sysctl" ]; then
+            sudo sysctl $sysctl
+          fi
 
       - name: Install dependencies
         run: uv sync
