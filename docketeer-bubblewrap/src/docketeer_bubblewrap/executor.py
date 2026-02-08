@@ -1,32 +1,12 @@
 """Bubblewrap-based sandboxed command executor."""
 
 import asyncio
-import logging
 import os
 import shutil
 import tempfile
 from pathlib import Path
 
 from docketeer.executor import CommandExecutor, CompletedProcess, Mount, RunningProcess
-
-log = logging.getLogger(__name__)
-
-
-def _probe_net_isolation() -> bool:
-    """Test whether bwrap --unshare-net works in this environment."""
-    try:
-        import subprocess
-
-        args = ["bwrap", "--unshare-net", "--dev", "/dev", "--proc", "/proc"]
-        for path in SYSTEM_RO_BINDS:
-            if Path(path).exists():
-                args.extend(["--ro-bind", path, path])
-        args.append("true")
-        result = subprocess.run(args, capture_output=True, timeout=5)
-        return result.returncode == 0
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
-        return False
-
 
 SYSTEM_RO_BINDS = [
     "/usr",
@@ -64,16 +44,6 @@ class BubblewrapExecutor(CommandExecutor):
     def __init__(self) -> None:
         if not shutil.which("bwrap"):
             raise RuntimeError("bwrap not found on PATH")
-        self.can_isolate_net = _probe_net_isolation()
-        if not self.can_isolate_net:
-            log.warning(
-                "Network namespace isolation is unavailable in this environment. "
-                "Sandboxed commands will have full network access regardless of the "
-                "network_access flag. This is common in containers or CI runners that "
-                "restrict namespace creation. To enable network isolation, grant "
-                "CAP_NET_ADMIN to this process (e.g. in Kubernetes: "
-                'securityContext.capabilities.add: ["NET_ADMIN"])'
-            )
 
     async def start(
         self,
@@ -93,7 +63,6 @@ class BubblewrapExecutor(CommandExecutor):
         args = _build_args(
             mounts=mounts or [],
             network_access=network_access,
-            can_isolate_net=self.can_isolate_net,
             username=username,
             tmp_dir=tmp_dir,
         )
@@ -113,7 +82,6 @@ def _build_args(
     *,
     mounts: list[Mount],
     network_access: bool,
-    can_isolate_net: bool = True,
     username: str | None = None,
     tmp_dir: Path | None = None,
 ) -> list[str]:
@@ -121,7 +89,7 @@ def _build_args(
 
     # Namespace isolation
     args.extend(["--unshare-pid", "--unshare-uts", "--unshare-ipc", "--unshare-cgroup"])
-    if not network_access and can_isolate_net:
+    if not network_access:
         args.append("--unshare-net")
 
     # Read-only system binds (skip paths that don't exist)
