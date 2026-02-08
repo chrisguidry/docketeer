@@ -1,12 +1,17 @@
 """Docket task handlers — bridges scheduled tasks to the brain."""
 
+import logging
 from datetime import datetime
 
-from docketeer.brain import Brain
+from anthropic import AuthenticationError, PermissionDeniedError
+
+from docketeer.brain import APOLOGY, Brain
 from docketeer.chat import ChatClient
 from docketeer.cycles import consolidation, reverie
 from docketeer.dependencies import CurrentBrain, CurrentChatClient
 from docketeer.prompt import BrainResponse, MessageContent
+
+log = logging.getLogger(__name__)
 
 
 async def nudge(
@@ -20,7 +25,15 @@ async def nudge(
     content = MessageContent(username="system", timestamp=now, text=prompt)
 
     context_room = room_id or "__tasks__"
-    response: BrainResponse = await brain.process(context_room, content)
+    try:
+        response: BrainResponse = await brain.process(context_room, content)
+    except (AuthenticationError, PermissionDeniedError):
+        raise
+    except Exception:
+        log.exception("Error processing nudge task")
+        if room_id:
+            await client.send_message(room_id, APOLOGY)
+        return
 
     if room_id and response.text:
         await client.send_message(room_id, response.text)

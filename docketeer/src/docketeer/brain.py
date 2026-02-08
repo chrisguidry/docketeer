@@ -1,15 +1,15 @@
 """Claude reasoning loop with tool use."""
 
 import base64
-import json
 import logging
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
-from pathlib import Path
+from datetime import datetime
 
 import anthropic
+from anthropic import APIError, AuthenticationError, PermissionDeniedError
+from anthropic._exceptions import RequestTooLargeError
 from anthropic.types import (
     Base64ImageSourceParam,
     ContentBlockParam,
@@ -22,6 +22,7 @@ from anthropic.types import (
 )
 
 from docketeer import environment
+from docketeer.audit import audit_log, log_usage
 from docketeer.chat import RoomMessage
 from docketeer.people import build_person_map, load_person_context
 from docketeer.prompt import (
@@ -48,6 +49,11 @@ COMPACT_THRESHOLD = 140_000
 COMPACT_MODEL = "claude-haiku-4-5-20251001"
 MIN_RECENT_MESSAGES = 6
 
+APOLOGY = (
+    "I'm sorry, I ran into a temporary problem and couldn't finish processing that. "
+    "Could you try again in a moment?"
+)
+
 
 @dataclass
 class ProcessCallbacks:
@@ -56,40 +62,6 @@ class ProcessCallbacks:
     on_first_text: Callable[[], Awaitable[None]] | None = None
     on_tool_start: Callable[[], Awaitable[None]] | None = None
     on_tool_end: Callable[[], Awaitable[None]] | None = None
-
-
-def _audit_log(
-    audit_dir: Path, tool_name: str, args: dict, result: str, is_error: bool
-) -> None:
-    """Append a tool call record to today's audit log."""
-    now = datetime.now(UTC)
-    audit_dir.mkdir(parents=True, exist_ok=True)
-    path = audit_dir / f"{now.strftime('%Y-%m-%d')}.jsonl"
-
-    record = {
-        "ts": now.isoformat(),
-        "tool": tool_name,
-        "args": args,
-        "result_length": len(result),
-        "is_error": is_error,
-    }
-    with path.open("a") as f:
-        f.write(json.dumps(record) + "\n")
-
-
-def _log_usage(response: anthropic.types.Message) -> None:
-    """Log token usage including cache stats."""
-    u = response.usage
-    cr = getattr(u, "cache_read_input_tokens", 0) or 0
-    cw = getattr(u, "cache_creation_input_tokens", 0) or 0
-    log.info(
-        "Tokens: %d in (%d cache-read, %d cache-write, %d uncached), %d out",
-        cr + cw + u.input_tokens,
-        cr,
-        cw,
-        u.input_tokens,
-        u.output_tokens,
-    )
 
 
 class Brain:
@@ -167,24 +139,18 @@ class Brain:
             room_info=room_info,
         )
 
-        # Tool definitions with cache breakpoint on last definition
         tools = registry.definitions()
         if tools:
             tools = [*tools]
             tools[-1].cache_control = CacheControl()
 
-        # Update tool context with current message info
         self.tool_context.username = content.username
         self.tool_context.room_id = room_id
 
-        # Compact if we're approaching the context limit
         if self._room_token_counts.get(room_id, 0) > COMPACT_THRESHOLD:
             await self._compact_history(room_id, system, tools)
 
-        # Build content for the user message
         user_content = self._build_content(content)
-
-        # Add to conversation history
         self._conversations[room_id].append(
             MessageParam(role="user", content=user_content)
         )
@@ -193,7 +159,46 @@ class Brain:
 
         log.debug("Processing message with %d history messages", len(messages))
 
-        # Agentic loop: keep calling Claude until no more tool use
+        try:
+            reply = await self._agentic_loop(system, messages, tools, callbacks)
+        except RequestTooLargeError:
+            log.warning("Request too large, compacting and retrying", exc_info=True)
+            await self._compact_history(room_id, system, tools)
+            try:
+                reply = await self._agentic_loop(system, messages, tools, callbacks)
+            except RequestTooLargeError:
+                log.error("Still too large after compaction", exc_info=True)
+                return BrainResponse(text=APOLOGY)
+        except (AuthenticationError, PermissionDeniedError):
+            raise
+        except APIError:
+            log.error("API error during processing", exc_info=True)
+            return BrainResponse(text=APOLOGY)
+
+        if reply:
+            self._conversations[room_id].append(
+                MessageParam(role="assistant", content=reply)
+            )
+
+        tokens = await self._measure_context(room_id, system, tools)
+        log.info(
+            "Context: %d / %d tokens for room %s",
+            tokens,
+            CONTEXT_BUDGET,
+            room_id,
+        )
+
+        log.debug("Response: %s", reply[:100])
+        return BrainResponse(text=reply)
+
+    async def _agentic_loop(
+        self,
+        system: list[SystemBlock],
+        messages: list[MessageParam],
+        tools: list[ToolDefinition],
+        callbacks: ProcessCallbacks | None,
+    ) -> str:
+        """Run the tool-use loop and return the final reply text."""
         on_first_text = callbacks.on_first_text if callbacks else None
         used_tools = False
         rounds = 0
@@ -203,11 +208,9 @@ class Brain:
                 system, messages, tools, on_first_text=on_first_text
             )
 
-            _log_usage(response)
+            log_usage(response)
 
-            # Process any tool_use blocks, even if the response was truncated
             tool_blocks = [b for b in response.content if isinstance(b, ToolUseBlock)]
-
             if tool_blocks:
                 used_tools = True
                 if callbacks and callbacks.on_tool_start:
@@ -226,23 +229,7 @@ class Brain:
             else:
                 break
 
-        reply = self._build_reply(response, used_tools, rounds)
-
-        if reply:
-            self._conversations[room_id].append(
-                MessageParam(role="assistant", content=reply)
-            )
-
-        tokens = await self._measure_context(room_id, system, tools)
-        log.info(
-            "Context: %d / %d tokens for room %s",
-            tokens,
-            CONTEXT_BUDGET,
-            room_id,
-        )
-
-        log.debug("Response: %s", reply[:100])
-        return BrainResponse(text=reply)
+        return self._build_reply(response, used_tools, rounds)
 
     async def _stream_message(
         self,
@@ -276,7 +263,7 @@ class Brain:
             is_error = result.startswith("Error:")
             log.info("Tool result: %s", result[:100])
 
-            _audit_log(
+            audit_log(
                 self._audit_path,
                 block.name,
                 block.input,
@@ -340,12 +327,16 @@ class Brain:
         self, room_id: str, system: list[SystemBlock], tools: list[ToolDefinition]
     ) -> int:
         """Count tokens for the current conversation state."""
-        result = await self.client.messages.count_tokens(
-            model=CLAUDE_MODEL,
-            system=[b.to_api_dict() for b in system],
-            tools=[t.to_api_dict() for t in tools],
-            messages=self._conversations[room_id],
-        )
+        try:
+            result = await self.client.messages.count_tokens(
+                model=CLAUDE_MODEL,
+                system=[b.to_api_dict() for b in system],
+                tools=[t.to_api_dict() for t in tools],
+                messages=self._conversations[room_id],
+            )
+        except APIError:
+            log.warning("Token counting failed, using stale count", exc_info=True)
+            return self._room_token_counts.get(room_id, 0)
         self._room_token_counts[room_id] = result.input_tokens
         return result.input_tokens
 
@@ -422,21 +413,27 @@ class Brain:
     async def _summarize_webpage(self, text: str, purpose: str) -> str:
         """Ask Haiku to summarize a web page, guided by the fetch purpose."""
         focus = f" for someone who wants to: {purpose}" if purpose else ""
-        response = await self.client.messages.create(
-            model=COMPACT_MODEL,
-            max_tokens=2048,
-            messages=[
-                MessageParam(
-                    role="user",
-                    content=(
-                        f"Summarize this web page{focus}. "
-                        "Preserve key facts, URLs, numbers, and any structured data. "
-                        "Omit navigation, ads, and boilerplate.\n\n"
-                        f"{text}"
-                    ),
-                )
-            ],
-        )
+        try:
+            response = await self.client.messages.create(
+                model=COMPACT_MODEL,
+                max_tokens=2048,
+                messages=[
+                    MessageParam(
+                        role="user",
+                        content=(
+                            f"Summarize this web page{focus}. "
+                            "Preserve key facts, URLs, numbers, and any structured data. "
+                            "Omit navigation, ads, and boilerplate.\n\n"
+                            f"{text}"
+                        ),
+                    )
+                ],
+            )
+        except APIError:
+            log.warning(
+                "Webpage summarization failed, returning truncated text", exc_info=True
+            )
+            return text[:4000]
         block = response.content[0]
         return block.text if isinstance(block, TextBlock) else str(block)
 
@@ -444,23 +441,29 @@ class Brain:
         self, url: str, status_code: int, headers: str
     ) -> bool:
         """Ask Haiku whether an HTTP response body is likely readable text."""
-        response = await self.client.messages.create(
-            model=COMPACT_MODEL,
-            max_tokens=8,
-            messages=[
-                MessageParam(
-                    role="user",
-                    content=(
-                        "Given this HTTP response, is the body likely readable text "
-                        "(HTML, JSON, plain text, etc.) that would be useful to read? "
-                        "Answer only 'true' or 'false'.\n\n"
-                        f"URL: {url}\n"
-                        f"Status: {status_code}\n"
-                        f"Headers:\n{headers}"
-                    ),
-                )
-            ],
-        )
+        try:
+            response = await self.client.messages.create(
+                model=COMPACT_MODEL,
+                max_tokens=8,
+                messages=[
+                    MessageParam(
+                        role="user",
+                        content=(
+                            "Given this HTTP response, is the body likely readable text "
+                            "(HTML, JSON, plain text, etc.) that would be useful to read? "
+                            "Answer only 'true' or 'false'.\n\n"
+                            f"URL: {url}\n"
+                            f"Status: {status_code}\n"
+                            f"Headers:\n{headers}"
+                        ),
+                    )
+                ],
+            )
+        except APIError:
+            log.warning(
+                "Response classification failed, assuming readable", exc_info=True
+            )
+            return True
         block = response.content[0]
         answer = block.text if isinstance(block, TextBlock) else ""
         return answer.strip().lower() == "true"

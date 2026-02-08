@@ -4,8 +4,9 @@ from datetime import UTC, datetime
 from unittest.mock import patch
 
 import pytest
+from anthropic import AuthenticationError
 
-from docketeer.brain import Brain
+from docketeer.brain import APOLOGY, Brain
 from docketeer.chat import Attachment, IncomingMessage, RoomMessage
 from docketeer.main import build_content, handle_message, run, send_response
 from docketeer.prompt import BrainResponse
@@ -14,6 +15,7 @@ from docketeer.testing import MemoryChat
 from ..conftest import (
     FakeMessage,
     FakeMessages,
+    make_auth_error,
     make_text_block,
     make_tool_use_block,
 )
@@ -287,3 +289,106 @@ def test_run_no_command(capsys: pytest.CaptureFixture[str]):
     with patch("sys.argv", ["docketeer"]):
         run()
     assert "snapshot" in capsys.readouterr().out
+
+
+# --- Error handling tests ---
+
+
+def _make_incoming(room_id: str = "room1") -> IncomingMessage:
+    return IncomingMessage(
+        message_id="m1",
+        user_id="u1",
+        username="alice",
+        display_name="Alice",
+        text="hello",
+        room_id=room_id,
+        is_direct=True,
+    )
+
+
+async def test_handle_message_brain_error_sends_apology(
+    chat: MemoryChat, brain: Brain, fake_messages: FakeMessages
+):
+    """When brain.process raises, handle_message sends an apology."""
+    brain.load_history(
+        "room1",
+        [
+            RoomMessage(
+                message_id="m0",
+                timestamp=datetime(2026, 2, 6, 10, 0, tzinfo=UTC),
+                username="a",
+                display_name="A",
+                text="x",
+            )
+        ],
+    )
+    with patch.object(brain, "process", side_effect=RuntimeError("boom")):
+        await handle_message(chat, brain, _make_incoming())
+    assert len(chat.sent_messages) == 1
+    assert chat.sent_messages[0].text == APOLOGY
+
+
+async def test_handle_message_auth_error_propagates(
+    chat: MemoryChat, brain: Brain, fake_messages: FakeMessages
+):
+    """AuthenticationError propagates through handle_message."""
+    brain.load_history(
+        "room1",
+        [
+            RoomMessage(
+                message_id="m0",
+                timestamp=datetime(2026, 2, 6, 10, 0, tzinfo=UTC),
+                username="a",
+                display_name="A",
+                text="x",
+            )
+        ],
+    )
+
+    with patch.object(brain, "process", side_effect=make_auth_error()):
+        with pytest.raises(AuthenticationError):
+            await handle_message(chat, brain, _make_incoming())
+
+
+async def test_handle_message_send_failure_does_not_crash(
+    chat: MemoryChat, brain: Brain, fake_messages: FakeMessages
+):
+    """If send_message fails after a successful brain call, it doesn't crash."""
+    brain.load_history(
+        "room1",
+        [
+            RoomMessage(
+                message_id="m0",
+                timestamp=datetime(2026, 2, 6, 10, 0, tzinfo=UTC),
+                username="a",
+                display_name="A",
+                text="x",
+            )
+        ],
+    )
+    fake_messages.responses = [FakeMessage(content=[make_text_block(text="reply")])]
+    with patch.object(
+        chat, "send_message", side_effect=ConnectionError("network down")
+    ):
+        await handle_message(chat, brain, _make_incoming())
+
+
+async def test_handle_message_typing_cleared_on_error(
+    chat: MemoryChat, brain: Brain, fake_messages: FakeMessages
+):
+    """Typing indicator is cleared even when brain.process raises."""
+    brain.load_history(
+        "room1",
+        [
+            RoomMessage(
+                message_id="m0",
+                timestamp=datetime(2026, 2, 6, 10, 0, tzinfo=UTC),
+                username="a",
+                display_name="A",
+                text="x",
+            )
+        ],
+    )
+    with patch.object(brain, "process", side_effect=RuntimeError("boom")):
+        await handle_message(chat, brain, _make_incoming())
+    assert ("room1", False) in chat.typing_events

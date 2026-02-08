@@ -3,6 +3,9 @@
 from pathlib import Path
 from typing import Any
 
+import pytest
+from anthropic import AuthenticationError
+
 from docketeer.brain import Brain
 from docketeer.cycles import (
     CONSOLIDATION_PROMPT,
@@ -14,7 +17,11 @@ from docketeer.cycles import (
 )
 from docketeer.tasks import docketeer_tasks
 
-from .conftest import FakeMessage, make_tool_use_block
+from .conftest import (
+    FakeMessage,
+    make_auth_error,
+    make_tool_use_block,
+)
 
 
 def test_read_cycle_guidance_extracts_section(workspace: Path):
@@ -98,3 +105,46 @@ async def test_consolidation_empty_response(
 def test_cycle_handlers_in_task_collection():
     assert reverie in docketeer_tasks
     assert consolidation in docketeer_tasks
+
+
+# --- Error handling tests ---
+
+
+async def test_reverie_error_returns_early(workspace: Path):
+    """Reverie logs and returns early on non-fatal errors."""
+    from unittest.mock import AsyncMock
+
+    brain = AsyncMock()
+    brain.process.side_effect = RuntimeError("boom")
+    await reverie(brain=brain, workspace=workspace)
+    brain.process.assert_called_once()
+
+
+async def test_consolidation_error_returns_early(workspace: Path):
+    """Consolidation logs and returns early on non-fatal errors."""
+    from unittest.mock import AsyncMock
+
+    brain = AsyncMock()
+    brain.process.side_effect = RuntimeError("boom")
+    await consolidation(brain=brain, workspace=workspace)
+    brain.process.assert_called_once()
+
+
+async def test_reverie_auth_error_propagates(workspace: Path):
+    """AuthenticationError propagates from reverie."""
+    from unittest.mock import AsyncMock
+
+    brain = AsyncMock()
+    brain.process.side_effect = make_auth_error()
+    with pytest.raises(AuthenticationError):
+        await reverie(brain=brain, workspace=workspace)
+
+
+async def test_consolidation_auth_error_propagates(workspace: Path):
+    """AuthenticationError propagates from consolidation."""
+    from unittest.mock import AsyncMock
+
+    brain = AsyncMock()
+    brain.process.side_effect = make_auth_error()
+    with pytest.raises(AuthenticationError):
+        await consolidation(brain=brain, workspace=workspace)

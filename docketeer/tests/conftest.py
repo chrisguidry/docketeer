@@ -6,12 +6,33 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
+from anthropic import APIConnectionError, AuthenticationError
+from anthropic._exceptions import RequestTooLargeError
 from anthropic.types import TextBlock, ToolUseBlock
 
 from docketeer import environment
 from docketeer.brain import Brain
 from docketeer.tools import ToolContext
+
+_FAKE_REQUEST = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+
+
+def make_auth_error() -> AuthenticationError:
+    response = httpx.Response(401, request=_FAKE_REQUEST)
+    return AuthenticationError(message="invalid api key", response=response, body=None)
+
+
+def make_request_too_large_error() -> RequestTooLargeError:
+    response = httpx.Response(413, request=_FAKE_REQUEST)
+    return RequestTooLargeError(
+        message="request too large", response=response, body=None
+    )
+
+
+def make_api_connection_error() -> APIConnectionError:
+    return APIConnectionError(request=_FAKE_REQUEST)
 
 
 @pytest.fixture(autouse=True)

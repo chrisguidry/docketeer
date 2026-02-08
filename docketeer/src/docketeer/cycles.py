@@ -4,6 +4,7 @@ import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from anthropic import AuthenticationError, PermissionDeniedError
 from docket.dependencies import Cron, Perpetual
 
 from docketeer import environment
@@ -71,7 +72,13 @@ async def reverie(
     prompt = _build_cycle_prompt(REVERIE_PROMPT, workspace, "Reverie")
     now = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M")
     content = MessageContent(username="system", timestamp=now, text=prompt)
-    response = await brain.process("__tasks__", content)
+    try:
+        response = await brain.process("__tasks__", content)
+    except (AuthenticationError, PermissionDeniedError):
+        raise
+    except Exception:
+        log.exception("Error during reverie cycle")
+        return
     if response.text:
         log.info("Reverie: %s", response.text)
 
@@ -85,6 +92,12 @@ async def consolidation(
     prompt = _build_cycle_prompt(CONSOLIDATION_PROMPT, workspace, "Consolidation")
     now = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M")
     content = MessageContent(username="system", timestamp=now, text=prompt)
-    response = await brain.process("__tasks__", content)
+    try:
+        response = await brain.process("__tasks__", content)
+    except (AuthenticationError, PermissionDeniedError):
+        raise
+    except Exception:
+        log.exception("Error during consolidation cycle")
+        return
     if response.text:
         log.info("Consolidation: %s", response.text)

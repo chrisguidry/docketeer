@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from docketeer.brain import _audit_log, _log_usage
+from docketeer.audit import audit_log, log_usage
 from docketeer.prompt import (
     CacheControl,
     RoomInfo,
@@ -103,9 +103,9 @@ def test_build_system_blocks_with_bootstrap(workspace: Path):
     assert "bootstrap instructions" in blocks[0].text
 
 
-def test_audit_log_creates_dir_and_appends(tmp_path: Path):
+def testaudit_log_creates_dir_and_appends(tmp_path: Path):
     audit_dir = tmp_path / "audit"
-    _audit_log(audit_dir, "read_file", {"path": "test.txt"}, "content", False)
+    audit_log(audit_dir, "read_file", {"path": "test.txt"}, "content", False)
     files = list(audit_dir.glob("*.jsonl"))
     assert len(files) == 1
     record = json.loads(files[0].read_text().strip())
@@ -113,19 +113,19 @@ def test_audit_log_creates_dir_and_appends(tmp_path: Path):
     assert record["is_error"] is False
 
 
-def test_audit_log_appends_to_existing(tmp_path: Path):
+def testaudit_log_appends_to_existing(tmp_path: Path):
     audit_dir = tmp_path / "audit"
-    _audit_log(audit_dir, "tool_a", {}, "ok", False)
-    _audit_log(audit_dir, "tool_b", {}, "ok", False)
+    audit_log(audit_dir, "tool_a", {}, "ok", False)
+    audit_log(audit_dir, "tool_b", {}, "ok", False)
     files = list(audit_dir.glob("*.jsonl"))
     lines = files[0].read_text().strip().split("\n")
     assert len(lines) == 2
 
 
-def test_log_usage(caplog: pytest.LogCaptureFixture):
+def testlog_usage(caplog: pytest.LogCaptureFixture):
     msg = FakeMessage()
-    with caplog.at_level("INFO", logger="docketeer.brain"):
-        _log_usage(msg)  # type: ignore[arg-type]
+    with caplog.at_level("INFO", logger="docketeer.audit"):
+        log_usage(msg)  # type: ignore[arg-type]
     assert "Tokens:" in caplog.text
 
 

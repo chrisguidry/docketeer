@@ -11,10 +11,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from anthropic import AuthenticationError, PermissionDeniedError
 from docket import Docket, Worker
 
 from docketeer import environment, tasks
-from docketeer.brain import Brain, ProcessCallbacks
+from docketeer.brain import APOLOGY, Brain, ProcessCallbacks
 from docketeer.chat import ChatClient, IncomingMessage, RoomMessage
 from docketeer.dependencies import set_brain, set_client, set_executor
 from docketeer.executor import CommandExecutor
@@ -264,7 +265,13 @@ async def main() -> None:  # pragma: no cover
             log.info("Listening for messages...")
             try:
                 async for msg in client.incoming_messages():
-                    await handle_message(client, brain, msg)
+                    try:
+                        await handle_message(client, brain, msg)
+                    except (AuthenticationError, PermissionDeniedError):
+                        log.critical("Fatal auth error, shutting down", exc_info=True)
+                        break
+                    except Exception:
+                        log.exception("Unhandled error processing message")
             except KeyboardInterrupt:
                 pass
             finally:
@@ -340,9 +347,20 @@ async def handle_message(
 
     try:
         response = await brain.process(msg.room_id, content, callbacks=callbacks)
+    except (AuthenticationError, PermissionDeniedError):
+        raise
+    except Exception:
+        log.exception(
+            "Error processing message from %s in %s", msg.username, msg.room_id
+        )
+        response = BrainResponse(text=APOLOGY)
     finally:
         await client.send_typing(msg.room_id, False)
-    await send_response(client, msg.room_id, response)
+
+    try:
+        await send_response(client, msg.room_id, response)
+    except Exception:
+        log.exception("Failed to send response to %s", msg.room_id)
 
 
 async def build_content(client: ChatClient, msg: IncomingMessage) -> MessageContent:
