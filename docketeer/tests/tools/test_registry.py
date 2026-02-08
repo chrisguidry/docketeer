@@ -27,8 +27,8 @@ def test_tool_registration():
         return f"Hello {name}"
 
     assert "greet" in reg._tools
-    assert reg._schemas["greet"]["name"] == "greet"
-    assert reg._schemas["greet"]["description"] == "Say hello."
+    assert reg._schemas["greet"].name == "greet"
+    assert reg._schemas["greet"].description == "Say hello."
 
 
 def test_definitions_returns_all():
@@ -46,7 +46,7 @@ def test_definitions_returns_all():
 
     defs = reg.definitions()
     assert len(defs) == 2
-    names = {d["name"] for d in defs}
+    names = {d.name for d in defs}
     assert names == {"tool_a", "tool_b"}
 
 

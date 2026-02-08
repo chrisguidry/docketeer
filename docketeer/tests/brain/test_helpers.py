@@ -8,6 +8,7 @@ import pytest
 
 from docketeer.brain import _audit_log, _log_usage
 from docketeer.prompt import (
+    CacheControl,
     RoomInfo,
     build_system_blocks,
     ensure_template,
@@ -37,7 +38,7 @@ def test_build_system_blocks_without_person_context(workspace: Path):
     blocks = build_system_blocks(workspace, "2026-02-06 10:00 EST", "chris")
     assert len(blocks) == 2
     assert "I am the soul" in blocks[0].text
-    assert blocks[0].cache_control == {"type": "ephemeral"}
+    assert blocks[0].cache_control == CacheControl()
     assert "Current time:" in blocks[1].text
     assert "@chris" in blocks[1].text
 

@@ -3,9 +3,8 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from anthropic.types import CacheControlEphemeralParam
-
 from docketeer.prompt import (
+    CacheControl,
     SystemBlock,
     _load_prompt_providers,
     build_system_blocks,
@@ -16,7 +15,7 @@ def test_build_system_blocks_includes_soul(workspace: Path):
     (workspace / "SOUL.md").write_text("I am the soul.")
     blocks = build_system_blocks(workspace, "2026-01-01T00:00:00", "chris")
     assert blocks[0].text == "I am the soul."
-    assert blocks[0].cache_control == {"type": "ephemeral"}
+    assert blocks[0].cache_control == CacheControl()
 
 
 def test_build_system_blocks_includes_bootstrap(workspace: Path):
@@ -81,10 +80,13 @@ def test_system_block_to_api_dict():
 
 
 def test_system_block_to_api_dict_with_cache_control():
-    cc = CacheControlEphemeralParam(type="ephemeral")
-    block = SystemBlock(text="hello", cache_control=cc)
+    block = SystemBlock(text="hello", cache_control=CacheControl())
     api_dict = block.to_api_dict()
-    assert api_dict == {"type": "text", "text": "hello", "cache_control": cc}
+    assert api_dict == {
+        "type": "text",
+        "text": "hello",
+        "cache_control": {"type": "ephemeral", "ttl": "5m"},
+    }
 
 
 def test_load_prompt_providers_calls_load():

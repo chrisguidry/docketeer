@@ -12,13 +12,11 @@ from pathlib import Path
 import anthropic
 from anthropic.types import (
     Base64ImageSourceParam,
-    CacheControlEphemeralParam,
     ContentBlockParam,
     ImageBlockParam,
     MessageParam,
     TextBlock,
     TextBlockParam,
-    ToolParam,
     ToolResultBlockParam,
     ToolUseBlock,
 )
@@ -27,6 +25,7 @@ from docketeer import environment
 from docketeer.people import build_person_map, load_person_context
 from docketeer.prompt import (
     BrainResponse,
+    CacheControl,
     HistoryMessage,
     MessageContent,
     RoomInfo,
@@ -35,7 +34,7 @@ from docketeer.prompt import (
     ensure_template,
     extract_text,
 )
-from docketeer.tools import ToolContext, registry
+from docketeer.tools import ToolContext, ToolDefinition, registry
 
 log = logging.getLogger(__name__)
 
@@ -170,7 +169,7 @@ class Brain:
         tools = registry.definitions()
         if tools:
             tools = [*tools]
-            tools[-1]["cache_control"] = CacheControlEphemeralParam(type="ephemeral")
+            tools[-1].cache_control = CacheControl()
 
         # Update tool context with current message info
         self.tool_context.username = content.username
@@ -247,7 +246,7 @@ class Brain:
         self,
         system: list[SystemBlock],
         messages: list[MessageParam],
-        tools: list[ToolParam],
+        tools: list[ToolDefinition],
         on_first_text: Callable[[], Awaitable[None]] | None = None,
     ) -> anthropic.types.Message:
         """Stream a response from Claude, optionally firing a callback on first text."""
@@ -256,7 +255,7 @@ class Brain:
             max_tokens=MAX_RESPONSE_TOKENS,
             system=[b.to_api_dict() for b in system],
             messages=messages,
-            tools=tools,
+            tools=[t.to_api_dict() for t in tools],
         ) as stream:
             if on_first_text:
                 async for _text in stream.text_stream:
@@ -304,7 +303,7 @@ class Brain:
                 if isinstance(block, dict) and block.get("type") == "tool_result":
                     block.pop("cache_control", None)  # type: ignore[misc]
 
-        tool_results[-1]["cache_control"] = CacheControlEphemeralParam(type="ephemeral")
+        tool_results[-1]["cache_control"] = CacheControl().to_api_dict()
 
     def _build_reply(
         self, response: anthropic.types.Message, had_tool_use: bool, rounds: int
@@ -336,20 +335,20 @@ class Brain:
         return "\n".join(reply_parts).strip()
 
     async def _measure_context(
-        self, room_id: str, system: list[SystemBlock], tools: list[ToolParam]
+        self, room_id: str, system: list[SystemBlock], tools: list[ToolDefinition]
     ) -> int:
         """Count tokens for the current conversation state."""
         result = await self.client.messages.count_tokens(
             model=CLAUDE_MODEL,
             system=[b.to_api_dict() for b in system],
-            tools=tools,
+            tools=[t.to_api_dict() for t in tools],
             messages=self._conversations[room_id],
         )
         self._room_token_counts[room_id] = result.input_tokens
         return result.input_tokens
 
     async def _compact_history(
-        self, room_id: str, system: list[SystemBlock], tools: list[ToolParam]
+        self, room_id: str, system: list[SystemBlock], tools: list[ToolDefinition]
     ) -> None:
         """Summarize older messages to free up context space."""
         messages = self._conversations[room_id]

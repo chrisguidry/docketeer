@@ -2,6 +2,8 @@
 
 import shutil
 import subprocess
+import tempfile
+from pathlib import Path
 
 from docketeer.tools import ToolContext, _safe_path, registry
 
@@ -62,17 +64,21 @@ async def read_skill_file(ctx: ToolContext, name: str, path: str) -> str:
 
 
 @registry.tool
-async def install_skill(ctx: ToolContext, url: str, name: str = "") -> str:
+async def install_skill(
+    ctx: ToolContext, url: str, name: str = "", path: str = ""
+) -> str:
     """Install a skill from a git repository.
 
     url: git repository URL to clone
-    name: skill name (derived from URL if empty)
+    name: skill name (derived from URL or path if empty)
+    path: subdirectory within the repo containing SKILL.md
     """
     if not shutil.which("git"):
         return "git is not installed — cannot clone skill repositories"
 
     if not name:
-        name = url.rstrip("/").rsplit("/", 1)[-1].removesuffix(".git")
+        source = path.rstrip("/") if path else url.rstrip("/")
+        name = source.rsplit("/", 1)[-1].removesuffix(".git")
 
     skills_dir = ctx.workspace / "skills"
     skills_dir.mkdir(exist_ok=True)
@@ -81,19 +87,25 @@ async def install_skill(ctx: ToolContext, url: str, name: str = "") -> str:
     if target.exists():
         return f"Skill {name!r} is already installed"
 
-    result = subprocess.run(
-        ["git", "clone", "--depth", "1", url, str(target)],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        if target.exists():
-            shutil.rmtree(target)
-        return f"Failed to clone: {result.stderr.strip()}"
+    with tempfile.TemporaryDirectory() as tmp:
+        clone_dir = Path(tmp) / "repo"
+        result = subprocess.run(
+            ["git", "clone", "--depth", "1", url, str(clone_dir)],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            return f"Failed to clone: {result.stderr.strip()}"
 
-    if not (target / "SKILL.md").exists():
-        shutil.rmtree(target)
-        return "Repository does not contain a SKILL.md file"
+        source = clone_dir / path if path else clone_dir
+
+        if not source.is_dir():
+            return f"Path {path!r} not found in repository"
+
+        if not (source / "SKILL.md").exists():
+            return "Repository does not contain a SKILL.md file"
+
+        shutil.copytree(source, target)
 
     try:
         skill = parse_skill(target)

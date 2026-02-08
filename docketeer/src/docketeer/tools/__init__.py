@@ -10,7 +10,29 @@ from typing import Any, get_type_hints
 
 from anthropic.types import ToolParam
 
+from docketeer.prompt import CacheControl
+
 log = logging.getLogger(__name__)
+
+
+@dataclass
+class ToolDefinition:
+    """A tool available to the agent."""
+
+    name: str
+    description: str
+    input_schema: dict[str, Any]
+    cache_control: CacheControl | None = None
+
+    def to_api_dict(self) -> ToolParam:
+        d = ToolParam(
+            name=self.name,
+            description=self.description,
+            input_schema=self.input_schema,
+        )
+        if self.cache_control:
+            d["cache_control"] = self.cache_control.to_api_dict()
+        return d
 
 
 @dataclass
@@ -26,22 +48,22 @@ class ToolContext:
 class ToolRegistry:
     def __init__(self) -> None:
         self._tools: dict[str, Callable] = {}
-        self._schemas: dict[str, ToolParam] = {}
+        self._schemas: dict[str, ToolDefinition] = {}
 
     def tool[F: FunctionType](self, fn: F) -> F:
         """Decorator that registers a tool and derives its schema."""
         name = fn.__name__
         schema = _schema_from_hints(fn)
         self._tools[name] = fn
-        self._schemas[name] = {
-            "name": name,
-            "description": (fn.__doc__ or "").strip().split("\n")[0],
-            "input_schema": schema,
-        }
+        self._schemas[name] = ToolDefinition(
+            name=name,
+            description=(fn.__doc__ or "").strip().split("\n")[0],
+            input_schema=schema,
+        )
         return fn
 
-    def definitions(self) -> list[ToolParam]:
-        """Return tool definitions for the Anthropic API."""
+    def definitions(self) -> list[ToolDefinition]:
+        """Return tool definitions."""
         return list(self._schemas.values())
 
     async def execute(self, name: str, args: dict[str, Any], ctx: ToolContext) -> str:

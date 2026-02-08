@@ -14,17 +14,27 @@ log = logging.getLogger(__name__)
 
 
 @dataclass
+class CacheControl:
+    """Prompt caching control."""
+
+    ttl: Literal["5m", "1h"] = "5m"
+
+    def to_api_dict(self) -> CacheControlEphemeralParam:
+        return CacheControlEphemeralParam(type="ephemeral", ttl=self.ttl)
+
+
+@dataclass
 class SystemBlock:
     """A text block in the system prompt."""
 
     text: str
-    cache_control: CacheControlEphemeralParam | None = None
+    cache_control: CacheControl | None = None
 
     def to_api_dict(self) -> TextBlockParam:
         """Serialize for the Anthropic API system parameter."""
         d = TextBlockParam(type="text", text=self.text)
         if self.cache_control:
-            d["cache_control"] = self.cache_control
+            d["cache_control"] = self.cache_control.to_api_dict()
         return d
 
 
@@ -111,7 +121,7 @@ def build_system_blocks(
     blocks: list[SystemBlock] = [
         SystemBlock(
             text=stable_text,
-            cache_control=CacheControlEphemeralParam(type="ephemeral"),
+            cache_control=CacheControl(),
         ),
     ]
 

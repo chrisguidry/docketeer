@@ -5,7 +5,7 @@ from typing import Any, Literal
 
 import pydantic_monty
 
-from docketeer.tools import ToolContext, ToolParam, registry
+from docketeer.tools import ToolContext, ToolDefinition, registry
 
 log = logging.getLogger(__name__)
 
@@ -20,19 +20,19 @@ def _format_output(result: Any, stdout: list[str]) -> str:
     return "\n".join(parts) or "(no output)"
 
 
-def _available_tools() -> list[ToolParam]:
+def _available_tools() -> list[ToolDefinition]:
     """Get tool definitions excluding run_python itself."""
-    return [d for d in registry.definitions() if d["name"] != "run_python"]
+    return [d for d in registry.definitions() if d.name != "run_python"]
 
 
 def _build_external_functions(
-    tools: list[ToolParam], ctx: ToolContext
+    tools: list[ToolDefinition], ctx: ToolContext
 ) -> dict[str, Any]:
     """Build async wrapper functions that bridge Monty calls to the tool registry."""
     functions: dict[str, Any] = {}
     for tool in tools:
-        param_names = list(tool["input_schema"].get("properties", {}).keys())  # type: ignore[union-attr]
-        tool_name = tool["name"]
+        param_names = list(tool.input_schema.get("properties", {}).keys())
+        tool_name = tool.name
 
         async def wrapper(
             *args: Any,
@@ -55,7 +55,7 @@ async def run_python(ctx: ToolContext, code: str) -> str:
     code: Python source code to execute
     """
     tools = _available_tools()
-    fn_names = [t["name"] for t in tools]
+    fn_names = [t.name for t in tools]
     external_fns = _build_external_functions(tools, ctx)
 
     stdout: list[str] = []

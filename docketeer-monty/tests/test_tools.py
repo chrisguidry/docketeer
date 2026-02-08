@@ -10,7 +10,7 @@ from docketeer_monty.tools import (
 
 def test_available_tools_excludes_run_python():
     tools = _available_tools()
-    names = [t["name"] for t in tools]
+    names = [t.name for t in tools]
     assert "run_python" not in names
     assert len(names) > 0
 

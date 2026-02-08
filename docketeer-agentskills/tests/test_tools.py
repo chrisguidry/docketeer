@@ -1,6 +1,7 @@
 """Tests for skill management tools."""
 
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 from docketeer.tools import ToolContext, registry
@@ -148,33 +149,11 @@ async def test_install_skill_clone_failure(tool_context: ToolContext, skills_dir
     assert not (skills_dir / "bad").exists()
 
 
-async def test_install_skill_clone_failure_cleans_partial(
-    tool_context: ToolContext, skills_dir: Path
-):
-    def fake_clone(*_args: object, **_kwargs: object) -> object:
-        (skills_dir / "partial").mkdir(exist_ok=True)
-        (skills_dir / "partial" / "junk").write_text("partial data")
-
-        class FakeResult:
-            returncode = 128
-            stderr = "fatal: connection refused"
-
-        return FakeResult()
-
-    with patch("docketeer_agentskills.tools.subprocess.run", side_effect=fake_clone):
-        result = await registry.execute(
-            "install_skill",
-            {"url": "https://example.com/partial.git", "name": "partial"},
-            tool_context,
-        )
-    assert "Failed to clone" in result
-    assert not (skills_dir / "partial").exists()
-
-
 async def test_install_skill_no_skill_md(tool_context: ToolContext, skills_dir: Path):
-    def fake_clone(*_args: object, **_kwargs: object) -> object:
-        (skills_dir / "no-skill-md").mkdir(exist_ok=True)
-        (skills_dir / "no-skill-md" / "README.md").write_text("hi")
+    def fake_clone(*args: Any, **_kwargs: Any) -> object:
+        clone_dir = Path(args[0][5])
+        clone_dir.mkdir(parents=True, exist_ok=True)
+        (clone_dir / "README.md").write_text("hi")
 
         class FakeResult:
             returncode = 0
@@ -195,10 +174,10 @@ async def test_install_skill_no_skill_md(tool_context: ToolContext, skills_dir: 
 async def test_install_skill_invalid_skill_md(
     tool_context: ToolContext, skills_dir: Path
 ):
-    def fake_clone(*_args: object, **_kwargs: object) -> object:
-        d = skills_dir / "bad-meta"
-        d.mkdir(exist_ok=True)
-        (d / "SKILL.md").write_text("---\nname: bad-meta\n---\nbody")
+    def fake_clone(*args: Any, **_kwargs: Any) -> object:
+        clone_dir = Path(args[0][5])
+        clone_dir.mkdir(parents=True, exist_ok=True)
+        (clone_dir / "SKILL.md").write_text("---\nname: bad-meta\n---\nbody")
 
         class FakeResult:
             returncode = 0
@@ -217,10 +196,10 @@ async def test_install_skill_invalid_skill_md(
 
 
 async def test_install_skill_success(tool_context: ToolContext, skills_dir: Path):
-    def fake_clone(*_args: object, **_kwargs: object) -> object:
-        d = skills_dir / "cool-skill"
-        d.mkdir(exist_ok=True)
-        (d / "SKILL.md").write_text(
+    def fake_clone(*args: Any, **_kwargs: Any) -> object:
+        clone_dir = Path(args[0][5])
+        clone_dir.mkdir(parents=True, exist_ok=True)
+        (clone_dir / "SKILL.md").write_text(
             "---\nname: cool-skill\ndescription: Cool stuff\n---\nDo things"
         )
 
@@ -243,10 +222,10 @@ async def test_install_skill_success(tool_context: ToolContext, skills_dir: Path
 async def test_install_skill_derives_name_from_url(
     tool_context: ToolContext, skills_dir: Path
 ):
-    def fake_clone(*_args: object, **_kwargs: object) -> object:
-        d = skills_dir / "my-repo"
-        d.mkdir(exist_ok=True)
-        (d / "SKILL.md").write_text(
+    def fake_clone(*args: Any, **_kwargs: Any) -> object:
+        clone_dir = Path(args[0][5])
+        clone_dir.mkdir(parents=True, exist_ok=True)
+        (clone_dir / "SKILL.md").write_text(
             "---\nname: my-repo\ndescription: From URL\n---\nbody"
         )
 
@@ -263,6 +242,127 @@ async def test_install_skill_derives_name_from_url(
             tool_context,
         )
     assert "Installed skill 'my-repo'" in result
+
+
+async def test_install_skill_with_path(tool_context: ToolContext, skills_dir: Path):
+    def fake_clone(*args: Any, **_kwargs: Any) -> object:
+        clone_target = Path(args[0][5])  # git clone --depth 1 url TARGET
+        clone_target.mkdir(parents=True, exist_ok=True)
+        nested = clone_target / "deep" / "nested" / "humanizer"
+        nested.mkdir(parents=True)
+        (nested / "SKILL.md").write_text(
+            "---\nname: humanizer\ndescription: Humanize text\n---\nMake it human"
+        )
+        (nested / "extra.txt").write_text("bonus file")
+
+        class FakeResult:
+            returncode = 0
+            stderr = ""
+
+        return FakeResult()
+
+    with patch("docketeer_agentskills.tools.subprocess.run", side_effect=fake_clone):
+        result = await registry.execute(
+            "install_skill",
+            {
+                "url": "https://github.com/user/templates.git",
+                "name": "humanizer",
+                "path": "deep/nested/humanizer",
+            },
+            tool_context,
+        )
+    assert "Installed skill 'humanizer'" in result
+    assert "Humanize text" in result
+    assert (skills_dir / "humanizer" / "SKILL.md").exists()
+    assert (skills_dir / "humanizer" / "extra.txt").exists()
+
+
+async def test_install_skill_with_path_no_skill_md(
+    tool_context: ToolContext, skills_dir: Path
+):
+    def fake_clone(*args: Any, **_kwargs: Any) -> object:
+        clone_target = Path(args[0][5])
+        clone_target.mkdir(parents=True, exist_ok=True)
+        nested = clone_target / "some" / "dir"
+        nested.mkdir(parents=True)
+        (nested / "README.md").write_text("not a skill")
+
+        class FakeResult:
+            returncode = 0
+            stderr = ""
+
+        return FakeResult()
+
+    with patch("docketeer_agentskills.tools.subprocess.run", side_effect=fake_clone):
+        result = await registry.execute(
+            "install_skill",
+            {
+                "url": "https://github.com/user/templates.git",
+                "name": "bad",
+                "path": "some/dir",
+            },
+            tool_context,
+        )
+    assert "does not contain a SKILL.md" in result
+    assert not (skills_dir / "bad").exists()
+
+
+async def test_install_skill_with_path_not_found(
+    tool_context: ToolContext, skills_dir: Path
+):
+    def fake_clone(*args: Any, **_kwargs: Any) -> object:
+        clone_target = Path(args[0][5])
+        clone_target.mkdir(parents=True, exist_ok=True)
+
+        class FakeResult:
+            returncode = 0
+            stderr = ""
+
+        return FakeResult()
+
+    with patch("docketeer_agentskills.tools.subprocess.run", side_effect=fake_clone):
+        result = await registry.execute(
+            "install_skill",
+            {
+                "url": "https://github.com/user/templates.git",
+                "name": "missing",
+                "path": "nonexistent/subdir",
+            },
+            tool_context,
+        )
+    assert "not found in repository" in result
+    assert not (skills_dir / "missing").exists()
+
+
+async def test_install_skill_with_path_derives_name(
+    tool_context: ToolContext, skills_dir: Path
+):
+    def fake_clone(*args: Any, **_kwargs: Any) -> object:
+        clone_target = Path(args[0][5])
+        clone_target.mkdir(parents=True, exist_ok=True)
+        nested = clone_target / "skills" / "my-tool"
+        nested.mkdir(parents=True)
+        (nested / "SKILL.md").write_text(
+            "---\nname: my-tool\ndescription: A tool\n---\nbody"
+        )
+
+        class FakeResult:
+            returncode = 0
+            stderr = ""
+
+        return FakeResult()
+
+    with patch("docketeer_agentskills.tools.subprocess.run", side_effect=fake_clone):
+        result = await registry.execute(
+            "install_skill",
+            {
+                "url": "https://github.com/user/templates.git",
+                "path": "skills/my-tool",
+            },
+            tool_context,
+        )
+    assert "Installed skill 'my-tool'" in result
+    assert (skills_dir / "my-tool" / "SKILL.md").exists()
 
 
 async def test_uninstall_skill(tool_context: ToolContext, skills_dir: Path):
