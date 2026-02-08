@@ -1,7 +1,7 @@
 """Tests for system prompt construction and extension point."""
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from docketeer.prompt import (
     CacheControl,
@@ -89,20 +89,9 @@ def test_system_block_to_api_dict_with_cache_control():
     }
 
 
-def test_load_prompt_providers_calls_load():
-    ep = MagicMock()
-    ep.name = "test_plugin"
-    ep.load.return_value = lambda ws: []
-    with patch("docketeer.prompt.entry_points", return_value=[ep]):
+def test_load_prompt_providers_delegates_to_discover_all():
+    fake_provider = lambda ws: []  # noqa: E731
+    with patch("docketeer.prompt.discover_all", return_value=[fake_provider]) as mock:
         providers = _load_prompt_providers()
-    ep.load.assert_called_once()
-    assert len(providers) == 1
-
-
-def test_load_prompt_providers_warns_on_failure():
-    ep = MagicMock()
-    ep.name = "broken_plugin"
-    ep.load.side_effect = ImportError("no such module")
-    with patch("docketeer.prompt.entry_points", return_value=[ep]):
-        providers = _load_prompt_providers()
-    assert providers == []
+    mock.assert_called_once_with("docketeer.prompt")
+    assert providers == [fake_provider]

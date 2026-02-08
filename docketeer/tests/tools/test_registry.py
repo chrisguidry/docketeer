@@ -1,7 +1,7 @@
 """Tests for tool registry, schema generation, path safety, and param docs."""
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -100,6 +100,19 @@ def test_schema_from_hints_types():
     assert schema["properties"]["score"]["type"] == "number"
 
 
+def test_schema_from_hints_list_of_strings():
+    async def fn(ctx: ToolContext, items: list[str]) -> str:
+        """Test.
+
+        items: the items
+        """
+        return ""
+
+    schema = _schema_from_hints(fn)
+    assert schema["properties"]["items"]["type"] == "array"
+    assert schema["properties"]["items"]["items"] == {"type": "string"}
+
+
 def test_schema_from_hints_required_vs_default():
     async def fn(
         ctx: ToolContext, required_param: str, optional_param: str = "default"
@@ -180,17 +193,7 @@ def test_safe_path_traversal_blocked(tmp_path: Path):
         _safe_path(workspace, "../../../etc/passwd")
 
 
-def test_load_tool_plugins_calls_load():
-    ep = MagicMock()
-    ep.name = "test_plugin"
-    with patch("importlib.metadata.entry_points", return_value=[ep]):
+def test_load_tool_plugins_delegates_to_discover_all():
+    with patch("docketeer.tools.discover_all", return_value=[]) as mock:
         _load_tool_plugins()
-    ep.load.assert_called_once()
-
-
-def test_load_tool_plugins_warns_on_failure():
-    ep = MagicMock()
-    ep.name = "broken_plugin"
-    ep.load.side_effect = ImportError("no such module")
-    with patch("importlib.metadata.entry_points", return_value=[ep]):
-        _load_tool_plugins()
+    mock.assert_called_once_with("docketeer.tools")

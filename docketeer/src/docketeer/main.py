@@ -6,6 +6,7 @@ import contextlib
 import fcntl
 import logging
 import sys
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -15,7 +16,9 @@ from docket import Docket, Worker
 from docketeer import environment, tasks
 from docketeer.brain import Brain, ProcessCallbacks
 from docketeer.chat import ChatClient, IncomingMessage
-from docketeer.dependencies import set_brain, set_client
+from docketeer.dependencies import set_brain, set_client, set_executor
+from docketeer.executor import CommandExecutor
+from docketeer.plugins import discover_all, discover_one
 from docketeer.prompt import BrainResponse, MessageContent, RoomInfo
 from docketeer.tools import ToolContext, registry
 
@@ -46,17 +49,32 @@ def _acquire_lock(data_dir: Path) -> None:
         sys.exit(1)
 
 
-def _discover_chat_backend() -> tuple[ChatClient, Any]:
-    """Discover the chat backend via entry_points."""
-    from importlib.metadata import entry_points
+RegisterToolsFn = Callable[[ChatClient, ToolContext], None]
 
-    eps = list(entry_points(group="docketeer.chat"))
-    if not eps:
+
+def _noop_register_tools(_client: ChatClient, _ctx: ToolContext) -> None:
+    pass
+
+
+def _discover_chat_backend() -> tuple[ChatClient, RegisterToolsFn]:
+    """Discover the chat backend via entry_points."""
+    ep = discover_one("docketeer.chat", "CHAT")
+    if ep is None:
         raise RuntimeError("No chat backend installed")
-    module = eps[0].load()
+    module = ep.load()
     client = module.create_client()
-    register_fn = getattr(module, "register_tools", None)
+    register_fn = getattr(module, "register_tools", _noop_register_tools)
     return client, register_fn
+
+
+def _discover_executor() -> CommandExecutor | None:
+    """Discover the command executor via entry_points (optional)."""
+    ep = discover_one("docketeer.executor", "EXECUTOR")
+    if ep is None:
+        log.info("No executor plugin installed — sandboxed execution unavailable")
+        return None
+    module = ep.load()
+    return module.create_executor()
 
 
 def _register_task_plugins(docket: Docket) -> None:
@@ -67,14 +85,9 @@ def _register_task_plugins(docket: Docket) -> None:
 
 def _load_task_collections() -> list[str]:
     """Load task collection paths from all docketeer.tasks entry points."""
-    from importlib.metadata import entry_points
-
     collections: list[str] = []
-    for ep in entry_points(group="docketeer.tasks"):
-        try:
-            collections.extend(ep.load())
-        except Exception:
-            log.warning("Failed to load task plugin: %s", ep.name, exc_info=True)
+    for plugin_collections in discover_all("docketeer.tasks"):
+        collections.extend(plugin_collections)
     return collections
 
 
@@ -163,30 +176,35 @@ async def main() -> None:  # pragma: no cover
     environment.AUDIT_PATH.mkdir(parents=True, exist_ok=True)
     log.info("Data directory: %s", environment.DATA_DIR.resolve())
 
-    # Create tool context
-    tool_context = ToolContext(workspace=environment.WORKSPACE_PATH)
-
+    # Discover plugins
     client, register_chat_tools = _discover_chat_backend()
+    executor = _discover_executor()
+
+    # Create tool context
+    tool_context = ToolContext(workspace=environment.WORKSPACE_PATH, executor=executor)
+
     brain = Brain(tool_context)
     tool_context.on_people_write = brain.rebuild_person_map
 
-    # Make brain/client available to docket task handlers
+    # Make brain/client/executor available to docket task handlers
     set_brain(brain)
     set_client(client)
+    if executor:
+        set_executor(executor)
 
     async with Docket(name=DOCKET_NAME, url=DOCKET_URL) as docket:
         docket.register_collection("docketeer.tasks:docketeer_tasks")
         _register_task_plugins(docket)
 
         # Register tools (chat + docket)
-        if register_chat_tools:
-            register_chat_tools(client, tool_context)
+        register_chat_tools(client, tool_context)
         _register_docket_tools(docket, tool_context)
 
         async with Worker(docket) as worker:
             worker_task = asyncio.create_task(worker.run_forever())
 
             await client.connect()
+            tool_context.agent_username = client.username
 
             log.info("Loading conversation history...")
             await load_all_history(client, brain)

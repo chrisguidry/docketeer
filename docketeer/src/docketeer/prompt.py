@@ -4,11 +4,12 @@ import importlib.resources
 import logging
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from importlib.metadata import entry_points
 from pathlib import Path
 from typing import Literal
 
 from anthropic.types import CacheControlEphemeralParam, TextBlockParam
+
+from docketeer.plugins import discover_all
 
 log = logging.getLogger(__name__)
 
@@ -39,13 +40,7 @@ class SystemBlock:
 
 
 def _load_prompt_providers() -> list[Callable[[Path], list[SystemBlock]]]:
-    providers = []
-    for ep in entry_points(group="docketeer.prompt"):
-        try:
-            providers.append(ep.load())
-        except Exception:
-            log.warning("Failed to load prompt plugin: %s", ep.name, exc_info=True)
-    return providers
+    return discover_all("docketeer.prompt")
 
 
 _prompt_providers = _load_prompt_providers()

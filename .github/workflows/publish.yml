@@ -25,6 +25,8 @@ jobs:
             environment: pypi-docketeer
           - package: docketeer-agentskills
             environment: pypi-docketeer-agentskills
+          - package: docketeer-bubblewrap
+            environment: pypi-docketeer-bubblewrap
           - package: docketeer-git
             environment: pypi-docketeer-git
           - package: docketeer-monty

@@ -10,11 +10,13 @@ from docket.dependencies import Dependency
 from docketeer import environment
 from docketeer.brain import Brain
 from docketeer.chat import ChatClient
+from docketeer.executor import CommandExecutor
 
 # ContextVars — set in main() before the worker starts
 
 _brain_var: ContextVar[Brain] = ContextVar("docketeer_brain")
 _client_var: ContextVar[ChatClient] = ContextVar("docketeer_client")
+_executor_var: ContextVar[CommandExecutor] = ContextVar("docketeer_executor")
 
 
 def set_brain(brain: Brain) -> None:
@@ -25,7 +27,11 @@ def set_client(client: ChatClient) -> None:
     _client_var.set(client)
 
 
-# --- CurrentBrain / CurrentChatClient ---
+def set_executor(executor: CommandExecutor) -> None:
+    _executor_var.set(executor)
+
+
+# --- CurrentBrain / CurrentChatClient / CurrentExecutor ---
 
 
 class _CurrentBrain(Dependency):
@@ -44,6 +50,15 @@ class _CurrentChatClient(Dependency):
 
 def CurrentChatClient() -> ChatClient:
     return cast(ChatClient, _CurrentChatClient())
+
+
+class _CurrentExecutor(Dependency):
+    async def __aenter__(self) -> CommandExecutor:
+        return _executor_var.get()
+
+
+def CurrentExecutor() -> CommandExecutor:
+    return cast(CommandExecutor, _CurrentExecutor())
 
 
 # --- WorkspacePath ---

@@ -1,4 +1,4 @@
-"""Tests for lock acquisition, chat backend discovery, and docket tool registration."""
+"""Tests for lock acquisition, chat backend discovery, executor discovery, and docket tool registration."""
 
 from datetime import UTC, datetime
 from pathlib import Path
@@ -10,6 +10,7 @@ import pytest
 from docketeer.main import (
     _acquire_lock,
     _discover_chat_backend,
+    _discover_executor,
     _load_task_collections,
     _register_docket_tools,
     _register_task_plugins,
@@ -44,7 +45,7 @@ def test_discover_chat_backend():
 
     ep = MagicMock()
     ep.load.return_value = module
-    with patch("importlib.metadata.entry_points", return_value=[ep]):
+    with patch("docketeer.main.discover_one", return_value=ep):
         result_client, register_fn = _discover_chat_backend()
     assert result_client is client
     assert register_fn is not None
@@ -56,16 +57,36 @@ def test_discover_chat_backend_no_register_tools():
 
     ep = MagicMock()
     ep.load.return_value = module
-    with patch("importlib.metadata.entry_points", return_value=[ep]):
+    with patch("docketeer.main.discover_one", return_value=ep):
         result_client, register_fn = _discover_chat_backend()
     assert result_client is client
-    assert register_fn is None
+    # Should get the noop default, not None
+    assert callable(register_fn)
+    register_fn(client, ToolContext(workspace=Path("/tmp")))  # should not raise
 
 
 def test_discover_chat_backend_no_plugins():
-    with patch("importlib.metadata.entry_points", return_value=[]):
+    with patch("docketeer.main.discover_one", return_value=None):
         with pytest.raises(RuntimeError, match="No chat backend installed"):
             _discover_chat_backend()
+
+
+def test_discover_executor_present():
+    module = MagicMock()
+    executor = MagicMock()
+    module.create_executor.return_value = executor
+
+    ep = MagicMock()
+    ep.load.return_value = module
+    with patch("docketeer.main.discover_one", return_value=ep):
+        result = _discover_executor()
+    assert result is executor
+
+
+def test_discover_executor_absent():
+    with patch("docketeer.main.discover_one", return_value=None):
+        result = _discover_executor()
+    assert result is None
 
 
 async def test_register_docket_tools_schedule_with_key(
@@ -206,56 +227,48 @@ async def test_register_docket_tools_list_scheduled_long_running_prompt(
 
 
 def test_load_task_collections_single_plugin():
-    ep = MagicMock()
-    ep.load.return_value = ["docketeer_git:git_tasks"]
-    with patch("importlib.metadata.entry_points", return_value=[ep]):
+    with patch(
+        "docketeer.main.discover_all", return_value=[["docketeer_git:git_tasks"]]
+    ):
         assert _load_task_collections() == ["docketeer_git:git_tasks"]
 
 
 def test_load_task_collections_multiple_from_one_plugin():
-    ep = MagicMock()
-    ep.load.return_value = ["pkg:tasks_a", "pkg:tasks_b"]
-    with patch("importlib.metadata.entry_points", return_value=[ep]):
+    with patch(
+        "docketeer.main.discover_all", return_value=[["pkg:tasks_a", "pkg:tasks_b"]]
+    ):
         assert _load_task_collections() == ["pkg:tasks_a", "pkg:tasks_b"]
 
 
 def test_load_task_collections_no_plugins():
-    with patch("importlib.metadata.entry_points", return_value=[]):
-        assert _load_task_collections() == []
-
-
-def test_load_task_collections_handles_failure():
-    ep = MagicMock()
-    ep.name = "broken"
-    ep.load.side_effect = ImportError("oops")
-    with patch("importlib.metadata.entry_points", return_value=[ep]):
+    with patch("docketeer.main.discover_all", return_value=[]):
         assert _load_task_collections() == []
 
 
 def test_register_task_plugins_registers_collections(mock_docket: MagicMock):
-    ep = MagicMock()
-    ep.load.return_value = ["docketeer_git:git_tasks"]
-    with patch("importlib.metadata.entry_points", return_value=[ep]):
+    with patch(
+        "docketeer.main.discover_all", return_value=[["docketeer_git:git_tasks"]]
+    ):
         _register_task_plugins(mock_docket)
     mock_docket.register_collection.assert_called_once_with("docketeer_git:git_tasks")
 
 
 def test_register_task_plugins_no_plugins(mock_docket: MagicMock):
-    with patch("importlib.metadata.entry_points", return_value=[]):
+    with patch("docketeer.main.discover_all", return_value=[]):
         _register_task_plugins(mock_docket)
     mock_docket.register_collection.assert_not_called()
 
 
 def test_task_collection_args_core_only():
-    with patch("importlib.metadata.entry_points", return_value=[]):
+    with patch("docketeer.main.discover_all", return_value=[]):
         args = _task_collection_args()
     assert args == ["--tasks", "docketeer.tasks:docketeer_tasks"]
 
 
 def test_task_collection_args_with_plugins():
-    ep = MagicMock()
-    ep.load.return_value = ["docketeer_git:git_tasks"]
-    with patch("importlib.metadata.entry_points", return_value=[ep]):
+    with patch(
+        "docketeer.main.discover_all", return_value=[["docketeer_git:git_tasks"]]
+    ):
         args = _task_collection_args()
     assert args == [
         "--tasks",

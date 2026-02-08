@@ -9,6 +9,7 @@ import pytest
 from docketeer.dependencies import (
     CurrentBrain,
     CurrentChatClient,
+    CurrentExecutor,
     EnvironmentInt,
     EnvironmentStr,
     EnvironmentTimedelta,
@@ -17,12 +18,15 @@ from docketeer.dependencies import (
     _client_var,
     _CurrentBrain,
     _CurrentChatClient,
+    _CurrentExecutor,
     _EnvironmentInt,
     _EnvironmentStr,
     _EnvironmentTimedelta,
+    _executor_var,
     _WorkspacePath,
     set_brain,
     set_client,
+    set_executor,
 )
 
 
@@ -163,3 +167,27 @@ async def test_environment_timedelta_from_env():
 def test_environment_timedelta_factory():
     result = EnvironmentTimedelta("X", timedelta(hours=1))
     assert isinstance(result, _EnvironmentTimedelta)
+
+
+# --- CurrentExecutor ---
+
+
+async def test_current_executor():
+    executor = AsyncMock()
+    token = _executor_var.set(executor)
+    try:
+        dep = _CurrentExecutor()
+        assert await dep.__aenter__() is executor
+    finally:
+        _executor_var.reset(token)
+
+
+async def test_current_executor_factory_returns_dependency():
+    result = CurrentExecutor()
+    assert isinstance(result, _CurrentExecutor)
+
+
+def test_set_executor():
+    executor = AsyncMock()
+    set_executor(executor)
+    assert _executor_var.get() is executor
