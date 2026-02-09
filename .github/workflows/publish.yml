@@ -29,6 +29,8 @@ jobs:
             environment: pypi-docketeer-bubblewrap
           - package: docketeer-git
             environment: pypi-docketeer-git
+          - package: docketeer-mcp
+            environment: pypi-docketeer-mcp
           - package: docketeer-monty
             environment: pypi-docketeer-monty
           - package: docketeer-rocketchat
