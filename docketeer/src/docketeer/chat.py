@@ -32,6 +32,7 @@ class RoomMessage:
     display_name: str
     text: str
     attachments: list[Attachment] | None = None
+    thread_id: str = ""
 
 
 @dataclass
@@ -45,6 +46,7 @@ class IncomingMessage:
     is_direct: bool
     timestamp: datetime | None = None
     attachments: list[Attachment] | None = None
+    thread_id: str = ""
 
 
 class ChatClient(ABC):
@@ -67,12 +69,17 @@ class ChatClient(ABC):
 
     @abstractmethod
     async def send_message(
-        self, room_id: str, text: str, attachments: list[dict[str, Any]] | None = None
+        self,
+        room_id: str,
+        text: str,
+        attachments: list[dict[str, Any]] | None = None,
+        *,
+        thread_id: str = "",
     ) -> None: ...
 
     @abstractmethod
     async def upload_file(
-        self, room_id: str, file_path: str, message: str = ""
+        self, room_id: str, file_path: str, message: str = "", *, thread_id: str = ""
     ) -> None: ...
 
     @abstractmethod

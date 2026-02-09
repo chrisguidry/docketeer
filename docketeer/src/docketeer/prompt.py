@@ -64,6 +64,7 @@ class MessageContent:
     message_id: str = ""
     timestamp: str = ""
     text: str = ""
+    thread_id: str = ""
     images: list[tuple[str, bytes]] = field(default_factory=list)
 
 

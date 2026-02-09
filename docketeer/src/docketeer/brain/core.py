@@ -143,6 +143,7 @@ class Brain:
 
         self.tool_context.username = content.username
         self.tool_context.room_id = room_id if not room_id.startswith("__") else ""
+        self.tool_context.thread_id = content.thread_id
 
         if self._room_token_counts.get(room_id, 0) > COMPACT_THRESHOLD:
             await self._compact_history(room_id, system, tools)
@@ -258,7 +259,8 @@ class Brain:
         blocks: list[ContentBlockParam] = []
         id_tag = f"[{content.message_id}] " if content.message_id else ""
         ts_tag = f"[{content.timestamp}] " if content.timestamp else ""
-        prefix = f"{id_tag}{ts_tag}"
+        thread_tag = f"[thread:{content.thread_id}] " if content.thread_id else ""
+        prefix = f"{id_tag}{ts_tag}{thread_tag}"
         empty = f"{prefix}@{content.username}: (empty message)"
 
         for media_type, data in content.images:

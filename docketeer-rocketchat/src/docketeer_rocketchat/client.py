@@ -113,16 +113,23 @@ class RocketChatClient(ChatClient):
             )
 
     async def send_message(
-        self, room_id: str, text: str, attachments: list[dict[str, Any]] | None = None
+        self,
+        room_id: str,
+        text: str,
+        attachments: list[dict[str, Any]] | None = None,
+        *,
+        thread_id: str = "",
     ) -> None:
         """Send a message to a room."""
         body: dict[str, Any] = {"roomId": room_id, "text": text}
         if attachments:
             body["attachments"] = attachments
+        if thread_id:
+            body["tmid"] = thread_id
         await self._post("chat.postMessage", **body)
 
     async def upload_file(
-        self, room_id: str, file_path: str, message: str = ""
+        self, room_id: str, file_path: str, message: str = "", *, thread_id: str = ""
     ) -> None:
         """Upload a file to a room and post it as a chat message."""
         path = Path(file_path)
@@ -133,7 +140,10 @@ class RocketChatClient(ChatClient):
         )
         resp.raise_for_status()
         file_id = resp.json()["file"]["_id"]
-        await self._post(f"rooms.mediaConfirm/{room_id}/{file_id}", msg=message)
+        confirm_body: dict[str, Any] = {"msg": message}
+        if thread_id:
+            confirm_body["tmid"] = thread_id
+        await self._post(f"rooms.mediaConfirm/{room_id}/{file_id}", **confirm_body)
 
     async def fetch_attachment(self, url: str) -> bytes:
         """Fetch an attachment from Rocket Chat."""
@@ -203,6 +213,7 @@ class RocketChatClient(ChatClient):
                     display_name=user.get("name", user.get("username", "unknown")),
                     text=text,
                     attachments=attachments,
+                    thread_id=msg.get("tmid", ""),
                 )
             )
         return messages
@@ -336,6 +347,7 @@ class RocketChatClient(ChatClient):
             is_direct=room_id.startswith(self._user_id or "") if room_id else False,
             timestamp=_parse_rc_timestamp(msg_data.get("ts")),
             attachments=attachments,
+            thread_id=msg_data.get("tmid", ""),
         )
 
     async def close(self) -> None:

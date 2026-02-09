@@ -67,7 +67,8 @@ def _load_task_collections() -> list[str]:
 def _format_room_message(msg: RoomMessage) -> str:
     """Format a single RoomMessage for display."""
     ts = msg.timestamp.astimezone().strftime("%Y-%m-%d %H:%M")
-    lines = [f"[{msg.message_id}] {ts} @{msg.username}: {msg.text}"]
+    thread_tag = f" [thread:{msg.thread_id}]" if msg.thread_id else ""
+    lines = [f"[{msg.message_id}] {ts}{thread_tag} @{msg.username}: {msg.text}"]
     if msg.attachments:
         for att in msg.attachments:
             label = att.title or "attachment"
@@ -109,6 +110,25 @@ def _register_core_chat_tools(client: ChatClient) -> None:
             return "No messages found."
 
         return "\n".join(_format_room_message(m) for m in messages)
+
+    @registry.tool
+    async def send_message(
+        ctx: ToolContext,
+        text: str,
+        thread_id: str = "",
+        room_id: str = "",
+    ) -> str:
+        """Send a message to a room or thread. Use this to start a thread
+        from a message, reply in a specific thread, or post to the channel
+        when you're currently in a thread.
+
+        text: the message text
+        thread_id: reply in this thread (use a message ID to start a thread from that message)
+        room_id: target room (defaults to current room)
+        """
+        target_room = room_id or ctx.room_id
+        await client.send_message(target_room, text, thread_id=thread_id)
+        return f"Sent message to {target_room}"
 
     @registry.tool
     async def react(

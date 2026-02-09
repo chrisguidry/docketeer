@@ -16,6 +16,7 @@ class SentMessage:
     room_id: str
     text: str
     attachments: list[dict[str, Any]] | None = None
+    thread_id: str = ""
 
 
 @dataclass
@@ -23,6 +24,7 @@ class UploadedFile:
     room_id: str
     file_path: str
     message: str = ""
+    thread_id: str = ""
 
 
 @dataclass
@@ -77,13 +79,15 @@ class MemoryChat(ChatClient):
         room_id: str,
         text: str,
         attachments: list[dict[str, Any]] | None = None,
+        *,
+        thread_id: str = "",
     ) -> None:
-        self.sent_messages.append(SentMessage(room_id, text, attachments))
+        self.sent_messages.append(SentMessage(room_id, text, attachments, thread_id))
 
     async def upload_file(
-        self, room_id: str, file_path: str, message: str = ""
+        self, room_id: str, file_path: str, message: str = "", *, thread_id: str = ""
     ) -> None:
-        self.uploaded_files.append(UploadedFile(room_id, file_path, message))
+        self.uploaded_files.append(UploadedFile(room_id, file_path, message, thread_id))
 
     async def fetch_attachment(self, url: str) -> bytes:
         if url in self._attachments:

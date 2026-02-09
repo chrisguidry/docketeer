@@ -80,9 +80,13 @@ async def handle_message(
         await client.send_typing(msg.room_id, False)
         await client.set_status_busy()
 
+    thread_id = msg.thread_id
+
     callbacks = ProcessCallbacks(
         on_first_text=lambda: client.send_typing(msg.room_id, True),
-        on_text=lambda text: client.send_message(msg.room_id, text),
+        on_text=lambda text: client.send_message(
+            msg.room_id, text, thread_id=thread_id
+        ),
         on_tool_start=_on_tool_start,
         on_tool_end=lambda: client.set_status_available(),
         interrupted=interrupted,
@@ -101,7 +105,7 @@ async def handle_message(
         await client.send_typing(msg.room_id, False)
 
     try:
-        await send_response(client, msg.room_id, response)
+        await send_response(client, msg.room_id, response, thread_id=thread_id)
     except Exception:
         log.exception("Failed to send response to %s", msg.room_id)
 
@@ -127,13 +131,14 @@ async def build_content(client: ChatClient, msg: IncomingMessage) -> MessageCont
         message_id=msg.message_id,
         timestamp=timestamp,
         text=msg.text,
+        thread_id=msg.thread_id,
         images=images,
     )
 
 
 async def send_response(
-    client: ChatClient, room_id: str, response: BrainResponse
+    client: ChatClient, room_id: str, response: BrainResponse, *, thread_id: str = ""
 ) -> None:
-    """Send response to Rocket Chat (skips empty responses from tool-only turns)."""
+    """Send response to chat (skips empty responses from tool-only turns)."""
     if response.text:
-        await client.send_message(room_id, response.text)
+        await client.send_message(room_id, response.text, thread_id=thread_id)
