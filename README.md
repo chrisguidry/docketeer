@@ -167,16 +167,16 @@ of packages endorsed by the authors, but they don't represent everything your
 Docketeer agent can be! You can send new plugin implementations by PR or build
 your own and install them alongside Docketeer to build your perfect agent.
 
-| Package | Description |
-|---------|-------------|
-| [docketeer](docketeer/) | Core agent engine — workspace, journal, scheduling, plugin discovery |
-| [docketeer-agentskills](docketeer-agentskills/) | [Agent Skills](https://agentskills.io/specification) — install, manage, and use packaged agent expertise |
-| [docketeer-bubblewrap](docketeer-bubblewrap/) | Sandboxed command execution via [bubblewrap](https://github.com/containers/bubblewrap) |
-| [docketeer-git](docketeer-git/) | Automatic git-backed workspace backups |
-| [docketeer-mcp](docketeer-mcp/) | [MCP](https://modelcontextprotocol.io/) server support — connect to any MCP-compatible server |
-| [docketeer-monty](docketeer-monty/) | Sandboxed Python execution via [Monty](https://github.com/pydantic/monty) |
-| [docketeer-rocketchat](docketeer-rocketchat/) | Rocket Chat backend for messaging |
-| [docketeer-web](docketeer-web/) | Web search, HTTP requests, file downloads |
+| Package | PyPI | Description |
+|---------|------|-------------|
+| [docketeer](docketeer/) | [![PyPI](https://img.shields.io/pypi/v/docketeer)](https://pypi.org/project/docketeer/) | Core agent engine — workspace, journal, scheduling, plugin discovery |
+| [docketeer-agentskills](docketeer-agentskills/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-agentskills)](https://pypi.org/project/docketeer-agentskills/) | [Agent Skills](https://agentskills.io/specification) — install, manage, and use packaged agent expertise |
+| [docketeer-bubblewrap](docketeer-bubblewrap/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-bubblewrap)](https://pypi.org/project/docketeer-bubblewrap/) | Sandboxed command execution via [bubblewrap](https://github.com/containers/bubblewrap) |
+| [docketeer-git](docketeer-git/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-git)](https://pypi.org/project/docketeer-git/) | Automatic git-backed workspace backups |
+| [docketeer-mcp](docketeer-mcp/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-mcp)](https://pypi.org/project/docketeer-mcp/) | [MCP](https://modelcontextprotocol.io/) server support — connect to any MCP-compatible server |
+| [docketeer-monty](docketeer-monty/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-monty)](https://pypi.org/project/docketeer-monty/) | Sandboxed Python execution via [Monty](https://github.com/pydantic/monty) |
+| [docketeer-rocketchat](docketeer-rocketchat/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-rocketchat)](https://pypi.org/project/docketeer-rocketchat/) | Rocket Chat backend for messaging |
+| [docketeer-web](docketeer-web/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-web)](https://pypi.org/project/docketeer-web/) | Web search, HTTP requests, file downloads |
 
 Each package's README lists its tools and configuration variables.
 
