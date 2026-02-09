@@ -22,6 +22,7 @@ from docketeer.executor import CommandExecutor
 from docketeer.plugins import discover_all, discover_one
 from docketeer.prompt import BrainResponse, MessageContent, RoomInfo
 from docketeer.tools import ToolContext, registry
+from docketeer.vault import Vault
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s"
@@ -76,6 +77,16 @@ def _discover_executor() -> CommandExecutor | None:
         return None
     module = ep.load()
     return module.create_executor()
+
+
+def _discover_vault() -> Vault | None:
+    """Discover the vault via entry_points (optional)."""
+    ep = discover_one("docketeer.vault", "VAULT")
+    if ep is None:
+        log.info("No vault plugin installed — secrets management unavailable")
+        return None
+    module = ep.load()
+    return module.create_vault()
 
 
 def _register_task_plugins(docket: Docket) -> None:
@@ -227,9 +238,12 @@ async def main() -> None:  # pragma: no cover
     # Discover plugins
     client, register_chat_tools = _discover_chat_backend()
     executor = _discover_executor()
+    vault = _discover_vault()
 
     # Create tool context
-    tool_context = ToolContext(workspace=environment.WORKSPACE_PATH, executor=executor)
+    tool_context = ToolContext(
+        workspace=environment.WORKSPACE_PATH, executor=executor, vault=vault
+    )
 
     brain = Brain(tool_context)
     tool_context.on_people_write = brain.rebuild_person_map

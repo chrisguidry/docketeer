@@ -1,12 +1,14 @@
-"""In-memory ChatClient for testing — no network, full control."""
+"""In-memory test doubles — no network, full control."""
 
 import asyncio
+import secrets
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
 from docketeer.chat import ChatClient, IncomingMessage, RoomMessage
+from docketeer.vault import SecretReference, Vault
 
 
 @dataclass
@@ -106,3 +108,29 @@ class MemoryChat(ChatClient):
 
     async def send_typing(self, room_id: str, typing: bool) -> None:
         self.typing_events.append((room_id, typing))
+
+
+class MemoryVault(Vault):
+    """In-memory Vault for tests — no external service needed."""
+
+    def __init__(self, initial: dict[str, str] | None = None) -> None:
+        self._secrets: dict[str, str] = dict(initial) if initial else {}
+
+    async def list(self) -> list[SecretReference]:
+        return [SecretReference(name=name) for name in self._secrets]
+
+    async def resolve(self, name: str) -> str:
+        if name not in self._secrets:
+            raise KeyError(name)
+        return self._secrets[name]
+
+    async def store(self, name: str, value: str) -> None:
+        self._secrets[name] = value
+
+    async def generate(self, name: str, length: int = 32) -> None:
+        self._secrets[name] = secrets.token_urlsafe(length)[:length]
+
+    async def delete(self, name: str) -> None:
+        if name not in self._secrets:
+            raise KeyError(name)
+        del self._secrets[name]

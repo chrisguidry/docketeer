@@ -108,13 +108,18 @@ graph TD
             Sandbox["bubblewrap, ..."]
         end
         PluginTools --> Sandbox
+
+        subgraph vault ["🔌 docketeer.vault"]
+            Secrets["1password, ..."]
+        end
+        PluginTools --> Secrets
     end
 
     Sandbox --> Host["🖥️ Host System"]
 
     classDef plugin fill:#f0f4ff,stroke:#4a6fa5
     classDef core fill:#fff4e6,stroke:#c77b2a
-    class ChatClient,Prompts,PluginTools,Sandbox,PluginTasks plugin
+    class ChatClient,Prompts,PluginTools,Sandbox,Secrets,PluginTasks plugin
     class Brain core
 ```
 
@@ -143,19 +148,32 @@ gives the agent autonomy. The agent can schedule future nudges for itself, and
 three built-in recurring tasks — `nudge`, `reverie`, and `consolidation` — let
 it think on its own, reflect on recent events, and summarize its journal.
 
+### Vault
+
+The agent often needs secrets — API keys, tokens, passwords — to do useful work,
+but those values should never appear in the conversation context where they'd be
+visible in logs or could leak through tool results. The vault plugin gives the
+agent five tools (`list_secrets`, `store_secret`, `generate_secret`,
+`delete_secret`, `capture_secret`) that let it manage secrets by name without
+ever seeing the raw values. When the agent needs a secret inside a sandboxed
+command, it passes a `secret_env` mapping on `run` or `shell` and the executor
+resolves the names through the vault at the last moment, injecting values as
+environment variables that only the child process can see.
+
 ### Plugin extension points
 
 All plugins are discovered via standard Python
 [entry points](https://packaging.python.org/en/latest/specifications/entry-points/).
-Single-plugin groups (`docketeer.chat`, `docketeer.executor`) auto-select when
-only one is installed, or can be chosen with an environment variable when several
-are available. Multi-plugin groups (`docketeer.tools`, `docketeer.prompt`,
-`docketeer.tasks`) load everything they find.
+Single-plugin groups (`docketeer.chat`, `docketeer.executor`, `docketeer.vault`)
+auto-select when only one is installed, or can be chosen with an environment
+variable when several are available. Multi-plugin groups (`docketeer.tools`,
+`docketeer.prompt`, `docketeer.tasks`) load everything they find.
 
 | Entry point group | Cardinality | Purpose |
 |-------------------|-------------|---------|
 | `docketeer.chat` | single | Chat backend — how the agent talks to people |
 | `docketeer.executor` | single, optional | Command executor — sandboxed process execution on the host |
+| `docketeer.vault` | single, optional | Secrets vault — store and resolve secrets without exposing values to the agent |
 | `docketeer.tools` | multiple | Tool plugins — capabilities the agent can use during its agentic loop |
 | `docketeer.prompt` | multiple | Prompt providers — contribute blocks to the system prompt |
 | `docketeer.tasks` | multiple | Task plugins — background work run by the Docket scheduler |
@@ -170,6 +188,7 @@ your own and install them alongside Docketeer to build your perfect agent.
 | Package | PyPI | Description |
 |---------|------|-------------|
 | [docketeer](docketeer/) | [![PyPI](https://img.shields.io/pypi/v/docketeer)](https://pypi.org/project/docketeer/) | Core agent engine — workspace, journal, scheduling, plugin discovery |
+| [docketeer-1password](docketeer-1password/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-1password)](https://pypi.org/project/docketeer-1password/) | [1Password](https://1password.com/) secret vault — store, generate, and resolve secrets |
 | [docketeer-agentskills](docketeer-agentskills/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-agentskills)](https://pypi.org/project/docketeer-agentskills/) | [Agent Skills](https://agentskills.io/specification) — install, manage, and use packaged agent expertise |
 | [docketeer-bubblewrap](docketeer-bubblewrap/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-bubblewrap)](https://pypi.org/project/docketeer-bubblewrap/) | Sandboxed command execution via [bubblewrap](https://github.com/containers/bubblewrap) |
 | [docketeer-git](docketeer-git/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-git)](https://pypi.org/project/docketeer-git/) | Automatic git-backed workspace backups |

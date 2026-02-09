@@ -58,6 +58,7 @@ Docketeer discovers plugins through four entry point groups:
 
 Available plugins:
 
+- [docketeer-1password](https://pypi.org/project/docketeer-1password/) — 1Password secret vault
 - [docketeer-agentskills](https://pypi.org/project/docketeer-agentskills/) — Agent Skills support
 - [docketeer-bubblewrap](https://pypi.org/project/docketeer-bubblewrap/) — sandboxed command execution via bubblewrap
 - [docketeer-git](https://pypi.org/project/docketeer-git/) — automatic git-backed workspace backups

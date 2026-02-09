@@ -113,6 +113,33 @@ def test_schema_from_hints_list_of_strings():
     assert schema["properties"]["items"]["items"] == {"type": "string"}
 
 
+def test_schema_from_hints_optional_dict():
+    async def fn(ctx: ToolContext, env: dict[str, str] | None = None) -> str:
+        """Test.
+
+        env: environment variables
+        """
+        return ""
+
+    schema = _schema_from_hints(fn)
+    assert schema["properties"]["env"]["type"] == "object"
+    assert schema["properties"]["env"]["additionalProperties"] == {"type": "string"}
+    assert schema["properties"]["env"]["default"] is None
+
+
+def test_schema_from_hints_dict_of_strings():
+    async def fn(ctx: ToolContext, env: dict[str, str]) -> str:
+        """Test.
+
+        env: environment variables
+        """
+        return ""
+
+    schema = _schema_from_hints(fn)
+    assert schema["properties"]["env"]["type"] == "object"
+    assert schema["properties"]["env"]["additionalProperties"] == {"type": "string"}
+
+
 def test_schema_from_hints_required_vs_default():
     async def fn(
         ctx: ToolContext, required_param: str, optional_param: str = "default"

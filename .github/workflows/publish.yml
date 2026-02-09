@@ -23,6 +23,8 @@ jobs:
         include:
           - package: docketeer
             environment: pypi-docketeer
+          - package: docketeer-1password
+            environment: pypi-docketeer-1password
           - package: docketeer-agentskills
             environment: pypi-docketeer-agentskills
           - package: docketeer-bubblewrap

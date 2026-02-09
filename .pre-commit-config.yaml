@@ -48,6 +48,15 @@ repos:
         pass_filenames: false
         require_serial: true
 
+      - id: pytest-docketeer-1password
+        name: pytest (docketeer-1password)
+        entry: uv run --no-sync --directory docketeer-1password pytest
+        language: system
+        types: [python]
+        files: ^docketeer/src/|^docketeer-1password/
+        pass_filenames: false
+        require_serial: true
+
       - id: pytest-docketeer-agentskills
         name: pytest (docketeer-agentskills)
         entry: uv run --no-sync --directory docketeer-agentskills pytest

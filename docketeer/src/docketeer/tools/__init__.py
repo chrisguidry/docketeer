@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+import types
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +16,7 @@ from anthropic.types import ToolParam
 from docketeer.executor import CommandExecutor
 from docketeer.plugins import discover_all
 from docketeer.prompt import CacheControl
+from docketeer.vault import Vault
 
 log = logging.getLogger(__name__)
 
@@ -49,6 +51,7 @@ class ToolContext:
     summarize: Callable[[str, str], Awaitable[str]] | None = None
     classify_response: Callable[[str, int, str], Awaitable[bool]] | None = None
     executor: CommandExecutor | None = None
+    vault: Vault | None = None
 
 
 class ToolRegistry:
@@ -104,12 +107,22 @@ def _schema_from_hints(fn: Callable) -> dict:
         if param_name == "ctx":
             continue
         hint = hints.get(param_name, str)
+        # Unwrap Optional / X | None to the inner type
+        if get_origin(hint) is types.UnionType:
+            hint = next(a for a in get_args(hint) if a is not type(None))
         prop: dict[str, Any]
         if get_origin(hint) is list:
             item_type = get_args(hint)[0] if get_args(hint) else str
             prop = {
                 "type": "array",
                 "items": {"type": TYPE_MAP.get(item_type, "string")},
+            }
+        elif get_origin(hint) is dict:
+            args = get_args(hint)
+            value_type = args[1] if len(args) > 1 else str
+            prop = {
+                "type": "object",
+                "additionalProperties": {"type": TYPE_MAP.get(value_type, "string")},
             }
         else:
             prop = {"type": TYPE_MAP.get(hint, "string")}
@@ -164,6 +177,7 @@ def _load_tool_plugins() -> None:
 
 import docketeer.tools.executor as _executor  # noqa: E402, F401
 import docketeer.tools.journal as _journal  # noqa: E402, F401
+import docketeer.tools.vault as _vault  # noqa: E402, F401
 import docketeer.tools.workspace as _workspace  # noqa: E402, F401
 
 _load_tool_plugins()

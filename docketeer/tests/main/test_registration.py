@@ -11,6 +11,7 @@ from docketeer.main import (
     _acquire_lock,
     _discover_chat_backend,
     _discover_executor,
+    _discover_vault,
     _load_task_collections,
     _register_docket_tools,
     _register_task_plugins,
@@ -86,6 +87,24 @@ def test_discover_executor_present():
 def test_discover_executor_absent():
     with patch("docketeer.main.discover_one", return_value=None):
         result = _discover_executor()
+    assert result is None
+
+
+def test_discover_vault_present():
+    module = MagicMock()
+    vault = MagicMock()
+    module.create_vault.return_value = vault
+
+    ep = MagicMock()
+    ep.load.return_value = module
+    with patch("docketeer.main.discover_one", return_value=ep):
+        result = _discover_vault()
+    assert result is vault
+
+
+def test_discover_vault_absent():
+    with patch("docketeer.main.discover_one", return_value=None):
+        result = _discover_vault()
     assert result is None
 
 
