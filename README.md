@@ -163,8 +163,9 @@ are available. Multi-plugin groups (`docketeer.tools`, `docketeer.prompt`,
 ## Packages
 
 Docketeer's git repository is a [uv workspace](https://docs.astral.sh/uv/concepts/workspaces/)
-made up of several packages. You can send new plugin implementations by PR or
-build your own and install them alongside Docketeer to build your perfect agent.
+of packages endorsed by the authors, but they don't represent everything your
+Docketeer agent can be! You can send new plugin implementations by PR or build
+your own and install them alongside Docketeer to build your perfect agent.
 
 | Package | Description |
 |---------|-------------|
