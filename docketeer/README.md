@@ -61,6 +61,7 @@ Available plugins:
 - [docketeer-agentskills](https://pypi.org/project/docketeer-agentskills/) — Agent Skills support
 - [docketeer-bubblewrap](https://pypi.org/project/docketeer-bubblewrap/) — sandboxed command execution via bubblewrap
 - [docketeer-git](https://pypi.org/project/docketeer-git/) — automatic git-backed workspace backups
+- [docketeer-mcp](https://pypi.org/project/docketeer-mcp/) — MCP server support
 - [docketeer-monty](https://pypi.org/project/docketeer-monty/) — sandboxed Python execution
 - [docketeer-rocketchat](https://pypi.org/project/docketeer-rocketchat/) — Rocket Chat backend
 - [docketeer-web](https://pypi.org/project/docketeer-web/) — web search, HTTP requests, file downloads

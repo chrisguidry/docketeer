@@ -62,10 +62,67 @@ future scheduled tasks.
 Prompt injection will remain a risk with any agent that can reach out to the
 internet for information.
 
+## Architecture
+
+```mermaid
+graph TD
+    People(["👥 People"])
+    People <--> ChatClient
+
+    subgraph chat ["🔌 docketeer.chat"]
+        ChatClient["Rocket.Chat, ..."]
+    end
+
+    ChatClient <--> Brain
+
+    subgraph agent ["Docketeer Agent"]
+        Brain["🧠 Brain / agentic loop"]
+
+        Brain <-- "reasoning" --> API["🤖 Claude API"]
+        Brain <-- "memory" --> Workspace["📂 Workspace"]
+        Brain <-- "scheduling" --> Docket["⏰ Docket"]
+
+        Docket -- triggers --> CoreTasks["nudge · reverie · consolidation"]
+        CoreTasks --> Brain
+
+        subgraph prompt ["🔌 docketeer.prompt"]
+            Prompts["agentskills, mcp, ..."]
+        end
+        Prompts -. system prompt .-> Brain
+
+        Brain -- tool calls --> Registry
+        subgraph tools ["🔌 docketeer.tools"]
+            Registry["Tool Registry"]
+            CoreTools["workspace · chat · docket"]
+            PluginTools["web, monty, mcp, ..."]
+        end
+        Registry --> CoreTools
+        Registry --> PluginTools
+
+        Docket -- triggers --> PluginTasks
+        subgraph tasks ["🔌 docketeer.tasks"]
+            PluginTasks["git backup, ..."]
+        end
+
+        subgraph executor ["🔌 docketeer.executor"]
+            Sandbox["bubblewrap, ..."]
+        end
+        PluginTools --> Sandbox
+    end
+
+    Sandbox --> Host["🖥️ Host System"]
+
+    classDef plugin fill:#f0f4ff,stroke:#4a6fa5
+    classDef core fill:#fff4e6,stroke:#c77b2a
+    class ChatClient,Prompts,PluginTools,Sandbox,PluginTasks plugin
+    class Brain core
+```
+
 ## Packages
 
-Docketeer is a [uv workspace](https://docs.astral.sh/uv/concepts/workspaces/)
-made up of several packages:
+Docketeer's git repository is a [uv workspace](https://docs.astral.sh/uv/concepts/workspaces/)
+made up of several packages. You can send new plugin implementations by PR or
+build your own and install them alongside Docketeer to build your perfect agent.
 
 | Package | Description |
 |---------|-------------|
@@ -73,6 +130,7 @@ made up of several packages:
 | [docketeer-agentskills](docketeer-agentskills/) | [Agent Skills](https://agentskills.io/specification) — install, manage, and use packaged agent expertise |
 | [docketeer-bubblewrap](docketeer-bubblewrap/) | Sandboxed command execution via [bubblewrap](https://github.com/containers/bubblewrap) |
 | [docketeer-git](docketeer-git/) | Automatic git-backed workspace backups |
+| [docketeer-mcp](docketeer-mcp/) | [MCP](https://modelcontextprotocol.io/) server support — connect to any MCP-compatible server |
 | [docketeer-monty](docketeer-monty/) | Sandboxed Python execution via [Monty](https://github.com/pydantic/monty) |
 | [docketeer-rocketchat](docketeer-rocketchat/) | Rocket Chat backend for messaging |
 | [docketeer-web](docketeer-web/) | Web search, HTTP requests, file downloads |
