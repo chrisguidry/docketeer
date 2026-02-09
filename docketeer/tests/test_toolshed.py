@@ -87,6 +87,22 @@ def test_find_install_root_flat_dir(tmp_path: Path):
     assert _find_install_root(binary) == tmp_path / "tools"
 
 
+def test_find_install_root_shared_prefix_local(tmp_path: Path):
+    binary = tmp_path / ".local" / "bin" / "uv"
+    binary.parent.mkdir(parents=True)
+    binary.touch()
+    with patch("docketeer.toolshed.Path.home", return_value=tmp_path):
+        assert _find_install_root(binary) == tmp_path / ".local" / "bin"
+
+
+def test_find_install_root_shared_prefix_home(tmp_path: Path):
+    binary = tmp_path / "bin" / "uv"
+    binary.parent.mkdir(parents=True)
+    binary.touch()
+    with patch("docketeer.toolshed.Path.home", return_value=tmp_path):
+        assert _find_install_root(binary) == tmp_path / "bin"
+
+
 # --- Toolshed.mounts ---
 
 
@@ -218,12 +234,15 @@ def test_discover_finds_uv_in_local_bin(tmp_path: Path):
             return str(uv_bin)
         return None
 
-    with patch("docketeer.toolshed.shutil.which", side_effect=fake_which):
+    with (
+        patch("docketeer.toolshed.shutil.which", side_effect=fake_which),
+        patch("docketeer.toolshed.Path.home", return_value=tmp_path),
+    ):
         ts = discover(cache_root=tmp_path / "cache")
 
     assert len(ts.runtimes) == 1
     assert ts.runtimes[0].spec.name == "python"
-    assert ts.runtimes[0].install_root == tmp_path / ".local"
+    assert ts.runtimes[0].install_root == tmp_path / ".local" / "bin"
 
 
 def test_discover_skips_system_commands():
@@ -281,7 +300,10 @@ def test_discover_deduplicates_roots(tmp_path: Path):
             return str(uv_bin)
         return None
 
-    with patch("docketeer.toolshed.shutil.which", side_effect=fake_which):
+    with (
+        patch("docketeer.toolshed.shutil.which", side_effect=fake_which),
+        patch("docketeer.toolshed.Path.home", return_value=tmp_path),
+    ):
         ts = discover(cache_root=tmp_path / "cache")
 
     assert len(ts.runtimes) == 1
@@ -304,7 +326,10 @@ def test_discover_finds_both_runtimes(tmp_path: Path):
             return str(uv_bin)
         return None
 
-    with patch("docketeer.toolshed.shutil.which", side_effect=fake_which):
+    with (
+        patch("docketeer.toolshed.shutil.which", side_effect=fake_which),
+        patch("docketeer.toolshed.Path.home", return_value=tmp_path),
+    ):
         ts = discover(cache_root=tmp_path / "cache")
 
     assert len(ts.runtimes) == 2
@@ -325,7 +350,10 @@ def test_discover_skips_duplicate_roots_across_runtimes(tmp_path: Path):
             return str(shared_bin / "uvx")
         return None
 
-    with patch("docketeer.toolshed.shutil.which", side_effect=fake_which):
+    with (
+        patch("docketeer.toolshed.shutil.which", side_effect=fake_which),
+        patch("docketeer.toolshed.Path.home", return_value=tmp_path),
+    ):
         ts = discover(cache_root=tmp_path / "cache")
 
     assert len(ts.runtimes) == 1
@@ -346,9 +374,12 @@ def test_discover_skips_pyenv_shims(tmp_path: Path):
     real_uvx.chmod(0o755)
 
     path = f"{shims_dir}:{real_dir}"
-    with patch.dict("os.environ", {"PATH": path}):
+    with (
+        patch.dict("os.environ", {"PATH": path}),
+        patch("docketeer.toolshed.Path.home", return_value=tmp_path),
+    ):
         ts = discover(cache_root=tmp_path / "cache")
 
     assert len(ts.runtimes) == 1
     assert ts.runtimes[0].spec.name == "python"
-    assert ts.runtimes[0].install_root == tmp_path / ".local"
+    assert ts.runtimes[0].install_root == tmp_path / ".local" / "bin"

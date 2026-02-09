@@ -107,11 +107,17 @@ def _find_install_root(binary: Path) -> Path:
     """Walk from a resolved binary path to its installation root.
 
     If the binary sits in a bin/ directory, the install root is one level up
-    (covers nvm, pyenv, etc.). Otherwise, the install root is the directory
-    containing the binary.
+    (covers nvm, pyenv, etc.).  However, if climbing would land on a shared
+    XDG directory ($HOME or $HOME/.local), we stay at bin/ to avoid mounting
+    unrelated user data into the sandbox.  Otherwise, the install root is the
+    directory containing the binary.
     """
     if binary.parent.name == "bin":
-        return binary.parent.parent
+        candidate = binary.parent.parent
+        home = Path.home()
+        if candidate == home or candidate == home / ".local":
+            return binary.parent
+        return candidate
     return binary.parent
 
 
