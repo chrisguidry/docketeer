@@ -118,6 +118,48 @@ graph TD
     class Brain core
 ```
 
+### Brain
+
+The Brain is the agentic loop at the center of Docketeer. It receives messages
+from the chat backend, builds a system prompt, manages conversation history, and
+runs a multi-turn tool-use loop against the Claude API. Each turn sends the
+conversation, system prompt blocks, and available tool definitions to Claude and
+gets back text and/or tool calls — looping until Claude responds with text or
+hits the tool-round limit. Everything else in the system either feeds into the
+Brain or is called by it.
+
+### Workspace
+
+The agent's persistent filesystem — its long-term memory. Contains `SOUL.md`
+(the agent's personality and instructions), a daily journal, per-person profiles,
+installed skills, and anything else the agent writes for itself. The Brain reads
+`SOUL.md` and person context into the system prompt on every turn, and workspace
+tools let the agent read and write its own files.
+
+### Docket
+
+A [Redis-backed task scheduler](https://github.com/chrisguidry/docket) that
+gives the agent autonomy. The agent can schedule future nudges for itself, and
+three built-in recurring tasks — `nudge`, `reverie`, and `consolidation` — let
+it think on its own, reflect on recent events, and summarize its journal.
+
+### Plugin extension points
+
+All plugins are discovered via standard Python
+[entry points](https://packaging.python.org/en/latest/specifications/entry-points/).
+Single-plugin groups (`docketeer.chat`, `docketeer.executor`) auto-select when
+only one is installed, or can be chosen with an environment variable when several
+are available. Multi-plugin groups (`docketeer.tools`, `docketeer.prompt`,
+`docketeer.tasks`) load everything they find.
+
+| Entry point group | Cardinality | Purpose |
+|-------------------|-------------|---------|
+| `docketeer.chat` | single | Chat backend — how the agent talks to people |
+| `docketeer.executor` | single, optional | Command executor — sandboxed process execution on the host |
+| `docketeer.tools` | multiple | Tool plugins — capabilities the agent can use during its agentic loop |
+| `docketeer.prompt` | multiple | Prompt providers — contribute blocks to the system prompt |
+| `docketeer.tasks` | multiple | Task plugins — background work run by the Docket scheduler |
+
 ## Packages
 
 Docketeer's git repository is a [uv workspace](https://docs.astral.sh/uv/concepts/workspaces/)
