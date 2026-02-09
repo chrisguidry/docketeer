@@ -271,7 +271,7 @@ async def test_process_exhausts_tool_rounds(brain: Brain, fake_messages: Any):
         for i in range(3)
     ]
     content = MessageContent(username="chris", text="keep going")
-    with patch("docketeer.brain.MAX_TOOL_ROUNDS", 3):
+    with patch("docketeer.brain.loop.MAX_TOOL_ROUNDS", 3):
         response = await brain.process("room1", content)
     assert response.text == ""
 
@@ -335,7 +335,7 @@ async def test_process_no_tools_registered(brain: Brain, fake_messages: Any):
     """Process works when no tools are registered."""
     fake_messages.responses = [FakeMessage(content=[make_text_block(text="No tools!")])]
     content = MessageContent(username="chris", text="hello")
-    with patch("docketeer.brain.registry.definitions", return_value=[]):
+    with patch("docketeer.brain.core.registry.definitions", return_value=[]):
         response = await brain.process("room1", content)
     assert response.text == "No tools!"
 
