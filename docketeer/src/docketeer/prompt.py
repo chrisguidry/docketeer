@@ -61,6 +61,7 @@ class MessageContent:
     """Content to send to Claude - text and/or images."""
 
     username: str
+    message_id: str = ""
     timestamp: str = ""
     text: str = ""
     images: list[tuple[str, bytes]] = field(default_factory=list)

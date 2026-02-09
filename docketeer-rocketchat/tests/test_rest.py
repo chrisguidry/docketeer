@@ -363,3 +363,28 @@ async def test_fetch_messages_failure(rc: RocketChatClient):
     )
     result = await rc.fetch_messages("room1")
     assert result == []
+
+
+# --- react / unreact ---
+
+
+@respx.mock
+async def test_react(rc: RocketChatClient):
+    route = respx.post("http://localhost:3000/api/v1/chat.react")
+    route.mock(return_value=httpx.Response(200, json={"success": True}))
+    await rc.react("msg1", ":thumbsup:")
+    body = json.loads(route.calls[0].request.content)
+    assert body["messageId"] == "msg1"
+    assert body["emoji"] == ":thumbsup:"
+    assert body["shouldReact"] is True
+
+
+@respx.mock
+async def test_unreact(rc: RocketChatClient):
+    route = respx.post("http://localhost:3000/api/v1/chat.react")
+    route.mock(return_value=httpx.Response(200, json={"success": True}))
+    await rc.unreact("msg1", ":thumbsup:")
+    body = json.loads(route.calls[0].request.content)
+    assert body["messageId"] == "msg1"
+    assert body["emoji"] == ":thumbsup:"
+    assert body["shouldReact"] is False

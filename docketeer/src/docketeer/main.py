@@ -67,7 +67,7 @@ def _load_task_collections() -> list[str]:
 def _format_room_message(msg: RoomMessage) -> str:
     """Format a single RoomMessage for display."""
     ts = msg.timestamp.astimezone().strftime("%Y-%m-%d %H:%M")
-    lines = [f"{ts} @{msg.username}: {msg.text}"]
+    lines = [f"[{msg.message_id}] {ts} @{msg.username}: {msg.text}"]
     if msg.attachments:
         for att in msg.attachments:
             label = att.title or "attachment"
@@ -109,6 +109,26 @@ def _register_core_chat_tools(client: ChatClient) -> None:
             return "No messages found."
 
         return "\n".join(_format_room_message(m) for m in messages)
+
+    @registry.tool
+    async def react(
+        ctx: ToolContext,
+        message_id: str,
+        emoji: str,
+        remove: bool = False,
+    ) -> str:
+        """React to a message with an emoji, or remove a reaction.
+
+        message_id: the ID of the message to react to
+        emoji: the emoji name (e.g. :thumbsup: or :tada:)
+        remove: set to true to remove the reaction instead of adding it
+        """
+        if remove:
+            await client.unreact(message_id, emoji)
+            return f"Removed {emoji} from {message_id}"
+        else:
+            await client.react(message_id, emoji)
+            return f"Added {emoji} to {message_id}"
 
 
 def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:

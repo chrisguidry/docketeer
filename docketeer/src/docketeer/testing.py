@@ -25,6 +25,13 @@ class UploadedFile:
     message: str = ""
 
 
+@dataclass
+class Reaction:
+    message_id: str
+    emoji: str
+    action: str  # "react" or "unreact"
+
+
 class MemoryChat(ChatClient):
     """In-memory ChatClient for tests — no network, full control."""
 
@@ -42,6 +49,7 @@ class MemoryChat(ChatClient):
         self.uploaded_files: list[UploadedFile] = []
         self.status_changes: list[tuple[str, str]] = []
         self.typing_events: list[tuple[str, bool]] = []
+        self.reactions: list[Reaction] = []
         self._incoming: asyncio.Queue[IncomingMessage | None] = asyncio.Queue()
         self._room_messages: dict[str, list[RoomMessage]] = {}
         self._dm_rooms: list[dict[str, Any]] = []
@@ -108,6 +116,12 @@ class MemoryChat(ChatClient):
 
     async def send_typing(self, room_id: str, typing: bool) -> None:
         self.typing_events.append((room_id, typing))
+
+    async def react(self, message_id: str, emoji: str) -> None:
+        self.reactions.append(Reaction(message_id, emoji, "react"))
+
+    async def unreact(self, message_id: str, emoji: str) -> None:
+        self.reactions.append(Reaction(message_id, emoji, "unreact"))
 
 
 class MemoryVault(Vault):

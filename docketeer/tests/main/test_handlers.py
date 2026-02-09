@@ -127,6 +127,7 @@ async def test_build_content_text_only(chat: MemoryChat):
     content = await build_content(chat, msg)
     assert content.text == "hello"
     assert content.username == "alice"
+    assert content.message_id == "m1"
     assert content.images == []
 
 

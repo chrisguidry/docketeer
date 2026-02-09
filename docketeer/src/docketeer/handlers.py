@@ -124,6 +124,7 @@ async def build_content(client: ChatClient, msg: IncomingMessage) -> MessageCont
 
     return MessageContent(
         username=msg.username,
+        message_id=msg.message_id,
         timestamp=timestamp,
         text=msg.text,
         images=images,

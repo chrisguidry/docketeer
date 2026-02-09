@@ -3,12 +3,15 @@
 import importlib.resources
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from docketeer.audit import audit_log, log_usage
+from docketeer.brain import Brain
 from docketeer.prompt import (
     CacheControl,
+    MessageContent,
     RoomInfo,
     build_system_blocks,
     ensure_template,
@@ -188,3 +191,11 @@ def test_extract_text_non_dict_without_text():
 def test_extract_text_skips_other():
     blocks = [{"type": "image"}, {"type": "unknown"}]
     assert extract_text(blocks) == ""
+
+
+async def test_process_synthetic_room_clears_tool_room_id(
+    brain: Brain, fake_messages: Any
+):
+    fake_messages.responses = [FakeMessage(content=[make_text_block(text="ok")])]
+    await brain.process("__tasks__", MessageContent(username="system", text="reverie"))
+    assert brain.tool_context.room_id == ""

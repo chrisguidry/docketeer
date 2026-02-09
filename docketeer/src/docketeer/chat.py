@@ -108,6 +108,12 @@ class ChatClient(ABC):
     @abstractmethod
     async def send_typing(self, room_id: str, typing: bool) -> None: ...
 
+    @abstractmethod
+    async def react(self, message_id: str, emoji: str) -> None: ...
+
+    @abstractmethod
+    async def unreact(self, message_id: str, emoji: str) -> None: ...
+
 
 RegisterToolsFn = Callable[["ChatClient", "ToolContext"], None]
 

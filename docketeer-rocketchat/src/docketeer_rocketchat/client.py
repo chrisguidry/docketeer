@@ -233,6 +233,16 @@ class RocketChatClient(ChatClient):
                 await asyncio.sleep(delay)
                 delay *= 2
 
+    async def react(self, message_id: str, emoji: str) -> None:
+        await self._post(
+            "chat.react", messageId=message_id, emoji=emoji, shouldReact=True
+        )
+
+    async def unreact(self, message_id: str, emoji: str) -> None:
+        await self._post(
+            "chat.react", messageId=message_id, emoji=emoji, shouldReact=False
+        )
+
     async def send_typing(self, room_id: str, typing: bool) -> None:
         """Send a typing indicator to a room via the user-activity stream."""
         if not self._ddp:

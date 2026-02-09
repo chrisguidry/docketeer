@@ -142,7 +142,7 @@ class Brain:
             tools[-1].cache_control = CacheControl()
 
         self.tool_context.username = content.username
-        self.tool_context.room_id = room_id
+        self.tool_context.room_id = room_id if not room_id.startswith("__") else ""
 
         if self._room_token_counts.get(room_id, 0) > COMPACT_THRESHOLD:
             await self._compact_history(room_id, system, tools)
@@ -256,7 +256,9 @@ class Brain:
     def _build_content(self, content: MessageContent) -> list[ContentBlockParam] | str:
         """Build content blocks for Claude."""
         blocks: list[ContentBlockParam] = []
-        prefix = f"[{content.timestamp}] " if content.timestamp else ""
+        id_tag = f"[{content.message_id}] " if content.message_id else ""
+        ts_tag = f"[{content.timestamp}] " if content.timestamp else ""
+        prefix = f"{id_tag}{ts_tag}"
         empty = f"{prefix}@{content.username}: (empty message)"
 
         for media_type, data in content.images:
