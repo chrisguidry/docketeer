@@ -177,17 +177,20 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
             return f"Error: invalid datetime format: {when}"
 
         room_id = "" if silent else ctx.room_id
+        thread_id = "" if silent else ctx.thread_id
 
         if key:
             await docket.replace(tasks.nudge, when=fire_at, key=key)(
                 prompt=prompt,
                 room_id=room_id,
+                thread_id=thread_id,
             )
         else:
             key = f"task-{fire_at.strftime('%Y%m%d-%H%M%S')}"
             await docket.add(tasks.nudge, when=fire_at, key=key)(
                 prompt=prompt,
                 room_id=room_id,
+                thread_id=thread_id,
             )
 
         local = fire_at.astimezone().strftime("%Y-%m-%d %H:%M %Z")

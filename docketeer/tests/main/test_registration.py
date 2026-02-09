@@ -162,6 +162,38 @@ async def test_register_docket_tools_schedule_silent(
     assert "silently" in result
 
 
+async def test_register_docket_tools_schedule_passes_thread_id(
+    mock_docket: AsyncMock, tool_context: ToolContext
+):
+    tool_context.thread_id = "parent_1"
+    _register_docket_tools(mock_docket, tool_context)
+    await registry.execute(
+        "schedule",
+        {
+            "prompt": "reply in thread",
+            "when": "2026-12-25T10:00:00-05:00",
+            "key": "thread-task",
+        },
+        tool_context,
+    )
+    mock_docket.replace.assert_called_once()
+    call_kwargs = mock_docket.replace.return_value.call_args[1]
+    assert call_kwargs["thread_id"] == "parent_1"
+
+
+async def test_register_docket_tools_schedule_no_thread_by_default(
+    mock_docket: AsyncMock, tool_context: ToolContext
+):
+    _register_docket_tools(mock_docket, tool_context)
+    await registry.execute(
+        "schedule",
+        {"prompt": "do thing", "when": "2026-12-25T10:00:00-05:00", "key": "no-thread"},
+        tool_context,
+    )
+    call_kwargs = mock_docket.replace.return_value.call_args[1]
+    assert call_kwargs["thread_id"] == ""
+
+
 async def test_register_docket_tools_cancel_task(
     mock_docket: AsyncMock, tool_context: ToolContext
 ):

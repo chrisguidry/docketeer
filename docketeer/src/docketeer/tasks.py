@@ -17,12 +17,15 @@ log = logging.getLogger(__name__)
 async def nudge(
     prompt: str,
     room_id: str = "",
+    thread_id: str = "",
     brain: Brain = CurrentBrain(),
     client: ChatClient = CurrentChatClient(),
 ) -> None:
     """Nudge the brain with a prompt, optionally sending the response to a room."""
     now = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M")
-    content = MessageContent(username="system", timestamp=now, text=prompt)
+    content = MessageContent(
+        username="system", timestamp=now, text=prompt, thread_id=thread_id
+    )
 
     context_room = room_id or "__tasks__"
     try:
@@ -32,11 +35,11 @@ async def nudge(
     except Exception:
         log.exception("Error processing nudge task")
         if room_id:
-            await client.send_message(room_id, APOLOGY)
+            await client.send_message(room_id, APOLOGY, thread_id=thread_id)
         return
 
     if room_id and response.text:
-        await client.send_message(room_id, response.text)
+        await client.send_message(room_id, response.text, thread_id=thread_id)
 
 
 docketeer_tasks = [nudge, reverie, consolidation]

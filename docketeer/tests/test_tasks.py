@@ -30,7 +30,9 @@ async def test_nudge_with_room_sends_message():
     assert content.username == "system"
     assert content.text == "hey there"
 
-    client.send_message.assert_called_once_with("room123", "reminder sent")
+    client.send_message.assert_called_once_with(
+        "room123", "reminder sent", thread_id=""
+    )
 
 
 async def test_nudge_silent_uses_tasks_room():
@@ -64,7 +66,7 @@ async def test_nudge_brain_error_sends_apology_to_room():
     client = AsyncMock()
 
     await nudge(prompt="do stuff", room_id="room123", brain=brain, client=client)
-    client.send_message.assert_called_once_with("room123", APOLOGY)
+    client.send_message.assert_called_once_with("room123", APOLOGY, thread_id="")
 
 
 async def test_nudge_silent_error_logged_only():
@@ -85,3 +87,59 @@ async def test_nudge_auth_error_propagates():
 
     with pytest.raises(AuthenticationError):
         await nudge(prompt="do stuff", room_id="room123", brain=brain, client=client)
+
+
+# --- Thread support ---
+
+
+async def test_nudge_with_thread_sends_to_thread():
+    brain = AsyncMock()
+    brain.process.return_value = BrainResponse(text="thread reply")
+    client = AsyncMock()
+
+    await nudge(
+        prompt="reply here",
+        room_id="room123",
+        thread_id="parent_1",
+        brain=brain,
+        client=client,
+    )
+
+    content: MessageContent = brain.process.call_args[0][1]
+    assert content.thread_id == "parent_1"
+
+    client.send_message.assert_called_once_with(
+        "room123", "thread reply", thread_id="parent_1"
+    )
+
+
+async def test_nudge_without_thread_sends_to_channel():
+    brain = AsyncMock()
+    brain.process.return_value = BrainResponse(text="channel reply")
+    client = AsyncMock()
+
+    await nudge(prompt="reply here", room_id="room123", brain=brain, client=client)
+
+    content: MessageContent = brain.process.call_args[0][1]
+    assert content.thread_id == ""
+
+    client.send_message.assert_called_once_with(
+        "room123", "channel reply", thread_id=""
+    )
+
+
+async def test_nudge_thread_error_sends_apology_to_thread():
+    brain = AsyncMock()
+    brain.process.side_effect = make_api_connection_error()
+    client = AsyncMock()
+
+    await nudge(
+        prompt="do stuff",
+        room_id="room123",
+        thread_id="parent_1",
+        brain=brain,
+        client=client,
+    )
+    client.send_message.assert_called_once_with(
+        "room123", APOLOGY, thread_id="parent_1"
+    )
