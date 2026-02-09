@@ -7,11 +7,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from docketeer.chat import discover_chat_backend
+from docketeer.executor import discover_executor
 from docketeer.main import (
     _acquire_lock,
-    _discover_chat_backend,
-    _discover_executor,
-    _discover_vault,
     _load_task_collections,
     _register_docket_tools,
     _register_task_plugins,
@@ -19,6 +18,7 @@ from docketeer.main import (
 )
 from docketeer.testing import MemoryChat
 from docketeer.tools import ToolContext, registry
+from docketeer.vault import discover_vault
 
 
 def test_acquire_lock_success(tmp_path: Path):
@@ -46,8 +46,8 @@ def test_discover_chat_backend():
 
     ep = MagicMock()
     ep.load.return_value = module
-    with patch("docketeer.main.discover_one", return_value=ep):
-        result_client, register_fn = _discover_chat_backend()
+    with patch("docketeer.chat.discover_one", return_value=ep):
+        result_client, register_fn = discover_chat_backend()
     assert result_client is client
     assert register_fn is not None
 
@@ -58,8 +58,8 @@ def test_discover_chat_backend_no_register_tools():
 
     ep = MagicMock()
     ep.load.return_value = module
-    with patch("docketeer.main.discover_one", return_value=ep):
-        result_client, register_fn = _discover_chat_backend()
+    with patch("docketeer.chat.discover_one", return_value=ep):
+        result_client, register_fn = discover_chat_backend()
     assert result_client is client
     # Should get the noop default, not None
     assert callable(register_fn)
@@ -67,9 +67,9 @@ def test_discover_chat_backend_no_register_tools():
 
 
 def test_discover_chat_backend_no_plugins():
-    with patch("docketeer.main.discover_one", return_value=None):
+    with patch("docketeer.chat.discover_one", return_value=None):
         with pytest.raises(RuntimeError, match="No chat backend installed"):
-            _discover_chat_backend()
+            discover_chat_backend()
 
 
 def test_discover_executor_present():
@@ -79,14 +79,14 @@ def test_discover_executor_present():
 
     ep = MagicMock()
     ep.load.return_value = module
-    with patch("docketeer.main.discover_one", return_value=ep):
-        result = _discover_executor()
+    with patch("docketeer.executor.discover_one", return_value=ep):
+        result = discover_executor()
     assert result is executor
 
 
 def test_discover_executor_absent():
-    with patch("docketeer.main.discover_one", return_value=None):
-        result = _discover_executor()
+    with patch("docketeer.executor.discover_one", return_value=None):
+        result = discover_executor()
     assert result is None
 
 
@@ -97,14 +97,14 @@ def test_discover_vault_present():
 
     ep = MagicMock()
     ep.load.return_value = module
-    with patch("docketeer.main.discover_one", return_value=ep):
-        result = _discover_vault()
+    with patch("docketeer.vault.discover_one", return_value=ep):
+        result = discover_vault()
     assert result is vault
 
 
 def test_discover_vault_absent():
-    with patch("docketeer.main.discover_one", return_value=None):
-        result = _discover_vault()
+    with patch("docketeer.vault.discover_one", return_value=None):
+        result = discover_vault()
     assert result is None
 
 

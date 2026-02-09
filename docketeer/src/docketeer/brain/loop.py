@@ -1,5 +1,6 @@
 """Agentic tool-use loop: streaming, tool execution, cache management."""
 
+import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -31,14 +32,19 @@ async def agentic_loop(
     tool_context: ToolContext,
     audit_path: Path,
     callbacks_on_first_text: Callable[[], Awaitable[None]] | None,
+    callbacks_on_text: Callable[[str], Awaitable[None]] | None,
     callbacks_on_tool_start: Callable[[], Awaitable[None]] | None,
     callbacks_on_tool_end: Callable[[], Awaitable[None]] | None,
+    interrupted: asyncio.Event | None = None,
 ) -> str:
     """Run the tool-use loop and return the final reply text."""
     used_tools = False
     rounds = 0
     exhausted = True
     for _ in range(MAX_TOOL_ROUNDS):
+        if interrupted and interrupted.is_set():
+            log.info("Agentic loop interrupted by new message")
+            return ""
         rounds += 1
         response = await stream_message(
             client, system, messages, tools, on_first_text=callbacks_on_first_text
@@ -48,6 +54,11 @@ async def agentic_loop(
 
         tool_blocks = [b for b in response.content if isinstance(b, ToolUseBlock)]
         if tool_blocks:
+            text = "\n".join(
+                b.text for b in response.content if isinstance(b, TextBlock)
+            ).strip()
+            if text and callbacks_on_text:
+                await callbacks_on_text(text)
             used_tools = True
             if callbacks_on_tool_start:
                 await callbacks_on_tool_start()

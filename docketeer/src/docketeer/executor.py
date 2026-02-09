@@ -1,9 +1,14 @@
 """CommandExecutor ABC and supporting types for sandboxed process execution."""
 
 import asyncio
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
+
+from docketeer.plugins import discover_one
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -78,3 +83,13 @@ class CommandExecutor(ABC):
         network_access: bool = False,
         username: str | None = None,
     ) -> RunningProcess: ...
+
+
+def discover_executor() -> CommandExecutor | None:
+    """Discover the command executor via entry_points (optional)."""
+    ep = discover_one("docketeer.executor", "EXECUTOR")
+    if ep is None:
+        log.info("No executor plugin installed — sandboxed execution unavailable")
+        return None
+    module = ep.load()
+    return module.create_executor()

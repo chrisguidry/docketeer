@@ -1,10 +1,18 @@
 """Chat client interface for the Docketeer agent."""
 
+import logging
 from abc import ABC, abstractmethod
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+from docketeer.plugins import discover_one
+
+if TYPE_CHECKING:
+    from docketeer.tools import ToolContext
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -99,3 +107,21 @@ class ChatClient(ABC):
 
     @abstractmethod
     async def send_typing(self, room_id: str, typing: bool) -> None: ...
+
+
+RegisterToolsFn = Callable[["ChatClient", "ToolContext"], None]
+
+
+def _noop_register_tools(_client: "ChatClient", _ctx: "ToolContext") -> None:
+    pass
+
+
+def discover_chat_backend() -> tuple["ChatClient", RegisterToolsFn]:
+    """Discover the chat backend via entry_points."""
+    ep = discover_one("docketeer.chat", "CHAT")
+    if ep is None:
+        raise RuntimeError("No chat backend installed")
+    module = ep.load()
+    client = module.create_client()
+    register_fn = getattr(module, "register_tools", _noop_register_tools)
+    return client, register_fn

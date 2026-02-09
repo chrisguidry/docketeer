@@ -8,7 +8,8 @@ from anthropic import AuthenticationError
 
 from docketeer.brain import APOLOGY, Brain
 from docketeer.chat import Attachment, IncomingMessage, RoomMessage
-from docketeer.main import build_content, handle_message, run, send_response
+from docketeer.handlers import build_content, handle_message, send_response
+from docketeer.main import run
 from docketeer.prompt import BrainResponse
 from docketeer.testing import MemoryChat
 

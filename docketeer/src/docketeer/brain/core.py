@@ -1,5 +1,6 @@
 """Brain: the Claude reasoning loop with tool use."""
 
+import asyncio
 import base64
 import logging
 from collections import defaultdict
@@ -54,8 +55,10 @@ class ProcessCallbacks:
     """Optional callbacks fired during process() for typing/presence signals."""
 
     on_first_text: Callable[[], Awaitable[None]] | None = None
+    on_text: Callable[[str], Awaitable[None]] | None = None
     on_tool_start: Callable[[], Awaitable[None]] | None = None
     on_tool_end: Callable[[], Awaitable[None]] | None = None
+    interrupted: asyncio.Event | None = None
 
 
 class Brain:
@@ -162,8 +165,10 @@ class Brain:
                 self.tool_context,
                 self._audit_path,
                 callbacks.on_first_text if callbacks else None,
+                callbacks.on_text if callbacks else None,
                 callbacks.on_tool_start if callbacks else None,
                 callbacks.on_tool_end if callbacks else None,
+                callbacks.interrupted if callbacks else None,
             )
         except RequestTooLargeError:
             log.warning("Request too large, compacting and retrying", exc_info=True)
@@ -177,8 +182,10 @@ class Brain:
                     self.tool_context,
                     self._audit_path,
                     callbacks.on_first_text if callbacks else None,
+                    callbacks.on_text if callbacks else None,
                     callbacks.on_tool_start if callbacks else None,
                     callbacks.on_tool_end if callbacks else None,
+                    callbacks.interrupted if callbacks else None,
                 )
             except RequestTooLargeError:
                 log.error("Still too large after compaction", exc_info=True)
