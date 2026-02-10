@@ -8,8 +8,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from rich import box
 from rich.console import Console
 from rich.markdown import Markdown
+from rich.panel import Panel
 from rich.text import Text
 
 from docketeer.chat import ChatClient, IncomingMessage, RoomMessage
@@ -20,7 +22,7 @@ ROOM_ID = "terminal"
 USER_ID = "local-user"
 USERNAME = "you"
 
-PROMPT = "[bold cyan]>[/bold cyan] "
+INPUT_PROMPT = "you > "
 
 
 def _redirect_logs_to_file(data_dir: Path) -> Path:
@@ -59,7 +61,8 @@ class TUIClient(ChatClient):
         self._console.print()
         self._console.rule("[bold]docketeer[/bold]")
         self._console.print("  type a message and press enter. ctrl-c to quit.")
-        self._console.print(f"  logs: {log_path}\n")
+        self._console.print(f"  logs: {log_path}")
+        self._console.print()
 
     async def close(self) -> None:
         self._closed = True
@@ -109,8 +112,7 @@ class TUIClient(ChatClient):
     def _read_input(self) -> str | None:
         """Blocking stdin read, run in executor."""
         try:
-            self._console.print(PROMPT, end="")
-            return input()
+            return input(INPUT_PROMPT)
         except EOFError:
             return None
 
@@ -133,18 +135,32 @@ class TUIClient(ChatClient):
                 text=text,
             )
         )
-        self._console.print()
-        self._console.print(Markdown(text))
-        self._console.print()
+        panel = Panel(
+            Markdown(text),
+            title="[bold]docketeer[/bold]",
+            title_align="left",
+            border_style="blue",
+            box=box.ROUNDED,
+            padding=(0, 1),
+        )
+        self._console.print(panel)
 
     async def upload_file(
         self, room_id: str, file_path: str, message: str = "", *, thread_id: str = ""
     ) -> None:
-        label = Text(f"  [file: {file_path}]", style="dim")
+        parts: list[str] = []
         if message:
-            self._console.print(f"\n{message}")
-        self._console.print(label)
-        self._console.print()
+            parts.append(message)
+        parts.append(f"[file: {file_path}]")
+        panel = Panel(
+            "\n".join(parts),
+            title="[bold]docketeer[/bold]",
+            title_align="left",
+            border_style="blue",
+            box=box.ROUNDED,
+            padding=(0, 1),
+        )
+        self._console.print(panel)
 
     async def fetch_attachment(self, url: str) -> bytes:
         raise ConnectionError(f"TUI client cannot fetch attachments: {url}")
