@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from docketeer.brain import Brain
-from docketeer.chat import IncomingMessage, RoomMessage
+from docketeer.chat import IncomingMessage, RoomKind, RoomMessage
 from docketeer.handlers import build_content, handle_message, send_response
 from docketeer.main import _format_room_message, _register_core_chat_tools
 from docketeer.prompt import BrainResponse
@@ -59,7 +59,7 @@ def test_incoming_message_thread_id_default():
         display_name="Alice",
         text="hello",
         room_id="r1",
-        is_direct=True,
+        kind=RoomKind.direct,
     )
     assert msg.thread_id == ""
 
@@ -72,7 +72,7 @@ def test_incoming_message_thread_id_set():
         display_name="Alice",
         text="hello",
         room_id="r1",
-        is_direct=True,
+        kind=RoomKind.direct,
         thread_id="parent_msg_1",
     )
     assert msg.thread_id == "parent_msg_1"
@@ -172,7 +172,7 @@ async def test_handle_message_routes_thread_reply(
         display_name="Alice",
         text="hello",
         room_id="room1",
-        is_direct=True,
+        kind=RoomKind.direct,
         thread_id="parent_msg_1",
     )
     await handle_message(chat, brain, msg)
@@ -205,7 +205,7 @@ async def test_handle_message_channel_message_no_thread(
         display_name="Alice",
         text="hello",
         room_id="room1",
-        is_direct=True,
+        kind=RoomKind.direct,
     )
     await handle_message(chat, brain, msg)
     assert len(chat.sent_messages) >= 1
@@ -355,7 +355,7 @@ async def test_build_content_includes_thread_id(chat: MemoryChat):
         display_name="Alice",
         text="hello",
         room_id="r1",
-        is_direct=True,
+        kind=RoomKind.direct,
         thread_id="t1",
     )
     content = await build_content(chat, msg)
@@ -370,7 +370,7 @@ async def test_build_content_empty_thread_id(chat: MemoryChat):
         display_name="Alice",
         text="hello",
         room_id="r1",
-        is_direct=True,
+        kind=RoomKind.direct,
     )
     content = await build_content(chat, msg)
     assert content.thread_id == ""

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from docketeer.chat import Attachment, RoomMessage
+from docketeer.chat import Attachment, RoomInfo, RoomKind, RoomMessage
 from docketeer.main import _register_core_chat_tools
 from docketeer.testing import MemoryChat
 from docketeer.tools import ToolContext, registry
@@ -41,6 +41,37 @@ def chat() -> MemoryChat:
 @pytest.fixture()
 def _register_tool(chat: MemoryChat) -> None:
     _register_core_chat_tools(chat)
+
+
+# --- list_rooms tool ---
+
+
+@pytest.mark.usefixtures("_register_tool")
+async def test_list_rooms_shows_all_types(chat: MemoryChat, tool_context: ToolContext):
+    chat._rooms = [
+        RoomInfo(room_id="dm1", kind=RoomKind.direct, members=["testbot", "alice"]),
+        RoomInfo(
+            room_id="gdm1", kind=RoomKind.group, members=["testbot", "alice", "bob"]
+        ),
+        RoomInfo(
+            room_id="ch1", kind=RoomKind.public, members=["testbot"], name="general"
+        ),
+        RoomInfo(
+            room_id="grp1", kind=RoomKind.private, members=["testbot"], name="secret"
+        ),
+    ]
+    result = await registry.execute("list_rooms", {}, tool_context)
+    assert "4 room(s)" in result
+    assert "DM with @alice" in result
+    assert "group DM with @alice, @bob" in result
+    assert "#general" in result
+    assert "#secret (private)" in result
+
+
+@pytest.mark.usefixtures("_register_tool")
+async def test_list_rooms_empty(chat: MemoryChat, tool_context: ToolContext):
+    result = await registry.execute("list_rooms", {}, tool_context)
+    assert "No rooms" in result
 
 
 # --- MemoryChat.fetch_messages ---

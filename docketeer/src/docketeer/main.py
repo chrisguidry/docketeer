@@ -16,7 +16,13 @@ from docket import Docket, Worker
 
 from docketeer import environment, tasks
 from docketeer.brain import Brain
-from docketeer.chat import ChatClient, RoomMessage, discover_chat_backend
+from docketeer.chat import (
+    ChatClient,
+    RoomInfo,
+    RoomKind,
+    RoomMessage,
+    discover_chat_backend,
+)
 from docketeer.dependencies import (
     set_brain,
     set_client,
@@ -27,7 +33,6 @@ from docketeer.dependencies import (
 from docketeer.executor import discover_executor
 from docketeer.handlers import process_messages
 from docketeer.plugins import discover_all
-from docketeer.prompt import RoomInfo
 from docketeer.tasks import parse_every
 from docketeer.tools import ToolContext, registry
 from docketeer.vault import discover_vault
@@ -87,6 +92,34 @@ def _format_room_message(msg: RoomMessage) -> str:
 
 def _register_core_chat_tools(client: ChatClient) -> None:
     """Register chat tools that work with any chat provider."""
+
+    @registry.tool
+    async def list_rooms(ctx: ToolContext) -> str:
+        """List all rooms you belong to — channels, groups, and DMs."""
+        rooms = _filter_rooms(await client.list_rooms(), client.username)
+        if not rooms:
+            return "No rooms found."
+
+        lines: list[str] = []
+        for room in rooms:
+            others = [m for m in room.members if m != client.username]
+            match room.kind:
+                case RoomKind.direct:
+                    label = f"DM with @{others[0]}" if others else "DM"
+                case RoomKind.group:
+                    label = (
+                        f"group DM with @{', @'.join(others)}" if others else "group DM"
+                    )
+                case RoomKind.private:
+                    name = f"#{room.name}" if room.name else "private channel"
+                    label = f"{name} (private)"
+                case RoomKind.public:
+                    label = f"#{room.name}" if room.name else "channel"
+                case _:  # pragma: no cover
+                    label = room.name or room.room_id
+            lines.append(f"  [{room.room_id}] {room.kind.value}: {label}")
+
+        return f"{len(rooms)} room(s):\n" + "\n".join(lines)
 
     @registry.tool
     async def room_messages(
@@ -360,32 +393,28 @@ async def main() -> None:  # pragma: no cover
                 log.info("Disconnected.")
 
 
+def _filter_rooms(rooms: list[RoomInfo], username: str) -> list[RoomInfo]:
+    """Drop self-DMs (DMs with no other members)."""
+    return [
+        r for r in rooms if not r.kind.is_dm or any(m != username for m in r.members)
+    ]
+
+
 async def load_all_history(client: ChatClient, brain: Brain) -> None:
-    """Load conversation history for all DM rooms."""
-    rooms = await client.list_dm_rooms()
-    log.info("Found %d DM rooms", len(rooms))
+    """Load conversation history for DM and group rooms."""
+    all_rooms = _filter_rooms(await client.list_rooms(), client.username)
+    dm_rooms = [r for r in all_rooms if r.kind.is_dm]
+    log.info("Found %d rooms (%d DM/group)", len(all_rooms), len(dm_rooms))
 
-    for room in rooms:
-        room_id = room.get("_id")
-        if not room_id:
-            continue
+    for room in dm_rooms:
+        brain.set_room_info(room.room_id, room)
 
-        usernames = room.get("usernames", [])
-        other_users = [u for u in usernames if u != client.username]
-        room_label = ", ".join(other_users) if other_users else room_id
+        other_users = [u for u in room.members if u != client.username]
+        room_label = ", ".join(other_users) if other_users else room.room_id
 
-        brain.set_room_info(
-            room_id,
-            RoomInfo(
-                room_id=room_id,
-                is_direct=True,
-                members=usernames,
-            ),
-        )
-
-        log.info("  Loading history for DM with %s", room_label)
-        history = await client.fetch_messages(room_id)
-        count = brain.load_history(room_id, history)
+        log.info("  Loading history for %s with %s", room.kind.value, room_label)
+        history = await client.fetch_messages(room.room_id)
+        count = brain.load_history(room.room_id, history)
         log.info("    Loaded %d messages", count)
 
 

@@ -9,6 +9,7 @@ from typing import Literal
 
 from anthropic.types import CacheControlEphemeralParam, TextBlockParam
 
+from docketeer.chat import RoomInfo, RoomKind  # noqa: F401
 from docketeer.plugins import discover_all
 
 log = logging.getLogger(__name__)
@@ -44,16 +45,6 @@ def _load_prompt_providers() -> list[Callable[[Path], list[SystemBlock]]]:
 
 
 _prompt_providers = _load_prompt_providers()
-
-
-@dataclass
-class RoomInfo:
-    """Metadata about the room the agent is operating in."""
-
-    room_id: str
-    is_direct: bool
-    members: list[str]
-    name: str = ""
 
 
 @dataclass
@@ -121,11 +112,21 @@ def build_system_blocks(
     dynamic_parts = [f"Current time: {current_time}"]
     if room_info:
         others = [m for m in room_info.members if m != username]
-        if room_info.is_direct:
-            label = f"DM with @{others[0]}" if others else "DM"
-        else:
-            name = f"#{room_info.name}" if room_info.name else "group chat"
-            label = f"{name} (with @{', @'.join(others)})" if others else name
+        match room_info.kind:
+            case RoomKind.direct:
+                label = f"DM with @{others[0]}" if others else "DM"
+            case RoomKind.group:
+                label = f"group DM with @{', @'.join(others)}" if others else "group DM"
+            case RoomKind.private:
+                name = f"#{room_info.name}" if room_info.name else "private channel"
+                label = (
+                    f"{name} (private, with @{', @'.join(others)})" if others else name
+                )
+            case RoomKind.public:
+                name = f"#{room_info.name}" if room_info.name else "channel"
+                label = f"{name} (with @{', @'.join(others)})" if others else name
+            case _:  # pragma: no cover
+                label = room_info.name or room_info.room_id
         dynamic_parts.append(f"Room: {label}")
 
     dynamic_parts.append(f"Talking to: @{username}")

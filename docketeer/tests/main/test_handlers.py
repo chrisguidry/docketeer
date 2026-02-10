@@ -7,7 +7,7 @@ import pytest
 from anthropic import AuthenticationError
 
 from docketeer.brain import APOLOGY, Brain
-from docketeer.chat import Attachment, IncomingMessage, RoomMessage
+from docketeer.chat import Attachment, IncomingMessage, RoomKind, RoomMessage
 from docketeer.handlers import build_content, handle_message, send_response
 from docketeer.main import run
 from docketeer.prompt import BrainResponse
@@ -46,7 +46,7 @@ async def test_handle_message_existing_room(
         display_name="Alice",
         text="hello nix",
         room_id="room1",
-        is_direct=True,
+        kind=RoomKind.direct,
     )
     await handle_message(chat, brain, msg)
     assert len(chat.sent_messages) == 1
@@ -74,13 +74,13 @@ async def test_handle_message_new_room(
         display_name="Alice",
         text="hi",
         room_id="new_room",
-        is_direct=True,
+        kind=RoomKind.direct,
     )
     await handle_message(chat, brain, msg)
     assert brain.has_history("new_room")
     assert len(chat.sent_messages) == 1
     info = brain._room_info["new_room"]
-    assert info.is_direct is True
+    assert info.kind is RoomKind.direct
     assert info.members == ["alice"]
 
 
@@ -108,7 +108,7 @@ async def test_handle_message_text_only_no_status_change(
         display_name="Alice",
         text="hi",
         room_id="room1",
-        is_direct=True,
+        kind=RoomKind.direct,
     )
     await handle_message(chat, brain, msg)
     assert chat.status_changes == []
@@ -122,7 +122,7 @@ async def test_build_content_text_only(chat: MemoryChat):
         display_name="Alice",
         text="hello",
         room_id="r1",
-        is_direct=True,
+        kind=RoomKind.direct,
     )
     content = await build_content(chat, msg)
     assert content.text == "hello"
@@ -140,7 +140,7 @@ async def test_build_content_with_attachments(chat: MemoryChat):
         display_name="Alice",
         text="look",
         room_id="r1",
-        is_direct=True,
+        kind=RoomKind.direct,
         attachments=[Attachment(url="/img.png", media_type="image/png")],
     )
     content = await build_content(chat, msg)
@@ -156,7 +156,7 @@ async def test_build_content_attachment_failure(chat: MemoryChat):
         display_name="Alice",
         text="look",
         room_id="r1",
-        is_direct=True,
+        kind=RoomKind.direct,
         attachments=[Attachment(url="/missing.png", media_type="image/png")],
     )
     content = await build_content(chat, msg)
@@ -171,7 +171,7 @@ async def test_build_content_with_timestamp(chat: MemoryChat):
         display_name="Alice",
         text="hi",
         room_id="r1",
-        is_direct=True,
+        kind=RoomKind.direct,
         timestamp=datetime(2026, 2, 6, 10, 0, tzinfo=UTC),
     )
     content = await build_content(chat, msg)
@@ -224,7 +224,7 @@ async def test_handle_message_sends_typing_events(
         display_name="Alice",
         text="hi",
         room_id="room1",
-        is_direct=True,
+        kind=RoomKind.direct,
     )
     await handle_message(chat, brain, msg)
     # Should have typing=True (on first text) then typing=False (after process)
@@ -261,7 +261,7 @@ async def test_handle_message_tool_use_status_changes(
         display_name="Alice",
         text="list files",
         room_id="room1",
-        is_direct=True,
+        kind=RoomKind.direct,
     )
     await handle_message(chat, brain, msg)
     statuses = [s[0] for s in chat.status_changes]
@@ -304,7 +304,7 @@ def _make_incoming(room_id: str = "room1") -> IncomingMessage:
         display_name="Alice",
         text="hello",
         room_id=room_id,
-        is_direct=True,
+        kind=RoomKind.direct,
     )
 
 

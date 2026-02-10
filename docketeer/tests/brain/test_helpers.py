@@ -9,10 +9,10 @@ import pytest
 
 from docketeer.audit import audit_log, log_usage
 from docketeer.brain import Brain
+from docketeer.chat import RoomInfo, RoomKind
 from docketeer.prompt import (
     CacheControl,
     MessageContent,
-    RoomInfo,
     build_system_blocks,
     ensure_template,
     extract_text,
@@ -58,7 +58,7 @@ def test_build_system_blocks_with_person_context(workspace: Path):
 
 def test_build_system_blocks_dm_room(workspace: Path):
     (workspace / "SOUL.md").write_text("soul")
-    info = RoomInfo(room_id="r1", is_direct=True, members=["nix", "alice"])
+    info = RoomInfo(room_id="r1", kind=RoomKind.direct, members=["nix", "alice"])
     blocks = build_system_blocks(workspace, "2026-02-06 10:00", "alice", room_info=info)
     dynamic = blocks[1].text
     assert "Room: DM with @nix" in dynamic
@@ -66,33 +66,56 @@ def test_build_system_blocks_dm_room(workspace: Path):
 
 def test_build_system_blocks_dm_room_no_others(workspace: Path):
     (workspace / "SOUL.md").write_text("soul")
-    info = RoomInfo(room_id="r1", is_direct=True, members=["alice"])
+    info = RoomInfo(room_id="r1", kind=RoomKind.direct, members=["alice"])
     blocks = build_system_blocks(workspace, "2026-02-06 10:00", "alice", room_info=info)
     dynamic = blocks[1].text
     assert "Room: DM" in dynamic
 
 
-def test_build_system_blocks_group_room_with_name(workspace: Path):
+def test_build_system_blocks_group_dm_room(workspace: Path):
     (workspace / "SOUL.md").write_text("soul")
     info = RoomInfo(
-        room_id="r1", is_direct=False, members=["alice", "bob", "chris"], name="general"
+        room_id="r1", kind=RoomKind.group, members=["alice", "bob", "chris"]
+    )
+    blocks = build_system_blocks(workspace, "2026-02-06 10:00", "chris", room_info=info)
+    dynamic = blocks[1].text
+    assert "Room: group DM with @alice, @bob" in dynamic
+
+
+def test_build_system_blocks_public_channel_with_name(workspace: Path):
+    (workspace / "SOUL.md").write_text("soul")
+    info = RoomInfo(
+        room_id="r1",
+        kind=RoomKind.public,
+        members=["alice", "bob", "chris"],
+        name="general",
     )
     blocks = build_system_blocks(workspace, "2026-02-06 10:00", "chris", room_info=info)
     dynamic = blocks[1].text
     assert "Room: #general (with @alice, @bob)" in dynamic
 
 
-def test_build_system_blocks_group_room_no_name(workspace: Path):
+def test_build_system_blocks_private_channel(workspace: Path):
     (workspace / "SOUL.md").write_text("soul")
-    info = RoomInfo(room_id="r1", is_direct=False, members=["alice", "bob"])
+    info = RoomInfo(
+        room_id="r1", kind=RoomKind.private, members=["alice", "bob"], name="secret"
+    )
     blocks = build_system_blocks(workspace, "2026-02-06 10:00", "bob", room_info=info)
     dynamic = blocks[1].text
-    assert "Room: group chat (with @alice)" in dynamic
+    assert "Room: #secret (private, with @alice)" in dynamic
 
 
-def test_build_system_blocks_group_room_no_others(workspace: Path):
+def test_build_system_blocks_public_channel_no_name(workspace: Path):
     (workspace / "SOUL.md").write_text("soul")
-    info = RoomInfo(room_id="r1", is_direct=False, members=["chris"], name="solo")
+    info = RoomInfo(room_id="r1", kind=RoomKind.public, members=["alice", "bob"])
+    blocks = build_system_blocks(workspace, "2026-02-06 10:00", "bob", room_info=info)
+    dynamic = blocks[1].text
+    assert "Room: channel (with @alice)" in dynamic
+
+
+def test_build_system_blocks_channel_no_others(workspace: Path):
+    (workspace / "SOUL.md").write_text("soul")
+    info = RoomInfo(room_id="r1", kind=RoomKind.public, members=["chris"], name="solo")
     blocks = build_system_blocks(workspace, "2026-02-06 10:00", "chris", room_info=info)
     dynamic = blocks[1].text
     assert "Room: #solo" in dynamic

@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from unittest.mock import patch
 
 from docketeer.brain import Brain
-from docketeer.chat import IncomingMessage, RoomMessage
+from docketeer.chat import IncomingMessage, RoomKind, RoomMessage
 from docketeer.handlers import handle_message
 from docketeer.testing import MemoryChat
 
@@ -40,7 +40,7 @@ def _make_incoming(room_id: str = "room1") -> IncomingMessage:
         display_name="Alice",
         text="hello",
         room_id=room_id,
-        is_direct=True,
+        kind=RoomKind.direct,
     )
 
 

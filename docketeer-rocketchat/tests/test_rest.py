@@ -9,7 +9,7 @@ import httpx
 import pytest
 import respx
 
-from docketeer.chat import RoomMessage
+from docketeer.chat import RoomKind, RoomMessage
 from docketeer_rocketchat.client import RocketChatClient, _parse_rc_timestamp
 
 
@@ -121,20 +121,87 @@ async def test_fetch_message_failure(rc: RocketChatClient):
 
 
 @respx.mock
-async def test_list_dm_rooms(rc: RocketChatClient):
+async def test_list_rooms(rc: RocketChatClient):
     respx.get("http://localhost:3000/api/v1/dm.list").mock(
-        return_value=httpx.Response(200, json={"ims": [{"_id": "r1"}, {"_id": "r2"}]})
+        return_value=httpx.Response(
+            200,
+            json={
+                "ims": [
+                    {"_id": "dm1", "usernames": ["testbot", "alice"]},
+                    {"_id": "gdm1", "usernames": ["testbot", "alice", "bob"]},
+                ]
+            },
+        )
     )
-    rooms = await rc.list_dm_rooms()
-    assert len(rooms) == 2
+    respx.get("http://localhost:3000/api/v1/channels.list.joined").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "channels": [
+                    {
+                        "_id": "ch1",
+                        "name": "general",
+                        "usernames": ["testbot", "alice"],
+                    },
+                ]
+            },
+        )
+    )
+    respx.get("http://localhost:3000/api/v1/groups.list").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "groups": [
+                    {"_id": "grp1", "name": "secret", "usernames": ["testbot", "bob"]},
+                ]
+            },
+        )
+    )
+    rooms = await rc.list_rooms()
+    assert len(rooms) == 4
+    by_id = {r.room_id: r for r in rooms}
+    assert by_id["dm1"].kind is RoomKind.direct
+    assert by_id["gdm1"].kind is RoomKind.group
+    assert by_id["ch1"].kind is RoomKind.public
+    assert by_id["ch1"].name == "general"
+    assert by_id["grp1"].kind is RoomKind.private
+    assert by_id["grp1"].name == "secret"
+    # Room kinds cache should be populated
+    assert rc._room_kinds["dm1"] is RoomKind.direct
+    assert rc._room_kinds["ch1"] is RoomKind.public
 
 
 @respx.mock
-async def test_list_dm_rooms_failure(rc: RocketChatClient):
+async def test_list_rooms_partial_failure(rc: RocketChatClient):
     respx.get("http://localhost:3000/api/v1/dm.list").mock(
         return_value=httpx.Response(500)
     )
-    assert await rc.list_dm_rooms() == []
+    respx.get("http://localhost:3000/api/v1/channels.list.joined").mock(
+        return_value=httpx.Response(500)
+    )
+    respx.get("http://localhost:3000/api/v1/groups.list").mock(
+        return_value=httpx.Response(
+            200,
+            json={"groups": [{"_id": "grp1", "name": "secret", "usernames": []}]},
+        )
+    )
+    rooms = await rc.list_rooms()
+    assert len(rooms) == 1
+    assert rooms[0].kind is RoomKind.private
+
+
+@respx.mock
+async def test_list_rooms_all_fail(rc: RocketChatClient):
+    respx.get("http://localhost:3000/api/v1/dm.list").mock(
+        return_value=httpx.Response(500)
+    )
+    respx.get("http://localhost:3000/api/v1/channels.list.joined").mock(
+        return_value=httpx.Response(500)
+    )
+    respx.get("http://localhost:3000/api/v1/groups.list").mock(
+        return_value=httpx.Response(500)
+    )
+    assert await rc.list_rooms() == []
 
 
 @respx.mock
@@ -354,6 +421,24 @@ async def test_fetch_messages_skips_non_image_attachments(rc: RocketChatClient):
     msgs = await rc.fetch_messages("room1")
     assert len(msgs) == 1
     assert msgs[0].attachments == []
+
+
+@respx.mock
+async def test_fetch_messages_routes_to_channels_history(rc: RocketChatClient):
+    rc._room_kinds["ch1"] = RoomKind.public
+    route = respx.get("http://localhost:3000/api/v1/channels.history")
+    route.mock(return_value=httpx.Response(200, json={"messages": []}))
+    await rc.fetch_messages("ch1")
+    assert route.called
+
+
+@respx.mock
+async def test_fetch_messages_routes_to_groups_history(rc: RocketChatClient):
+    rc._room_kinds["grp1"] = RoomKind.private
+    route = respx.get("http://localhost:3000/api/v1/groups.history")
+    route.mock(return_value=httpx.Response(200, json={"messages": []}))
+    await rc.fetch_messages("grp1")
+    assert route.called
 
 
 @respx.mock

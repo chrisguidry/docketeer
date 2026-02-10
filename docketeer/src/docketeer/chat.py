@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass
 from datetime import datetime
+from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 from docketeer.plugins import discover_one
@@ -35,6 +36,27 @@ class RoomMessage:
     thread_id: str = ""
 
 
+class RoomKind(Enum):
+    public = "public"
+    private = "private"
+    group = "group"
+    direct = "direct"
+
+    @property
+    def is_dm(self) -> bool:
+        return self in (RoomKind.group, RoomKind.direct)
+
+
+@dataclass
+class RoomInfo:
+    """Metadata about the room the agent is operating in."""
+
+    room_id: str
+    kind: RoomKind
+    members: list[str]
+    name: str = ""
+
+
 @dataclass
 class IncomingMessage:
     message_id: str
@@ -43,7 +65,7 @@ class IncomingMessage:
     display_name: str
     text: str
     room_id: str
-    is_direct: bool
+    kind: RoomKind
     timestamp: datetime | None = None
     attachments: list[Attachment] | None = None
     thread_id: str = ""
@@ -99,7 +121,7 @@ class ChatClient(ABC):
     ) -> list[RoomMessage]: ...
 
     @abstractmethod
-    async def list_dm_rooms(self) -> list[dict[str, Any]]: ...
+    async def list_rooms(self) -> list[RoomInfo]: ...
 
     @abstractmethod
     async def set_status(self, status: str, message: str = "") -> None: ...

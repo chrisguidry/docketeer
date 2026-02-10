@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from docketeer.chat import ChatClient, IncomingMessage, RoomMessage
+from docketeer.chat import ChatClient, IncomingMessage, RoomInfo, RoomMessage
 from docketeer.vault import SecretReference, Vault
 
 
@@ -54,7 +54,7 @@ class MemoryChat(ChatClient):
         self.reactions: list[Reaction] = []
         self._incoming: asyncio.Queue[IncomingMessage | None] = asyncio.Queue()
         self._room_messages: dict[str, list[RoomMessage]] = {}
-        self._dm_rooms: list[dict[str, Any]] = []
+        self._rooms: list[RoomInfo] = []
         self._attachments: dict[str, bytes] = {}
         self._messages: dict[str, dict[str, Any]] = {}
 
@@ -112,8 +112,8 @@ class MemoryChat(ChatClient):
             messages = [m for m in messages if m.timestamp < before]
         return messages[:count]
 
-    async def list_dm_rooms(self) -> list[dict[str, Any]]:
-        return self._dm_rooms
+    async def list_rooms(self) -> list[RoomInfo]:
+        return self._rooms
 
     async def set_status(self, status: str, message: str = "") -> None:
         self.status_changes.append((status, message))

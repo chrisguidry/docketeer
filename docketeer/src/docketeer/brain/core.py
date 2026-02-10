@@ -23,13 +23,12 @@ from docketeer import environment
 from docketeer.brain.compaction import compact_history
 from docketeer.brain.helpers import classify_response, summarize_webpage
 from docketeer.brain.loop import agentic_loop
-from docketeer.chat import RoomMessage
+from docketeer.chat import RoomInfo, RoomMessage
 from docketeer.people import build_person_map, load_person_context
 from docketeer.prompt import (
     BrainResponse,
     CacheControl,
     MessageContent,
-    RoomInfo,
     SystemBlock,
     build_system_blocks,
     ensure_template,

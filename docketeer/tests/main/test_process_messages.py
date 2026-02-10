@@ -8,7 +8,7 @@ import pytest
 from anthropic import AuthenticationError
 
 from docketeer.brain import Brain
-from docketeer.chat import IncomingMessage, RoomMessage
+from docketeer.chat import IncomingMessage, RoomKind, RoomMessage
 from docketeer.handlers import _check_handle_result, process_messages
 from docketeer.testing import MemoryChat
 from docketeer.tools import ToolContext, registry
@@ -32,7 +32,7 @@ def _make_incoming(
         display_name="Alice",
         text=text,
         room_id=room_id,
-        is_direct=True,
+        kind=RoomKind.direct,
     )
 
 

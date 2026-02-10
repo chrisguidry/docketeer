@@ -6,8 +6,8 @@ import logging
 from anthropic import AuthenticationError, PermissionDeniedError
 
 from docketeer.brain import APOLOGY, Brain, ProcessCallbacks
-from docketeer.chat import ChatClient, IncomingMessage
-from docketeer.prompt import BrainResponse, MessageContent, RoomInfo
+from docketeer.chat import ChatClient, IncomingMessage, RoomInfo
+from docketeer.prompt import BrainResponse, MessageContent
 
 log = logging.getLogger(__name__)
 
@@ -69,7 +69,7 @@ async def handle_message(
             msg.room_id,
             RoomInfo(
                 room_id=msg.room_id,
-                is_direct=msg.is_direct,
+                kind=msg.kind,
                 members=[msg.username],
             ),
         )

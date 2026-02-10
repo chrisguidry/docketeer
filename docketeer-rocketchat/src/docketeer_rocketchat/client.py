@@ -10,7 +10,14 @@ from typing import Any
 
 import httpx
 
-from docketeer.chat import Attachment, ChatClient, IncomingMessage, RoomMessage
+from docketeer.chat import (
+    Attachment,
+    ChatClient,
+    IncomingMessage,
+    RoomInfo,
+    RoomKind,
+    RoomMessage,
+)
 from docketeer_rocketchat.ddp import DDPClient
 
 log = logging.getLogger(__name__)
@@ -40,6 +47,7 @@ class RocketChatClient(ChatClient):
         self._ddp: DDPClient | None = None
         self._http: httpx.AsyncClient | None = None
         self._user_id: str | None = None
+        self._room_kinds: dict[str, RoomKind] = {}
 
     @property
     def user_id(self) -> str:
@@ -176,7 +184,17 @@ class RocketChatClient(ChatClient):
                 params["oldest"] = after.isoformat()
             if before:
                 params["latest"] = before.isoformat()
-            result = await self._get("dm.history", **params)
+
+            kind = self._room_kinds.get(room_id)
+            match kind:
+                case RoomKind.public:
+                    endpoint = "channels.history"
+                case RoomKind.private:
+                    endpoint = "groups.history"
+                case _:
+                    endpoint = "dm.history"
+
+            result = await self._get(endpoint, **params)
             raw_messages = list(reversed(result.get("messages", [])))
         except Exception as e:
             log.warning("Failed to fetch messages for %s: %s", room_id, e)
@@ -218,14 +236,60 @@ class RocketChatClient(ChatClient):
             )
         return messages
 
-    async def list_dm_rooms(self) -> list[dict[str, Any]]:
-        """List all DM rooms for the bot."""
+    async def list_rooms(self) -> list[RoomInfo]:
+        """List all rooms the bot is a member of."""
+        rooms: list[RoomInfo] = []
+
         try:
             result = await self._get("dm.list")
-            return result.get("ims", [])
+            for dm in result.get("ims", []):
+                room_id = dm.get("_id", "")
+                usernames = dm.get("usernames", [])
+                kind = RoomKind.group if len(usernames) > 2 else RoomKind.direct
+                self._room_kinds[room_id] = kind
+                rooms.append(
+                    RoomInfo(
+                        room_id=room_id,
+                        kind=kind,
+                        members=usernames,
+                    )
+                )
         except Exception as e:
             log.warning("Failed to list DM rooms: %s", e)
-            return []
+
+        try:
+            result = await self._get("channels.list.joined")
+            for ch in result.get("channels", []):
+                room_id = ch.get("_id", "")
+                self._room_kinds[room_id] = RoomKind.public
+                rooms.append(
+                    RoomInfo(
+                        room_id=room_id,
+                        kind=RoomKind.public,
+                        members=ch.get("usernames", []),
+                        name=ch.get("name", ""),
+                    )
+                )
+        except Exception as e:
+            log.warning("Failed to list channels: %s", e)
+
+        try:
+            result = await self._get("groups.list")
+            for grp in result.get("groups", []):
+                room_id = grp.get("_id", "")
+                self._room_kinds[room_id] = RoomKind.private
+                rooms.append(
+                    RoomInfo(
+                        room_id=room_id,
+                        kind=RoomKind.private,
+                        members=grp.get("usernames", []),
+                        name=grp.get("name", ""),
+                    )
+                )
+        except Exception as e:
+            log.warning("Failed to list groups: %s", e)
+
+        return rooms
 
     async def set_status(self, status: str, message: str = "") -> None:
         """Set the bot's presence status (online, busy, away, offline)."""
@@ -337,6 +401,8 @@ class RocketChatClient(ChatClient):
                         )
                     )
 
+        kind = self._room_kinds.get(room_id, RoomKind.direct)
+
         return IncomingMessage(
             message_id=message_id,
             user_id=user.get("_id", ""),
@@ -344,7 +410,7 @@ class RocketChatClient(ChatClient):
             display_name=user.get("name", user.get("username", "")),
             text=text,
             room_id=room_id,
-            is_direct=room_id.startswith(self._user_id or "") if room_id else False,
+            kind=kind,
             timestamp=_parse_rc_timestamp(msg_data.get("ts")),
             attachments=attachments,
             thread_id=msg_data.get("tmid", ""),
