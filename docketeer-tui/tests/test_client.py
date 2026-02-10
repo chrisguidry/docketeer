@@ -131,11 +131,14 @@ async def test_fetch_messages_time_filters():
     assert all(m.text == "old" for m in before_msgs)
 
 
-async def test_list_dm_rooms():
+async def test_list_rooms():
+    from docketeer.chat import RoomKind
+
     client = TUIClient()
-    rooms = await client.list_dm_rooms()
+    rooms = await client.list_rooms()
     assert len(rooms) == 1
-    assert rooms[0]["_id"] == ROOM_ID
+    assert rooms[0].room_id == ROOM_ID
+    assert rooms[0].kind is RoomKind.direct
 
 
 async def test_set_status_away():
@@ -179,7 +182,9 @@ async def test_incoming_messages_yields_input():
     assert messages[0].text == "hello"
     assert messages[0].room_id == ROOM_ID
     assert messages[0].username == client._human_username
-    assert messages[0].is_direct is True
+    from docketeer.chat import RoomKind
+
+    assert messages[0].kind is RoomKind.direct
 
 
 async def test_incoming_messages_skips_blank():

@@ -19,7 +19,7 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.text import Text
 
-from docketeer.chat import ChatClient, IncomingMessage, RoomMessage
+from docketeer.chat import ChatClient, IncomingMessage, RoomInfo, RoomKind, RoomMessage
 
 log = logging.getLogger(__name__)
 
@@ -138,7 +138,7 @@ class TUIClient(ChatClient):
                 display_name=self._human_username,
                 text=text,
                 room_id=ROOM_ID,
-                is_direct=True,
+                kind=RoomKind.direct,
                 timestamp=now,
             )
 
@@ -220,8 +220,14 @@ class TUIClient(ChatClient):
             messages = [m for m in messages if m.timestamp < before]
         return messages[-count:]
 
-    async def list_dm_rooms(self) -> list[dict[str, Any]]:
-        return [{"_id": ROOM_ID, "usernames": [self._human_username, self.username]}]
+    async def list_rooms(self) -> list[RoomInfo]:
+        return [
+            RoomInfo(
+                room_id=ROOM_ID,
+                kind=RoomKind.direct,
+                members=[self._human_username, self.username],
+            )
+        ]
 
     async def set_status(self, status: str, message: str = "") -> None:
         if status == "away":
