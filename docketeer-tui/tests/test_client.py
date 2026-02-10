@@ -171,10 +171,10 @@ async def test_unreact():
 
 async def test_incoming_messages_yields_input():
     client = TUIClient()
-    client._read_input = AsyncMock(side_effect=["hello", None])
-    messages = []
-    async for msg in client.incoming_messages():
-        messages.append(msg)
+    with patch.object(client, "_read_input", AsyncMock(side_effect=["hello", None])):
+        messages = []
+        async for msg in client.incoming_messages():
+            messages.append(msg)
     assert len(messages) == 1
     assert messages[0].text == "hello"
     assert messages[0].room_id == ROOM_ID
@@ -184,38 +184,40 @@ async def test_incoming_messages_yields_input():
 
 async def test_incoming_messages_skips_blank():
     client = TUIClient()
-    client._read_input = AsyncMock(side_effect=["", "  ", "actual", None])
-    messages = []
-    async for msg in client.incoming_messages():
-        messages.append(msg)
+    with patch.object(
+        client, "_read_input", AsyncMock(side_effect=["", "  ", "actual", None])
+    ):
+        messages = []
+        async for msg in client.incoming_messages():
+            messages.append(msg)
     assert len(messages) == 1
     assert messages[0].text == "actual"
 
 
 async def test_incoming_messages_stores_history():
     client = TUIClient()
-    client._read_input = AsyncMock(side_effect=["hello", None])
-    async for _ in client.incoming_messages():
-        pass
+    with patch.object(client, "_read_input", AsyncMock(side_effect=["hello", None])):
+        async for _ in client.incoming_messages():
+            pass
     assert len(client._messages) == 1
     assert client._messages[0].username == client._human_username
 
 
 async def test_incoming_messages_eof():
     client = TUIClient()
-    client._read_input = AsyncMock(side_effect=EOFError)
-    messages = []
-    async for msg in client.incoming_messages():
-        messages.append(msg)
+    with patch.object(client, "_read_input", AsyncMock(side_effect=EOFError)):
+        messages = []
+        async for msg in client.incoming_messages():
+            messages.append(msg)
     assert len(messages) == 0
 
 
 async def test_incoming_messages_keyboard_interrupt():
     client = TUIClient()
-    client._read_input = AsyncMock(side_effect=KeyboardInterrupt)
-    messages = []
-    async for msg in client.incoming_messages():
-        messages.append(msg)
+    with patch.object(client, "_read_input", AsyncMock(side_effect=KeyboardInterrupt)):
+        messages = []
+        async for msg in client.incoming_messages():
+            messages.append(msg)
     assert len(messages) == 0
 
 
