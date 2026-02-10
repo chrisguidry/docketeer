@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from docketeer_tui.client import ROOM_ID, USERNAME, TUIClient, _redirect_logs_to_file
+from docketeer_tui.client import ROOM_ID, TUIClient, _redirect_logs_to_file
 
 
 @pytest.fixture(autouse=True)
@@ -178,7 +178,7 @@ async def test_incoming_messages_yields_input():
     assert len(messages) == 1
     assert messages[0].text == "hello"
     assert messages[0].room_id == ROOM_ID
-    assert messages[0].username == USERNAME
+    assert messages[0].username == client._human_username
     assert messages[0].is_direct is True
 
 
@@ -198,7 +198,7 @@ async def test_incoming_messages_stores_history():
     async for _ in client.incoming_messages():
         pass
     assert len(client._messages) == 1
-    assert client._messages[0].username == USERNAME
+    assert client._messages[0].username == client._human_username
 
 
 async def test_incoming_messages_eof():
@@ -285,3 +285,17 @@ def test_create_client():
 
     client = create_client()
     assert isinstance(client, TUIClient)
+
+
+def test_username_from_env(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("DOCKETEER_TUI_USERNAME", "cguidry")
+    client = TUIClient()
+    assert client._human_username == "cguidry"
+    assert client._human_user_id == "tui-cguidry"
+
+
+def test_username_defaults_to_os_user():
+    import getpass
+
+    client = TUIClient()
+    assert client._human_username == getpass.getuser()

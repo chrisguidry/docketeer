@@ -1,6 +1,8 @@
 """Terminal chat client for local development."""
 
+import getpass
 import logging
+import os
 import secrets
 from collections.abc import AsyncGenerator, Generator
 from contextlib import contextmanager
@@ -22,10 +24,6 @@ from docketeer.chat import ChatClient, IncomingMessage, RoomMessage
 log = logging.getLogger(__name__)
 
 ROOM_ID = "terminal"
-USER_ID = "local-user"
-USERNAME = "you"
-
-INPUT_PROMPT = "you > "
 
 
 def _redirect_logs_to_file(data_dir: Path) -> Path:
@@ -68,6 +66,10 @@ class TUIClient(ChatClient):
         self._messages: list[RoomMessage] = []
         self._closed = False
         self._stdout_ctx: Any = None
+        self._human_username = os.environ.get(
+            "DOCKETEER_TUI_USERNAME", getpass.getuser()
+        )
+        self._human_user_id = f"tui-{self._human_username}"
 
     async def connect(self) -> None:
         from docketeer import environment
@@ -88,6 +90,7 @@ class TUIClient(ChatClient):
 
         self._console.print()
         self._console.rule("[bold]docketeer[/bold]")
+        self._console.print(f"  logged in as [bold]{self._human_username}[/bold]")
         self._console.print("  type a message and press enter. ctrl-c to quit.")
         self._console.print(f"  logs: {log_path}")
         self._console.print()
@@ -122,17 +125,17 @@ class TUIClient(ChatClient):
                 RoomMessage(
                     message_id=msg_id,
                     timestamp=now,
-                    username=USERNAME,
-                    display_name=USERNAME,
+                    username=self._human_username,
+                    display_name=self._human_username,
                     text=text,
                 )
             )
 
             yield IncomingMessage(
                 message_id=msg_id,
-                user_id=USER_ID,
-                username=USERNAME,
-                display_name=USERNAME,
+                user_id=self._human_user_id,
+                username=self._human_username,
+                display_name=self._human_username,
                 text=text,
                 room_id=ROOM_ID,
                 is_direct=True,
@@ -143,7 +146,7 @@ class TUIClient(ChatClient):
         """Read a line from the user via prompt_toolkit."""
         assert self._session is not None
         try:
-            return await self._session.prompt_async(INPUT_PROMPT)
+            return await self._session.prompt_async(f"{self._human_username} > ")
         except EOFError:
             return None
 
@@ -218,7 +221,7 @@ class TUIClient(ChatClient):
         return messages[-count:]
 
     async def list_dm_rooms(self) -> list[dict[str, Any]]:
-        return [{"_id": ROOM_ID, "usernames": [USERNAME, self.username]}]
+        return [{"_id": ROOM_ID, "usernames": [self._human_username, self.username]}]
 
     async def set_status(self, status: str, message: str = "") -> None:
         if status == "away":

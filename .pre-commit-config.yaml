@@ -110,3 +110,12 @@ repos:
         files: ^docketeer/src/|^docketeer-rocketchat/
         pass_filenames: false
         require_serial: true
+
+      - id: pytest-docketeer-tui
+        name: pytest (docketeer-tui)
+        entry: uv run --no-sync --directory docketeer-tui pytest
+        language: system
+        types: [python]
+        files: ^docketeer/src/|^docketeer-tui/
+        pass_filenames: false
+        require_serial: true

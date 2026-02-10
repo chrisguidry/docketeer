@@ -37,6 +37,8 @@ jobs:
             environment: pypi-docketeer-monty
           - package: docketeer-rocketchat
             environment: pypi-docketeer-rocketchat
+          - package: docketeer-tui
+            environment: pypi-docketeer-tui
           - package: docketeer-web
             environment: pypi-docketeer-web
     environment:
