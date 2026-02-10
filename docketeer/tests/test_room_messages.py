@@ -210,6 +210,13 @@ async def test_room_messages_empty(chat: MemoryChat, tool_context: ToolContext):
 
 
 @pytest.mark.usefixtures("_register_tool")
+async def test_room_messages_no_room_context(chat: MemoryChat, workspace: Path):
+    ctx = ToolContext(workspace=workspace, room_id="")
+    result = await registry.execute("room_messages", {}, ctx)
+    assert "No room context" in result
+
+
+@pytest.mark.usefixtures("_register_tool")
 async def test_room_messages_custom_room(chat: MemoryChat, tool_context: ToolContext):
     chat._room_messages["other-room"] = [
         RoomMessage(

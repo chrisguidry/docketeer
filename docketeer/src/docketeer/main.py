@@ -137,6 +137,8 @@ def _register_core_chat_tools(client: ChatClient) -> None:
         room_id: room to fetch from (defaults to the current room)
         """
         target_room = room_id or ctx.room_id
+        if not target_room:
+            return "No room context available. Specify a room_id to fetch messages."
 
         before_dt = datetime.fromisoformat(before) if before else None
         after_dt = datetime.fromisoformat(after) if after else None
