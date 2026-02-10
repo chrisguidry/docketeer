@@ -9,7 +9,6 @@ members = [
  "docketeer-monty",
  "docketeer-rocketchat",
  "docketeer-web",
- "spike-acp",
 ]
 
 [dependency-groups]
