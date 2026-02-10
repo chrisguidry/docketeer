@@ -82,6 +82,10 @@ class TUIClient(ChatClient):
         self._stdout_ctx = _patched_stdout()
         self._stdout_ctx.__enter__()
 
+        # recreate Console AFTER patch_stdout so it writes through the proxy;
+        # force_terminal=True because the proxy doesn't report as a TTY
+        self._console = Console(force_terminal=True)
+
         self._console.print()
         self._console.rule("[bold]docketeer[/bold]")
         self._console.print("  type a message and press enter. ctrl-c to quit.")
