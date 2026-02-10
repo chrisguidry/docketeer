@@ -20,6 +20,130 @@ from docketeer.testing import MemoryChat
 from docketeer.tools import ToolContext, registry
 from docketeer.vault import discover_vault
 
+# --- schedule_every tests ---
+
+
+async def test_schedule_every_with_duration(
+    mock_docket: AsyncMock, tool_context: ToolContext
+):
+    _register_docket_tools(mock_docket, tool_context)
+    result = await registry.execute(
+        "schedule_every",
+        {"prompt": "check status", "every": "PT30M", "key": "status-check"},
+        tool_context,
+    )
+    assert "status-check" in result
+    assert "30m" in result.lower() or "30 min" in result.lower()
+    mock_docket.replace.assert_called_once()
+
+
+async def test_schedule_every_with_cron(
+    mock_docket: AsyncMock, tool_context: ToolContext
+):
+    _register_docket_tools(mock_docket, tool_context)
+    result = await registry.execute(
+        "schedule_every",
+        {"prompt": "morning standup", "every": "0 9 * * 1-5", "key": "standup"},
+        tool_context,
+    )
+    assert "standup" in result
+    assert "cron" in result.lower()
+    mock_docket.replace.assert_called_once()
+
+
+async def test_schedule_every_invalid_expression(
+    mock_docket: AsyncMock, tool_context: ToolContext
+):
+    _register_docket_tools(mock_docket, tool_context)
+    result = await registry.execute(
+        "schedule_every",
+        {"prompt": "test", "every": "not-valid", "key": "bad"},
+        tool_context,
+    )
+    assert "error" in result.lower()
+
+
+async def test_schedule_every_invalid_timezone(
+    mock_docket: AsyncMock, tool_context: ToolContext
+):
+    _register_docket_tools(mock_docket, tool_context)
+    result = await registry.execute(
+        "schedule_every",
+        {
+            "prompt": "test",
+            "every": "0 9 * * *",
+            "key": "tz-bad",
+            "timezone": "Fake/Zone",
+        },
+        tool_context,
+    )
+    assert "error" in result.lower()
+
+
+async def test_schedule_every_silent_clears_room(
+    mock_docket: AsyncMock, tool_context: ToolContext
+):
+    _register_docket_tools(mock_docket, tool_context)
+    result = await registry.execute(
+        "schedule_every",
+        {
+            "prompt": "quiet work",
+            "every": "PT1H",
+            "key": "quiet",
+            "silent": True,
+        },
+        tool_context,
+    )
+    assert "silently" in result
+    call_kwargs = mock_docket.replace.return_value.call_args[1]
+    assert call_kwargs["room_id"] == ""
+
+
+async def test_schedule_every_thread_passthrough(
+    mock_docket: AsyncMock, tool_context: ToolContext
+):
+    tool_context.thread_id = "parent_1"
+    _register_docket_tools(mock_docket, tool_context)
+    await registry.execute(
+        "schedule_every",
+        {"prompt": "thread work", "every": "PT30M", "key": "threaded"},
+        tool_context,
+    )
+    call_kwargs = mock_docket.replace.return_value.call_args[1]
+    assert call_kwargs["thread_id"] == "parent_1"
+
+
+async def test_list_scheduled_shows_every_for_recurring(
+    mock_docket: AsyncMock, tool_context: ToolContext
+):
+    future_task = MagicMock()
+    future_task.key = "recurring-1"
+    future_task.when = datetime(2026, 12, 25, 10, 0, tzinfo=UTC)
+    future_task.kwargs = {"prompt": "check in", "every": "PT30M"}
+
+    snapshot = MagicMock()
+    snapshot.future = [future_task]
+    snapshot.running = []
+    mock_docket.snapshot.return_value = snapshot
+
+    _register_docket_tools(mock_docket, tool_context)
+    result = await registry.execute("list_scheduled", {}, tool_context)
+    assert "recurring-1" in result
+    assert "every PT30M" in result or "PT30M" in result
+
+
+async def test_schedule_every_with_cron_shorthand(
+    mock_docket: AsyncMock, tool_context: ToolContext
+):
+    _register_docket_tools(mock_docket, tool_context)
+    result = await registry.execute(
+        "schedule_every",
+        {"prompt": "daily check", "every": "@daily", "key": "daily-check"},
+        tool_context,
+    )
+    assert "daily-check" in result
+    mock_docket.replace.assert_called_once()
+
 
 def test_acquire_lock_success(tmp_path: Path):
     _acquire_lock(tmp_path)

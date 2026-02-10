@@ -468,6 +468,7 @@ name = "docketeer"
 source = { editable = "docketeer" }
 dependencies = [
     { name = "anthropic" },
+    { name = "croniter" },
     { name = "pydocket" },
     { name = "pyyaml" },
     { name = "watchfiles" },
@@ -476,6 +477,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "anthropic" },
+    { name = "croniter" },
     { name = "pydocket" },
     { name = "pyyaml" },
     { name = "watchfiles" },

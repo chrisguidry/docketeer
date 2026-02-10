@@ -17,6 +17,7 @@ classifiers = [
 ]
 dependencies = [
     "anthropic",
+    "croniter",
     "pydocket",
     "pyyaml",
     "watchfiles",

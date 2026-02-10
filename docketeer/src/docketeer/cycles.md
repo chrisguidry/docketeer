@@ -1,3 +1,6 @@
+Reverie and consolidation run automatically — you don't need to schedule them.
+Use `schedule_every` for your own recurring tasks.
+
 # Reverie
 
 Some things I like to check during reverie:

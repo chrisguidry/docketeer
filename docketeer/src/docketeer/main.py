@@ -9,7 +9,9 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
+from croniter import croniter
 from docket import Docket, Worker
 
 from docketeer import environment, tasks
@@ -20,6 +22,7 @@ from docketeer.executor import discover_executor
 from docketeer.handlers import process_messages
 from docketeer.plugins import discover_all
 from docketeer.prompt import RoomInfo
+from docketeer.tasks import parse_every
 from docketeer.tools import ToolContext, registry
 from docketeer.vault import discover_vault
 
@@ -198,6 +201,57 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
         return f'Scheduled "{key}" for {local} ({mode})'
 
     @registry.tool
+    async def schedule_every(
+        ctx: ToolContext,
+        prompt: str,
+        every: str,
+        key: str,
+        timezone: str = "UTC",
+        silent: bool = False,
+    ) -> str:
+        """Schedule a recurring task on a fixed interval or cron schedule.
+
+        prompt: what to do each time (be specific — future-you needs context)
+        every: ISO 8601 duration (PT30M, PT2H, P1D) or cron expression (0 9 * * 1-5, @daily)
+        key: required — stable identifier for cancellation (e.g. "daily-standup")
+        timezone: timezone for cron expressions (default: UTC, ignored for durations)
+        silent: if true, work silently without sending a message (default: false)
+        """
+        duration = parse_every(every)
+
+        if duration is None:
+            try:
+                tz = ZoneInfo(timezone)
+            except (KeyError, ValueError):
+                return f"Error: invalid timezone: {timezone}"
+
+            try:
+                now = datetime.now(tz)
+                first_fire = croniter(every, now).get_next(datetime)
+            except (ValueError, KeyError):
+                return f"Error: invalid schedule expression: {every}"
+
+            mode_desc = f"cron {every}"
+        else:
+            first_fire = datetime.now().astimezone()
+            mode_desc = f"every {every}"
+
+        room_id = "" if silent else ctx.room_id
+        thread_id = "" if silent else ctx.thread_id
+
+        await docket.replace(tasks.nudge_every, when=first_fire, key=key)(
+            prompt=prompt,
+            every=every,
+            timezone=timezone,
+            room_id=room_id,
+            thread_id=thread_id,
+        )
+
+        local = first_fire.astimezone().strftime("%Y-%m-%d %H:%M %Z")
+        mode = "silently" if silent else "in this room"
+        return f'Scheduled "{key}" ({mode_desc}, {mode}), first run {local}'
+
+    @registry.tool
     async def cancel_task(ctx: ToolContext, key: str) -> str:
         """Cancel a scheduled task.
 
@@ -218,13 +272,17 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
             prompt = ex.kwargs.get("prompt", "")
             if len(prompt) > 80:
                 prompt = prompt[:77] + "..."
-            lines.append(f"  [{ex.key}] {local} — {prompt}")
+            every = ex.kwargs.get("every", "")
+            recur = f" (every {every})" if every else ""
+            lines.append(f"  [{ex.key}] {local}{recur} — {prompt}")
 
         for ex in snap.running:
             prompt = ex.kwargs.get("prompt", "")
             if len(prompt) > 80:
                 prompt = prompt[:77] + "..."
-            lines.append(f"  [{ex.key}] RUNNING — {prompt}")
+            every = ex.kwargs.get("every", "")
+            recur = f" (every {every})" if every else ""
+            lines.append(f"  [{ex.key}] RUNNING{recur} — {prompt}")
 
         if not lines:
             return "No scheduled tasks"
