@@ -1,14 +1,15 @@
 [tool.uv.workspace]
 members = [
     "docketeer",
- "docketeer-1password",
- "docketeer-agentskills",
- "docketeer-bubblewrap",
- "docketeer-git",
- "docketeer-mcp",
- "docketeer-monty",
- "docketeer-rocketchat",
- "docketeer-web",
+    "docketeer-1password",
+    "docketeer-agentskills",
+    "docketeer-bubblewrap",
+    "docketeer-git",
+    "docketeer-mcp",
+    "docketeer-monty",
+    "docketeer-rocketchat",
+    "docketeer-tui",
+    "docketeer-web",
 ]
 
 [dependency-groups]
@@ -21,6 +22,7 @@ dev = [
     "docketeer-mcp",
     "docketeer-monty",
     "docketeer-rocketchat",
+    "docketeer-tui",
     "docketeer-web",
     "codespell",
     "loq",
@@ -44,6 +46,7 @@ docketeer-git = { workspace = true }
 docketeer-mcp = { workspace = true }
 docketeer-monty = { workspace = true }
 docketeer-rocketchat = { workspace = true }
+docketeer-tui = { workspace = true }
 docketeer-web = { workspace = true }
 
 [tool.ruff]
@@ -89,7 +92,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["docketeer", "docketeer_1password", "docketeer_agentskills", "docketeer_bubblewrap", "docketeer_git", "docketeer_mcp", "docketeer_monty", "docketeer_rocketchat", "docketeer_web"]
+known-first-party = ["docketeer", "docketeer_1password", "docketeer_agentskills", "docketeer_bubblewrap", "docketeer_git", "docketeer_mcp", "docketeer_monty", "docketeer_rocketchat", "docketeer_tui", "docketeer_web"]
 
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**/*.py" = ["ANN201"]

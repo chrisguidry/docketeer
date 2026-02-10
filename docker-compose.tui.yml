@@ -1,0 +1,24 @@
+services:
+  redis:
+    image: redis:8
+    volumes:
+      - redis-data:/data
+
+  docketeer:
+    build: .
+    stdin_open: true
+    tty: true
+    depends_on:
+      - redis
+    environment:
+      TERM: xterm-256color
+      DOCKETEER_ANTHROPIC_API_KEY: ${DOCKETEER_ANTHROPIC_API_KEY}
+      DOCKETEER_TUI_USERNAME: ${DOCKETEER_TUI_USERNAME:-}
+      DOCKETEER_CHAT: tui
+      DOCKETEER_DOCKET_URL: redis://redis:6379/0
+    volumes:
+      - docketeer-data:/root/.docketeer
+
+volumes:
+  redis-data:
+  docketeer-data:
