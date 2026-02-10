@@ -23,6 +23,9 @@ dependencies = [
 [project.entry-points."docketeer.chat"]
 tui = "docketeer_tui"
 
+[project.entry-points."docketeer.prompt"]
+tui = "docketeer_tui.prompt:provide_tui_context"
+
 [build-system]
 requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"

@@ -5,6 +5,7 @@ import logging
 import secrets
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from rich.console import Console
@@ -19,6 +20,26 @@ ROOM_ID = "terminal"
 USER_ID = "local-user"
 USERNAME = "you"
 
+PROMPT = "[bold cyan]>[/bold cyan] "
+
+
+def _redirect_logs_to_file(data_dir: Path) -> Path:
+    """Redirect all logging to a file so the TUI stays clean."""
+    log_path = data_dir / "docketeer.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    root = logging.getLogger()
+    # remove all existing handlers (the basicConfig stderr handler)
+    for handler in root.handlers[:]:
+        root.removeHandler(handler)
+
+    file_handler = logging.FileHandler(log_path)
+    file_handler.setFormatter(
+        logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s")
+    )
+    root.addHandler(file_handler)
+    return log_path
+
 
 class TUIClient(ChatClient):
     """Chat client that reads from stdin and writes to the terminal."""
@@ -32,9 +53,13 @@ class TUIClient(ChatClient):
         self._closed = False
 
     async def connect(self) -> None:
+        from docketeer import environment
+
+        log_path = _redirect_logs_to_file(environment.DATA_DIR)
         self._console.print()
         self._console.rule("[bold]docketeer[/bold]")
-        self._console.print("  type a message and press enter. ctrl-c to quit.\n")
+        self._console.print("  type a message and press enter. ctrl-c to quit.")
+        self._console.print(f"  logs: {log_path}\n")
 
     async def close(self) -> None:
         self._closed = True
@@ -84,6 +109,7 @@ class TUIClient(ChatClient):
     def _read_input(self) -> str | None:
         """Blocking stdin read, run in executor."""
         try:
+            self._console.print(PROMPT, end="")
             return input()
         except EOFError:
             return None

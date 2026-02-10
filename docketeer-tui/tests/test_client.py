@@ -1,19 +1,38 @@
 """Tests for the TUI chat client."""
 
+import logging
+from collections.abc import Generator
 from datetime import UTC, datetime
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-from docketeer_tui.client import ROOM_ID, USERNAME, TUIClient
+from docketeer_tui.client import ROOM_ID, USERNAME, TUIClient, _redirect_logs_to_file
 
 
-async def test_connect_and_close():
-    client = TUIClient()
-    await client.connect()
-    assert not client._closed
-    await client.close()
-    assert client._closed
+@pytest.fixture(autouse=True)
+def _isolate_logging() -> Generator[None]:
+    """Save and restore root logger handlers around each test."""
+    root = logging.getLogger()
+    original_handlers = root.handlers[:]
+    yield
+    # close any file handlers added during the test
+    for handler in root.handlers[:]:
+        if handler not in original_handlers:
+            handler.close()
+            root.removeHandler(handler)
+    root.handlers = original_handlers
+
+
+async def test_connect_and_close(tmp_path: Path):
+    log_path = tmp_path / "docketeer.log"
+    with patch("docketeer_tui.client._redirect_logs_to_file", return_value=log_path):
+        client = TUIClient()
+        await client.connect()
+        assert not client._closed
+        await client.close()
+        assert client._closed
 
 
 async def test_subscribe_is_noop():
@@ -215,12 +234,25 @@ async def test_incoming_messages_closed():
 
 
 async def test_set_status_debug_logging(caplog: pytest.LogCaptureFixture):
-    import logging
-
     client = TUIClient()
     with caplog.at_level(logging.DEBUG, logger="docketeer_tui.client"):
         await client.set_status("online", "ready")
     assert "status: online ready" in caplog.text
+
+
+async def test_redirect_logs_to_file(tmp_path: Path):
+    log_path = _redirect_logs_to_file(tmp_path)
+    assert log_path == tmp_path / "docketeer.log"
+
+    # use warning level since root logger default is WARNING
+    test_logger = logging.getLogger("test.redirect")
+    test_logger.warning("hello from test")
+
+    # flush so the message is written
+    for handler in logging.getLogger().handlers:
+        handler.flush()
+
+    assert "hello from test" in log_path.read_text()
 
 
 def test_create_client():
