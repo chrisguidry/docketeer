@@ -11,6 +11,7 @@ from fastmcp.client.transports.stdio import StdioTransport
 from docketeer.executor import CommandExecutor, Mount
 
 from .config import MCPServerConfig
+from .oauth import PendingOAuth
 from .transport import ExecutorTransport
 
 log = logging.getLogger(__name__)
@@ -30,6 +31,7 @@ def _build_transport(
     config: MCPServerConfig,
     executor: CommandExecutor | None = None,
     workspace: Path | None = None,
+    auth: str | None = None,
 ) -> ClientTransport:
     """Build the appropriate transport for a server config."""
     if config.is_stdio:
@@ -59,6 +61,7 @@ def _build_transport(
         return StreamableHttpTransport(
             url=config.url,
             headers=config.headers or None,
+            auth=auth,
         )
 
     raise ValueError(f"Server {config.name!r} has neither command nor url")
@@ -70,6 +73,7 @@ class MCPClientManager:
     def __init__(self) -> None:
         self._clients: dict[str, Client] = {}
         self._tools: dict[str, list[MCPToolInfo]] = {}
+        self._pending_oauth: dict[str, PendingOAuth] = {}
 
     async def connect(
         self,
@@ -77,12 +81,13 @@ class MCPClientManager:
         config: MCPServerConfig,
         executor: CommandExecutor | None = None,
         workspace: Path | None = None,
+        auth: str | None = None,
     ) -> list[MCPToolInfo]:
         """Connect to a server and discover its tools."""
         if name in self._clients:
             raise ValueError(f"Already connected to {name!r}")
 
-        transport = _build_transport(config, executor, workspace)
+        transport = _build_transport(config, executor, workspace, auth=auth)
         client = Client(transport)
         await client.__aenter__()
 

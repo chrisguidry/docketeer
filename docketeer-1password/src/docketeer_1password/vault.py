@@ -84,31 +84,40 @@ class OnePasswordVault(Vault):
 
     async def store(self, name: str, value: str) -> None:
         vault, item, field = _parse_name(name)
-        await self._run_op(
-            "item",
-            "create",
-            "--category",
-            "Password",
-            "--vault",
-            vault,
-            "--title",
-            item,
-            f"{field}={value}",
-        )
+        try:
+            await self._run_op(
+                "item", "edit", item, f"{field}={value}", "--vault", vault
+            )
+        except RuntimeError:
+            await self._run_op(
+                "item",
+                "create",
+                "--category",
+                "Password",
+                "--vault",
+                vault,
+                "--title",
+                item,
+                f"{field}={value}",
+            )
 
     async def generate(self, name: str, length: int = 32) -> None:
         vault, item, field = _parse_name(name)
-        await self._run_op(
-            "item",
-            "create",
-            "--category",
-            "Password",
-            "--vault",
-            vault,
-            "--title",
-            item,
-            f"--generate-password={length},letters,digits,symbols",
-        )
+        gen_flag = f"--generate-password={length},letters,digits,symbols"
+        try:
+            await self._run_op("item", "edit", item, gen_flag, "--vault", vault)
+        except RuntimeError:
+            await self._run_op(
+                "item",
+                "create",
+                "--category",
+                "Password",
+                "--vault",
+                vault,
+                "--title",
+                item,
+                gen_flag,
+            )
 
     async def delete(self, name: str) -> None:
         vault, item, field = _parse_name(name)

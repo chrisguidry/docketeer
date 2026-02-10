@@ -42,9 +42,6 @@ def _write_server(mcp_dir: Path, name: str, data: dict) -> None:
     (mcp_dir / f"{name}.json").write_text(json.dumps(data))
 
 
-# --- list_mcp_servers ---
-
-
 async def test_list_mcp_servers_none(tool_context: ToolContext, data_dir: Path):
     result = await registry.execute("list_mcp_servers", {}, tool_context)
     assert "No MCP servers configured" in result
@@ -74,9 +71,6 @@ async def test_list_mcp_servers_http(tool_context: ToolContext, mcp_dir: Path):
     _write_server(mcp_dir, "api", {"url": "https://example.com/mcp"})
     result = await registry.execute("list_mcp_servers", {}, tool_context)
     assert "https://example.com/mcp" in result
-
-
-# --- connect_mcp_server ---
 
 
 async def test_connect_already_connected(
@@ -135,9 +129,6 @@ async def test_connect_failure(
     assert "connection refused" in result
 
 
-# --- disconnect_mcp_server ---
-
-
 async def test_disconnect_not_connected(tool_context: ToolContext):
     result = await registry.execute(
         "disconnect_mcp_server", {"name": "x"}, tool_context
@@ -156,9 +147,6 @@ async def test_disconnect_success(
         "disconnect_mcp_server", {"name": "s"}, tool_context
     )
     assert "Disconnected" in result
-
-
-# --- search_mcp_tools ---
 
 
 async def test_search_no_results(tool_context: ToolContext):
@@ -191,9 +179,6 @@ async def test_search_no_description(
     ]
     result = await registry.execute("search_mcp_tools", {"query": "bare"}, tool_context)
     assert "bare_tool" in result
-
-
-# --- use_mcp_tool ---
 
 
 async def test_use_tool_success(
@@ -230,9 +215,6 @@ async def test_use_tool_error(
         tool_context,
     )
     assert "Error calling s/t" in result
-
-
-# --- add_mcp_server ---
 
 
 async def test_add_server_stdio(tool_context: ToolContext, mcp_dir: Path):
@@ -303,9 +285,6 @@ async def test_add_server_invalid_name(tool_context: ToolContext, data_dir: Path
     assert "Invalid server name" in result
 
 
-# --- remove_mcp_server ---
-
-
 async def test_remove_server_exists(tool_context: ToolContext, mcp_dir: Path):
     (mcp_dir / "old.json").write_text("{}")
     result = await registry.execute("remove_mcp_server", {"name": "old"}, tool_context)
@@ -331,3 +310,37 @@ async def test_remove_server_disconnects_first(
     )
     assert "Removed" in result
     fresh_manager.disconnect.assert_called_once_with("active")  # type: ignore[union-attr]
+
+
+async def test_remove_server_cancels_oauth_refresh(
+    tool_context: ToolContext, mcp_dir: Path
+):
+    _write_server(
+        mcp_dir, "api", {"url": "https://api.example.com/mcp", "auth": "mcp/api/token"}
+    )
+
+    mock_docket = AsyncMock()
+    with patch("docketeer_mcp.tools.current_docket", return_value=mock_docket):
+        result = await registry.execute(
+            "remove_mcp_server", {"name": "api"}, tool_context
+        )
+
+    assert "Removed" in result
+    mock_docket.cancel.assert_called_once_with("mcp-refresh-mcp/api/token")
+
+
+async def test_remove_server_cancel_refresh_ignores_errors(
+    tool_context: ToolContext, mcp_dir: Path
+):
+    _write_server(
+        mcp_dir, "api", {"url": "https://api.example.com/mcp", "auth": "mcp/api/token"}
+    )
+
+    mock_docket = AsyncMock()
+    mock_docket.cancel = AsyncMock(side_effect=RuntimeError("no such task"))
+    with patch("docketeer_mcp.tools.current_docket", return_value=mock_docket):
+        result = await registry.execute(
+            "remove_mcp_server", {"name": "api"}, tool_context
+        )
+
+    assert "Removed" in result

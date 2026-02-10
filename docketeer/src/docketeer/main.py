@@ -17,7 +17,13 @@ from docket import Docket, Worker
 from docketeer import environment, tasks
 from docketeer.brain import Brain
 from docketeer.chat import ChatClient, RoomMessage, discover_chat_backend
-from docketeer.dependencies import set_brain, set_client, set_executor
+from docketeer.dependencies import (
+    set_brain,
+    set_client,
+    set_docket,
+    set_executor,
+    set_vault,
+)
 from docketeer.executor import discover_executor
 from docketeer.handlers import process_messages
 from docketeer.plugins import discover_all
@@ -310,13 +316,16 @@ async def main() -> None:  # pragma: no cover
     brain = Brain(tool_context)
     tool_context.on_people_write = brain.rebuild_person_map
 
-    # Make brain/client/executor available to docket task handlers
+    # Make brain/client/executor/vault available to docket task handlers
     set_brain(brain)
     set_client(client)
     if executor:
         set_executor(executor)
+    if vault:
+        set_vault(vault)
 
     async with Docket(name=DOCKET_NAME, url=DOCKET_URL) as docket:
+        set_docket(docket)
         docket.register_collection("docketeer.tasks:docketeer_tasks")
         _register_task_plugins(docket)
 

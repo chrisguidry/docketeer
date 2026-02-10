@@ -5,18 +5,22 @@ from datetime import timedelta
 from pathlib import Path
 from typing import cast
 
+from docket import Docket
 from docket.dependencies import Dependency
 
 from docketeer import environment
 from docketeer.brain import Brain
 from docketeer.chat import ChatClient
 from docketeer.executor import CommandExecutor
+from docketeer.vault import Vault
 
 # ContextVars — set in main() before the worker starts
 
 _brain_var: ContextVar[Brain] = ContextVar("docketeer_brain")
 _client_var: ContextVar[ChatClient] = ContextVar("docketeer_client")
 _executor_var: ContextVar[CommandExecutor] = ContextVar("docketeer_executor")
+_vault_var: ContextVar[Vault] = ContextVar("docketeer_vault")
+_docket_var: ContextVar[Docket] = ContextVar("docketeer_docket")
 
 
 def set_brain(brain: Brain) -> None:
@@ -31,7 +35,15 @@ def set_executor(executor: CommandExecutor) -> None:
     _executor_var.set(executor)
 
 
-# --- CurrentBrain / CurrentChatClient / CurrentExecutor ---
+def set_vault(vault: Vault) -> None:
+    _vault_var.set(vault)
+
+
+def set_docket(docket: Docket) -> None:
+    _docket_var.set(docket)
+
+
+# --- CurrentBrain / CurrentChatClient / CurrentExecutor / CurrentVault / CurrentDocket ---
 
 
 class _CurrentBrain(Dependency):
@@ -59,6 +71,24 @@ class _CurrentExecutor(Dependency):
 
 def CurrentExecutor() -> CommandExecutor:
     return cast(CommandExecutor, _CurrentExecutor())
+
+
+class _CurrentVault(Dependency):
+    async def __aenter__(self) -> Vault:
+        return _vault_var.get()
+
+
+def CurrentVault() -> Vault:
+    return cast(Vault, _CurrentVault())
+
+
+class _CurrentDocket(Dependency):
+    async def __aenter__(self) -> Docket:
+        return _docket_var.get()
+
+
+def CurrentDocket() -> Docket:
+    return cast(Docket, _CurrentDocket())
 
 
 # --- WorkspacePath ---

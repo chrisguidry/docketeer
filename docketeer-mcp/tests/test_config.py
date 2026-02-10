@@ -186,3 +186,50 @@ def test_remove_server_exists(mcp_dir: Path):
 
 def test_remove_server_missing(mcp_dir: Path):
     assert remove_server("nonexistent") is False
+
+
+# --- auth field ---
+
+
+def test_config_auth_default():
+    c = MCPServerConfig(name="t", url="https://example.com/mcp")
+    assert c.auth == ""
+
+
+def test_load_servers_with_auth(mcp_dir: Path):
+    (mcp_dir / "api.json").write_text(
+        json.dumps(
+            {
+                "url": "https://api.example.com/mcp",
+                "auth": "mcp/api/token",
+            }
+        )
+    )
+    servers = load_servers()
+    assert servers["api"].auth == "mcp/api/token"
+
+
+def test_load_servers_without_auth(mcp_dir: Path):
+    (mcp_dir / "api.json").write_text(
+        json.dumps({"url": "https://api.example.com/mcp"})
+    )
+    servers = load_servers()
+    assert servers["api"].auth == ""
+
+
+def test_save_server_http_with_auth(mcp_dir: Path):
+    config = MCPServerConfig(
+        name="api",
+        url="https://api.example.com/mcp",
+        auth="mcp/api/token",
+    )
+    save_server(config)
+    data = json.loads((mcp_dir / "api.json").read_text())
+    assert data["auth"] == "mcp/api/token"
+
+
+def test_save_server_http_without_auth(mcp_dir: Path):
+    config = MCPServerConfig(name="api", url="https://api.example.com/mcp")
+    save_server(config)
+    data = json.loads((mcp_dir / "api.json").read_text())
+    assert "auth" not in data

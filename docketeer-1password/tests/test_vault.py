@@ -189,7 +189,7 @@ async def test_resolve_op_failure(vault: OnePasswordVault):
 # --- store ---
 
 
-async def test_store(vault: OnePasswordVault):
+async def test_store_edits_existing_item(vault: OnePasswordVault):
     async def fake_exec(*args: object, **_kwargs: object) -> AsyncMock:
         return _mock_op()
 
@@ -197,11 +197,40 @@ async def test_store(vault: OnePasswordVault):
         await vault.store("Agent/new-secret/password", "my-value")
 
     cmd = list(mock.call_args.args)
+    assert cmd[1] == "item"
+    assert cmd[2] == "edit"
+    assert "new-secret" in cmd
     assert "--vault" in cmd
     assert "Agent" in cmd
-    assert "--title" in cmd
-    assert "new-secret" in cmd
     assert "password=my-value" in cmd
+
+
+async def test_store_creates_when_item_missing(vault: OnePasswordVault):
+    call_count = 0
+
+    async def fake_exec(*args: object, **_kwargs: object) -> AsyncMock:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            proc = _mock_op("", returncode=1)
+            proc.communicate.return_value = (b"", b"not found")
+            return proc
+        return _mock_op()
+
+    with patch("asyncio.create_subprocess_exec", side_effect=fake_exec) as mock:
+        await vault.store("Agent/new-secret/password", "my-value")
+
+    assert call_count == 2
+    first_cmd = list(mock.call_args_list[0].args)
+    assert first_cmd[2] == "edit"
+
+    second_cmd = list(mock.call_args_list[1].args)
+    assert second_cmd[2] == "create"
+    assert "--vault" in second_cmd
+    assert "Agent" in second_cmd
+    assert "--title" in second_cmd
+    assert "new-secret" in second_cmd
+    assert "password=my-value" in second_cmd
 
 
 async def test_store_custom_field(vault: OnePasswordVault):
@@ -234,7 +263,7 @@ async def test_store_op_failure(vault: OnePasswordVault):
 # --- generate ---
 
 
-async def test_generate(vault: OnePasswordVault):
+async def test_generate_edits_existing_item(vault: OnePasswordVault):
     async def fake_exec(*args: object, **_kwargs: object) -> AsyncMock:
         return _mock_op()
 
@@ -242,7 +271,38 @@ async def test_generate(vault: OnePasswordVault):
         await vault.generate("Agent/random-key/password", length=24)
 
     cmd = list(mock.call_args.args)
+    assert cmd[1] == "item"
+    assert cmd[2] == "edit"
+    assert "random-key" in cmd
+    assert "--vault" in cmd
+    assert "Agent" in cmd
     assert any("24" in str(a) for a in cmd)
+
+
+async def test_generate_creates_when_item_missing(vault: OnePasswordVault):
+    call_count = 0
+
+    async def fake_exec(*args: object, **_kwargs: object) -> AsyncMock:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            proc = _mock_op("", returncode=1)
+            proc.communicate.return_value = (b"", b"not found")
+            return proc
+        return _mock_op()
+
+    with patch("asyncio.create_subprocess_exec", side_effect=fake_exec) as mock:
+        await vault.generate("Agent/random-key/password", length=24)
+
+    assert call_count == 2
+    first_cmd = list(mock.call_args_list[0].args)
+    assert first_cmd[2] == "edit"
+
+    second_cmd = list(mock.call_args_list[1].args)
+    assert second_cmd[2] == "create"
+    assert "--vault" in second_cmd
+    assert "Agent" in second_cmd
+    assert any("24" in str(a) for a in second_cmd)
 
 
 async def test_generate_default_length(vault: OnePasswordVault):

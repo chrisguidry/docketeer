@@ -9,7 +9,9 @@ import pytest
 from docketeer.dependencies import (
     CurrentBrain,
     CurrentChatClient,
+    CurrentDocket,
     CurrentExecutor,
+    CurrentVault,
     EnvironmentInt,
     EnvironmentStr,
     EnvironmentTimedelta,
@@ -18,15 +20,21 @@ from docketeer.dependencies import (
     _client_var,
     _CurrentBrain,
     _CurrentChatClient,
+    _CurrentDocket,
     _CurrentExecutor,
+    _CurrentVault,
+    _docket_var,
     _EnvironmentInt,
     _EnvironmentStr,
     _EnvironmentTimedelta,
     _executor_var,
+    _vault_var,
     _WorkspacePath,
     set_brain,
     set_client,
+    set_docket,
     set_executor,
+    set_vault,
 )
 
 
@@ -191,3 +199,51 @@ def test_set_executor():
     executor = AsyncMock()
     set_executor(executor)
     assert _executor_var.get() is executor
+
+
+# --- CurrentVault ---
+
+
+async def test_current_vault():
+    vault = AsyncMock()
+    token = _vault_var.set(vault)
+    try:
+        dep = _CurrentVault()
+        assert await dep.__aenter__() is vault
+    finally:
+        _vault_var.reset(token)
+
+
+async def test_current_vault_factory_returns_dependency():
+    result = CurrentVault()
+    assert isinstance(result, _CurrentVault)
+
+
+def test_set_vault():
+    vault = AsyncMock()
+    set_vault(vault)
+    assert _vault_var.get() is vault
+
+
+# --- CurrentDocket ---
+
+
+async def test_current_docket():
+    docket = AsyncMock()
+    token = _docket_var.set(docket)
+    try:
+        dep = _CurrentDocket()
+        assert await dep.__aenter__() is docket
+    finally:
+        _docket_var.reset(token)
+
+
+async def test_current_docket_factory_returns_dependency():
+    result = CurrentDocket()
+    assert isinstance(result, _CurrentDocket)
+
+
+def test_set_docket():
+    docket = AsyncMock()
+    set_docket(docket)
+    assert _docket_var.get() is docket

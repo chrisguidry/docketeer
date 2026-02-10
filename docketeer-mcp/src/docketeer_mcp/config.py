@@ -28,6 +28,7 @@ class MCPServerConfig:
     headers: dict[str, str] = field(default_factory=dict)
 
     network_access: bool = False
+    auth: str = ""
 
     @property
     def is_stdio(self) -> bool:
@@ -68,6 +69,7 @@ def load_servers() -> dict[str, MCPServerConfig]:
             url=data.get("url", ""),
             headers=data.get("headers", {}),
             network_access=data.get("networkAccess", False),
+            auth=data.get("auth", ""),
         )
     return servers
 
@@ -91,6 +93,9 @@ def save_server(config: MCPServerConfig) -> None:
         data["url"] = config.url
         if config.headers:
             data["headers"] = config.headers
+
+    if config.auth:
+        data["auth"] = config.auth
 
     path = mcp_dir / f"{config.name}.json"
     path.write_text(json.dumps(data, indent=2) + "\n")

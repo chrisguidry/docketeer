@@ -30,6 +30,9 @@ mcp = "docketeer_mcp"
 [project.entry-points."docketeer.prompt"]
 mcp = "docketeer_mcp.prompt:provide_mcp_catalog"
 
+[project.entry-points."docketeer.tasks"]
+mcp = "docketeer_mcp.tasks:mcp_task_collections"
+
 [build-system]
 requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
