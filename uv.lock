@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.12"
 
 [manifest]
@@ -12,6 +12,7 @@ members = [
     "docketeer-mcp",
     "docketeer-monty",
     "docketeer-rocketchat",
+    "docketeer-tui",
     "docketeer-web",
 ]
 
@@ -26,6 +27,7 @@ dev = [
     { name = "docketeer-mcp", editable = "docketeer-mcp" },
     { name = "docketeer-monty", editable = "docketeer-monty" },
     { name = "docketeer-rocketchat", editable = "docketeer-rocketchat" },
+    { name = "docketeer-tui", editable = "docketeer-tui" },
     { name = "docketeer-web", editable = "docketeer-web" },
     { name = "loq" },
     { name = "prek" },
@@ -573,6 +575,20 @@ requires-dist = [
     { name = "docketeer", editable = "docketeer" },
     { name = "httpx" },
     { name = "websockets" },
+]
+
+[[package]]
+name = "docketeer-tui"
+source = { editable = "docketeer-tui" }
+dependencies = [
+    { name = "docketeer" },
+    { name = "rich" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "docketeer", editable = "docketeer" },
+    { name = "rich" },
 ]
 
 [[package]]
