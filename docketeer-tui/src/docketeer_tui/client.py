@@ -48,7 +48,7 @@ def _redirect_logs_to_file(data_dir: Path) -> Path:
 @contextmanager
 def _patched_stdout() -> Generator[None]:
     """Wrap patch_stdout so tests can easily mock it out."""
-    with patch_stdout():
+    with patch_stdout(raw=True):
         yield
 
 
