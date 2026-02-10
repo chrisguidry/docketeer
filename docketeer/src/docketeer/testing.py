@@ -7,7 +7,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from docketeer.chat import ChatClient, IncomingMessage, RoomInfo, RoomMessage
+from docketeer.chat import (
+    ChatClient,
+    IncomingMessage,
+    OnHistoryCallback,
+    RoomInfo,
+    RoomMessage,
+)
 from docketeer.vault import SecretReference, Vault
 
 
@@ -67,7 +73,15 @@ class MemoryChat(ChatClient):
     async def subscribe_to_my_messages(self) -> None:
         self.subscribed = True
 
-    async def incoming_messages(self) -> AsyncGenerator[IncomingMessage, None]:
+    async def incoming_messages(
+        self,
+        on_history: OnHistoryCallback | None = None,
+    ) -> AsyncGenerator[IncomingMessage, None]:
+        if on_history:
+            for room in self._rooms:
+                messages = self._room_messages.get(room.room_id, [])
+                if messages:
+                    await on_history(room, messages)
         while True:
             msg = await self._incoming.get()
             if msg is None:

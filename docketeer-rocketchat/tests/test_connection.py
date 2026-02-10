@@ -11,14 +11,19 @@ from docketeer_rocketchat.client import RocketChatClient
 async def test_close():
     client = RocketChatClient()
     client._http = httpx.AsyncClient()
-    client._ddp = AsyncMock()
+    ddp = AsyncMock()
+    client._ddp = ddp
     await client.close()
-    client._ddp.close.assert_called_once()
+    ddp.close.assert_called_once()
+    assert client._ddp is None
+    assert client._http is None
 
 
 async def test_close_no_connections():
     client = RocketChatClient()
     await client.close()
+    assert client._ddp is None
+    assert client._http is None
 
 
 def test_user_id_property():

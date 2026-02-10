@@ -2,7 +2,7 @@
 
 import logging
 from abc import ABC, abstractmethod
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -71,6 +71,9 @@ class IncomingMessage:
     thread_id: str = ""
 
 
+OnHistoryCallback = Callable[["RoomInfo", list["RoomMessage"]], Awaitable[None]]
+
+
 class ChatClient(ABC):
     """Abstract chat client interface for testing and alternative backends."""
 
@@ -87,7 +90,10 @@ class ChatClient(ABC):
     async def subscribe_to_my_messages(self) -> None: ...
 
     @abstractmethod
-    def incoming_messages(self) -> AsyncGenerator[IncomingMessage, None]: ...
+    def incoming_messages(
+        self,
+        on_history: OnHistoryCallback | None = None,
+    ) -> AsyncGenerator[IncomingMessage, None]: ...
 
     @abstractmethod
     async def send_message(

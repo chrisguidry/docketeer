@@ -1,4 +1,4 @@
-"""Tests for incoming_messages and _parse_message_event."""
+"""Tests for incoming_messages, _parse_message_event, and reconnect."""
 
 from collections.abc import AsyncGenerator
 from typing import Any
@@ -10,6 +10,24 @@ import respx
 from docketeer_rocketchat.client import RocketChatClient
 
 
+def _make_event(
+    msg_id: str, text: str, user_id: str = "user1", username: str = "alice"
+) -> dict[str, Any]:
+    return {
+        "msg": "changed",
+        "fields": {
+            "args": [
+                {
+                    "_id": msg_id,
+                    "msg": text,
+                    "rid": "r1",
+                    "u": {"_id": user_id, "username": username},
+                }
+            ]
+        },
+    }
+
+
 async def test_incoming_messages_filters():
     """Own messages, empty text, and unparsable events are skipped."""
     client = RocketChatClient()
@@ -17,51 +35,10 @@ async def test_incoming_messages_filters():
 
     ddp = AsyncMock()
     events = [
-        # own message
-        {
-            "msg": "changed",
-            "fields": {
-                "args": [
-                    {
-                        "_id": "m1",
-                        "msg": "my own",
-                        "rid": "r1",
-                        "u": {"_id": "bot_uid", "username": "bot"},
-                    }
-                ]
-            },
-        },
-        # empty text, no attachments
-        {
-            "msg": "changed",
-            "fields": {
-                "args": [
-                    {
-                        "_id": "m2",
-                        "msg": "",
-                        "rid": "r1",
-                        "u": {"_id": "user1", "username": "alice"},
-                    }
-                ]
-            },
-        },
-        # not a "changed" event
+        _make_event("m1", "my own", user_id="bot_uid", username="bot"),
+        _make_event("m2", "", user_id="user1"),
         {"msg": "added"},
-        # valid message
-        {
-            "msg": "changed",
-            "fields": {
-                "args": [
-                    {
-                        "_id": "m3",
-                        "msg": "hello",
-                        "rid": "r1",
-                        "u": {"_id": "user1", "username": "alice"},
-                    }
-                ]
-            },
-        },
-        {"msg": "disconnected"},
+        _make_event("m3", "hello"),
     ]
 
     async def fake_events() -> AsyncGenerator[dict[str, Any], None]:
@@ -74,6 +51,7 @@ async def test_incoming_messages_filters():
     results = []
     async for msg in client.incoming_messages():
         results.append(msg)
+        break
     assert len(results) == 1
     assert results[0].text == "hello"
 
@@ -85,33 +63,9 @@ async def test_incoming_messages_dedup():
 
     ddp = AsyncMock()
     events = [
-        {
-            "msg": "changed",
-            "fields": {
-                "args": [
-                    {
-                        "_id": "m1",
-                        "msg": "hello",
-                        "rid": "r1",
-                        "u": {"_id": "user1", "username": "alice"},
-                    }
-                ]
-            },
-        },
-        {
-            "msg": "changed",
-            "fields": {
-                "args": [
-                    {
-                        "_id": "m1",
-                        "msg": "hello again",
-                        "rid": "r1",
-                        "u": {"_id": "user1", "username": "alice"},
-                    }
-                ]
-            },
-        },
-        {"msg": "disconnected"},
+        _make_event("m1", "hello"),
+        _make_event("m1", "hello again"),
+        _make_event("m2", "world"),
     ]
 
     async def fake_events() -> AsyncGenerator[dict[str, Any], None]:
@@ -124,7 +78,11 @@ async def test_incoming_messages_dedup():
     results = []
     async for msg in client.incoming_messages():
         results.append(msg)
-    assert len(results) == 1
+        if len(results) == 2:
+            break
+    assert len(results) == 2
+    assert results[0].text == "hello"
+    assert results[1].text == "world"
 
 
 async def test_incoming_messages_no_ddp():

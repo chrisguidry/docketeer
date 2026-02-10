@@ -19,7 +19,14 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.text import Text
 
-from docketeer.chat import ChatClient, IncomingMessage, RoomInfo, RoomKind, RoomMessage
+from docketeer.chat import (
+    ChatClient,
+    IncomingMessage,
+    OnHistoryCallback,
+    RoomInfo,
+    RoomKind,
+    RoomMessage,
+)
 
 log = logging.getLogger(__name__)
 
@@ -106,7 +113,10 @@ class TUIClient(ChatClient):
     async def subscribe_to_my_messages(self) -> None:
         pass
 
-    async def incoming_messages(self) -> AsyncGenerator[IncomingMessage, None]:
+    async def incoming_messages(
+        self,
+        on_history: OnHistoryCallback | None = None,
+    ) -> AsyncGenerator[IncomingMessage, None]:
         while not self._closed:
             try:
                 text = await self._read_input()

@@ -1,6 +1,7 @@
 """Rocket Chat client combining DDP subscriptions with async REST API."""
 
 import asyncio
+import contextlib
 import logging
 import mimetypes
 from collections.abc import AsyncGenerator
@@ -14,6 +15,7 @@ from docketeer.chat import (
     Attachment,
     ChatClient,
     IncomingMessage,
+    OnHistoryCallback,
     RoomInfo,
     RoomKind,
     RoomMessage,
@@ -35,6 +37,19 @@ def _parse_rc_timestamp(ts: Any) -> datetime | None:
     return None
 
 
+def _parse_attachments(raw: list[dict[str, Any]]) -> list[Attachment]:
+    """Extract image attachments from a Rocket Chat attachment list."""
+    return [
+        Attachment(
+            url=image_url,
+            media_type=att.get("image_type", "image/png"),
+            title=att.get("title", ""),
+        )
+        for att in raw
+        if (image_url := att.get("image_url"))
+    ]
+
+
 class RocketChatClient(ChatClient):
     """Hybrid Rocket Chat client: DDP for subscriptions, async REST for actions."""
 
@@ -48,6 +63,7 @@ class RocketChatClient(ChatClient):
         self._http: httpx.AsyncClient | None = None
         self._user_id: str | None = None
         self._room_kinds: dict[str, RoomKind] = {}
+        self._high_water: datetime | None = None
 
     @property
     def user_id(self) -> str:
@@ -55,6 +71,8 @@ class RocketChatClient(ChatClient):
 
     async def connect(self) -> None:
         """Connect via DDP and authenticate via REST."""
+        with contextlib.suppress(Exception):
+            await self.close()
         log.info("Connecting to Rocket Chat at %s...", self.url)
         ws_url = self._to_ws_url(self.url)
         self._ddp = DDPClient(url=ws_url)
@@ -74,12 +92,8 @@ class RocketChatClient(ChatClient):
         data = resp.json()["data"]
         auth_token = data["authToken"]
         self._user_id = data["userId"]
-        self._http.headers.update(
-            {
-                "X-Auth-Token": auth_token,
-                "X-User-Id": self._user_id,
-            }
-        )
+        self._http.headers["X-Auth-Token"] = auth_token
+        self._http.headers["X-User-Id"] = self._user_id
 
         me = await self._get("me")
         log.info("Logged in as @%s (%s)", me.get("username"), me.get("name", ""))
@@ -94,11 +108,11 @@ class RocketChatClient(ChatClient):
         assert self._http is not None, "Not connected — call connect() first"
         return self._http
 
-    def _to_ws_url(self, url: str) -> str:
-        if url.startswith("https://"):
-            return url.replace("https://", "wss://") + "/websocket"
-        elif url.startswith("http://"):
-            return url.replace("http://", "ws://") + "/websocket"
+    @staticmethod
+    def _to_ws_url(url: str) -> str:
+        for http, ws in [("https://", "wss://"), ("http://", "ws://")]:
+            if url.startswith(http):
+                return url.replace(http, ws) + "/websocket"
         return url + "/websocket"
 
     async def _get(self, endpoint: str, **params: Any) -> dict[str, Any]:
@@ -210,18 +224,8 @@ class RocketChatClient(ChatClient):
             if not dt:
                 continue
 
-            attachments = None
-            if raw_attachments := msg.get("attachments"):
-                attachments = []
-                for att in raw_attachments:
-                    if image_url := att.get("image_url"):
-                        attachments.append(
-                            Attachment(
-                                url=image_url,
-                                media_type=att.get("image_type", "image/png"),
-                                title=att.get("title", ""),
-                            )
-                        )
+            raw_att = msg.get("attachments")
+            attachments = _parse_attachments(raw_att) if raw_att else None
 
             messages.append(
                 RoomMessage(
@@ -331,27 +335,107 @@ class RocketChatClient(ChatClient):
         except Exception:
             log.warning("Failed to send typing indicator to %s", room_id)
 
-    async def incoming_messages(self) -> AsyncGenerator[IncomingMessage, None]:
-        """Yield incoming messages from subscriptions."""
+    async def incoming_messages(
+        self,
+        on_history: OnHistoryCallback | None = None,
+    ) -> AsyncGenerator[IncomingMessage, None]:
+        """Yield incoming messages, reconnecting with backoff on disconnect."""
         if not self._ddp:
             return
 
         seen: set[str] = set()
-        async for event in self._ddp.events():
-            log.debug("DDP event: %s", event)
-            msg = await self._parse_message_event(event)
-            if (
-                not msg
-                or msg.user_id == self._user_id
-                or not (msg.text or msg.attachments)
-            ):
-                continue
-            if msg.message_id in seen:
-                log.debug("Skipping duplicate message %s", msg.message_id)
-                continue
-            seen.add(msg.message_id)
-            log.info("Message from %s in %s", msg.username, msg.room_id)
-            yield msg
+        backoff = 1
+
+        while True:
+            await self._after_connect(on_history, since=self._high_water)
+
+            async for event in self._ddp.events():
+                log.debug("DDP event: %s", event)
+                msg = await self._parse_message_event(event)
+                if (
+                    not msg
+                    or msg.user_id == self._user_id
+                    or not (msg.text or msg.attachments)
+                ):
+                    continue
+                if msg.message_id in seen:
+                    log.debug("Skipping duplicate message %s", msg.message_id)
+                    continue
+                seen.add(msg.message_id)
+                log.info("Message from %s in %s", msg.username, msg.room_id)
+                if msg.timestamp and (
+                    self._high_water is None or msg.timestamp > self._high_water
+                ):
+                    self._high_water = msg.timestamp
+                yield msg
+
+            log.warning("Connection lost, reconnecting...")
+            while True:
+                with contextlib.suppress(Exception):
+                    await self.close()
+                await asyncio.sleep(backoff)
+                try:
+                    await self.connect()
+                    backoff = 1
+                    break
+                except Exception:
+                    backoff = min(backoff * 2, 60)
+                    log.exception("Reconnect failed, next attempt in %ds", backoff)
+
+    async def _after_connect(
+        self,
+        on_history: OnHistoryCallback | None,
+        since: datetime | None = None,
+    ) -> None:
+        """Subscribe, set status, and prime history after a successful connect."""
+        await self.subscribe_to_my_messages()
+        await self.set_status_available()
+        await self._prime_history(on_history, since=since)
+
+    async def _prime_history(
+        self,
+        on_history: OnHistoryCallback | None,
+        since: datetime | None = None,
+    ) -> None:
+        """Fetch room history and prime the brain via callback."""
+        if not on_history:
+            return
+
+        try:
+            rooms = await self.list_rooms()
+        except Exception:
+            log.warning("Failed to list rooms for history", exc_info=True)
+            return
+
+        dm_rooms = [
+            r
+            for r in rooms
+            if r.kind.is_dm and any(m != self.username for m in r.members)
+        ]
+
+        qualifier = f" since {since.isoformat()}" if since else ""
+        log.info("Loading history for %d room(s)%s", len(dm_rooms), qualifier)
+
+        for room in dm_rooms:
+            try:
+                messages = await self.fetch_messages(room.room_id, after=since)
+                if not messages:
+                    continue
+                await on_history(room, messages)
+                for msg in messages:
+                    if self._high_water is None or msg.timestamp > self._high_water:
+                        self._high_water = msg.timestamp
+                others = [m for m in room.members if m != self.username]
+                log.info(
+                    "  %s with %s: %d messages",
+                    room.kind.value,
+                    ", ".join(others) or room.room_id,
+                    len(messages),
+                )
+            except Exception:
+                log.warning(
+                    "Failed to load history for %s", room.room_id, exc_info=True
+                )
 
     async def _parse_message_event(
         self, event: dict[str, Any]
@@ -388,18 +472,8 @@ class RocketChatClient(ChatClient):
         room_id = msg_data.get("rid", "") or payload.get("rid", "")
         text = msg_data.get("msg", "")
 
-        attachments = None
-        if raw_attachments := msg_data.get("attachments"):
-            attachments = []
-            for att in raw_attachments:
-                if image_url := att.get("image_url"):
-                    attachments.append(
-                        Attachment(
-                            url=image_url,
-                            media_type=att.get("image_type", "image/png"),
-                            title=att.get("title", ""),
-                        )
-                    )
+        raw_att = msg_data.get("attachments")
+        attachments = _parse_attachments(raw_att) if raw_att else None
 
         kind = self._room_kinds.get(room_id, RoomKind.direct)
 
@@ -420,5 +494,7 @@ class RocketChatClient(ChatClient):
         """Close the connection."""
         if self._http:
             await self._http.aclose()
+            self._http = None
         if self._ddp:
             await self._ddp.close()
+            self._ddp = None

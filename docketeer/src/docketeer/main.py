@@ -373,18 +373,9 @@ async def main() -> None:  # pragma: no cover
             await client.connect()
             tool_context.agent_username = client.username
 
-            log.info("Loading conversation history...")
-            await load_all_history(client, brain)
-
-            log.info("Subscribing to messages...")
-            await client.subscribe_to_my_messages()
-
-            await client.set_status_available()
             log.info("Listening for messages...")
             try:
                 await process_messages(client, brain)
-            except KeyboardInterrupt:
-                pass
             finally:
                 worker_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
@@ -398,24 +389,6 @@ def _filter_rooms(rooms: list[RoomInfo], username: str) -> list[RoomInfo]:
     return [
         r for r in rooms if not r.kind.is_dm or any(m != username for m in r.members)
     ]
-
-
-async def load_all_history(client: ChatClient, brain: Brain) -> None:
-    """Load conversation history for DM and group rooms."""
-    all_rooms = _filter_rooms(await client.list_rooms(), client.username)
-    dm_rooms = [r for r in all_rooms if r.kind.is_dm]
-    log.info("Found %d rooms (%d DM/group)", len(all_rooms), len(dm_rooms))
-
-    for room in dm_rooms:
-        brain.set_room_info(room.room_id, room)
-
-        other_users = [u for u in room.members if u != client.username]
-        room_label = ", ".join(other_users) if other_users else room.room_id
-
-        log.info("  Loading history for %s with %s", room.kind.value, room_label)
-        history = await client.fetch_messages(room.room_id)
-        count = brain.load_history(room.room_id, history)
-        log.info("    Loaded %d messages", count)
 
 
 def run() -> None:

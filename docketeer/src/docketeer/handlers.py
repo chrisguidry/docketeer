@@ -6,7 +6,7 @@ import logging
 from anthropic import AuthenticationError, PermissionDeniedError
 
 from docketeer.brain import APOLOGY, Brain, ProcessCallbacks
-from docketeer.chat import ChatClient, IncomingMessage, RoomInfo
+from docketeer.chat import ChatClient, IncomingMessage, RoomInfo, RoomMessage
 from docketeer.prompt import BrainResponse, MessageContent
 
 log = logging.getLogger(__name__)
@@ -14,7 +14,12 @@ log = logging.getLogger(__name__)
 
 async def process_messages(client: ChatClient, brain: Brain) -> None:
     """Process incoming messages, interrupting long-running tool loops on new arrivals."""
-    msg_iter = client.incoming_messages().__aiter__()
+
+    async def _on_history(room: RoomInfo, messages: list[RoomMessage]) -> None:
+        brain.set_room_info(room.room_id, room)
+        brain.load_history(room.room_id, messages)
+
+    msg_iter = client.incoming_messages(on_history=_on_history).__aiter__()
     next_msg = asyncio.create_task(anext(msg_iter, None))
 
     while True:
