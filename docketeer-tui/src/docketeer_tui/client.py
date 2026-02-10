@@ -1,13 +1,16 @@
 """Terminal chat client for local development."""
 
-import asyncio
 import logging
 import secrets
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Generator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from prompt_toolkit import PromptSession
+from prompt_toolkit.history import FileHistory
+from prompt_toolkit.patch_stdout import patch_stdout
 from rich import box
 from rich.console import Console
 from rich.markdown import Markdown
@@ -31,7 +34,6 @@ def _redirect_logs_to_file(data_dir: Path) -> Path:
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
     root = logging.getLogger()
-    # remove all existing handlers (the basicConfig stderr handler)
     for handler in root.handlers[:]:
         root.removeHandler(handler)
 
@@ -43,21 +45,43 @@ def _redirect_logs_to_file(data_dir: Path) -> Path:
     return log_path
 
 
+@contextmanager
+def _patched_stdout() -> Generator[None]:
+    """Wrap patch_stdout so tests can easily mock it out."""
+    with patch_stdout():
+        yield
+
+
 class TUIClient(ChatClient):
-    """Chat client that reads from stdin and writes to the terminal."""
+    """Chat client that reads from stdin and writes to the terminal.
+
+    Uses prompt_toolkit to maintain a fixed input area at the bottom of the
+    terminal while agent responses scroll above it.
+    """
 
     username = "docketeer"
     user_id = "docketeer-tui"
 
     def __init__(self) -> None:
         self._console = Console()
+        self._session: PromptSession[str] | None = None
         self._messages: list[RoomMessage] = []
         self._closed = False
+        self._stdout_ctx: Any = None
 
     async def connect(self) -> None:
         from docketeer import environment
 
         log_path = _redirect_logs_to_file(environment.DATA_DIR)
+
+        history_file = environment.DATA_DIR / ".tui-history.txt"
+        self._session = PromptSession(history=FileHistory(str(history_file)))
+
+        # patch_stdout makes all print() / Console.print() output render
+        # above the prompt_toolkit input line — the key to two-region UX
+        self._stdout_ctx = _patched_stdout()
+        self._stdout_ctx.__enter__()
+
         self._console.print()
         self._console.rule("[bold]docketeer[/bold]")
         self._console.print("  type a message and press enter. ctrl-c to quit.")
@@ -68,15 +92,17 @@ class TUIClient(ChatClient):
         self._closed = True
         self._console.print()
         self._console.rule("[dim]disconnected[/dim]")
+        if self._stdout_ctx:
+            self._stdout_ctx.__exit__(None, None, None)
+            self._stdout_ctx = None
 
     async def subscribe_to_my_messages(self) -> None:
         pass
 
     async def incoming_messages(self) -> AsyncGenerator[IncomingMessage, None]:
-        loop = asyncio.get_running_loop()
         while not self._closed:
             try:
-                text = await loop.run_in_executor(None, self._read_input)
+                text = await self._read_input()
             except (EOFError, KeyboardInterrupt):
                 break
             if text is None:
@@ -109,10 +135,11 @@ class TUIClient(ChatClient):
                 timestamp=now,
             )
 
-    def _read_input(self) -> str | None:
-        """Blocking stdin read, run in executor."""
+    async def _read_input(self) -> str | None:
+        """Read a line from the user via prompt_toolkit."""
+        assert self._session is not None
         try:
-            return input(INPUT_PROMPT)
+            return await self._session.prompt_async(INPUT_PROMPT)
         except EOFError:
             return None
 
@@ -191,7 +218,7 @@ class TUIClient(ChatClient):
 
     async def set_status(self, status: str, message: str = "") -> None:
         if status == "away":
-            self._console.print(Text("  thinking...", style="dim italic"), end="\r")
+            self._console.print(Text("  thinking...", style="dim italic"))
         elif log.isEnabledFor(logging.DEBUG):
             log.debug("status: %s %s", status, message)
 

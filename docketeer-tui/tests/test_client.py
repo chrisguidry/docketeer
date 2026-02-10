@@ -4,7 +4,7 @@ import logging
 from collections.abc import Generator
 from datetime import UTC, datetime
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -27,10 +27,14 @@ def _isolate_logging() -> Generator[None]:
 
 async def test_connect_and_close(tmp_path: Path):
     log_path = tmp_path / "docketeer.log"
-    with patch("docketeer_tui.client._redirect_logs_to_file", return_value=log_path):
+    with (
+        patch("docketeer_tui.client._redirect_logs_to_file", return_value=log_path),
+        patch("docketeer_tui.client._patched_stdout", return_value=MagicMock()),
+    ):
         client = TUIClient()
         await client.connect()
         assert not client._closed
+        assert client._session is not None
         await client.close()
         assert client._closed
 
@@ -167,61 +171,68 @@ async def test_unreact():
 
 async def test_incoming_messages_yields_input():
     client = TUIClient()
-    inputs = iter(["hello", None])
-    with patch.object(client, "_read_input", side_effect=inputs):
-        messages = []
-        async for msg in client.incoming_messages():
-            messages.append(msg)
-        assert len(messages) == 1
-        assert messages[0].text == "hello"
-        assert messages[0].room_id == ROOM_ID
-        assert messages[0].username == USERNAME
-        assert messages[0].is_direct is True
+    client._read_input = AsyncMock(side_effect=["hello", None])
+    messages = []
+    async for msg in client.incoming_messages():
+        messages.append(msg)
+    assert len(messages) == 1
+    assert messages[0].text == "hello"
+    assert messages[0].room_id == ROOM_ID
+    assert messages[0].username == USERNAME
+    assert messages[0].is_direct is True
 
 
 async def test_incoming_messages_skips_blank():
     client = TUIClient()
-    inputs = iter(["", "  ", "actual", None])
-    with patch.object(client, "_read_input", side_effect=inputs):
-        messages = []
-        async for msg in client.incoming_messages():
-            messages.append(msg)
-        assert len(messages) == 1
-        assert messages[0].text == "actual"
+    client._read_input = AsyncMock(side_effect=["", "  ", "actual", None])
+    messages = []
+    async for msg in client.incoming_messages():
+        messages.append(msg)
+    assert len(messages) == 1
+    assert messages[0].text == "actual"
 
 
 async def test_incoming_messages_stores_history():
     client = TUIClient()
-    inputs = iter(["hello", None])
-    with patch.object(client, "_read_input", side_effect=inputs):
-        async for _ in client.incoming_messages():
-            pass
+    client._read_input = AsyncMock(side_effect=["hello", None])
+    async for _ in client.incoming_messages():
+        pass
     assert len(client._messages) == 1
     assert client._messages[0].username == USERNAME
 
 
 async def test_incoming_messages_eof():
     client = TUIClient()
-    with patch.object(client, "_read_input", side_effect=EOFError):
-        messages = []
-        async for msg in client.incoming_messages():
-            messages.append(msg)
-        assert len(messages) == 0
+    client._read_input = AsyncMock(side_effect=EOFError)
+    messages = []
+    async for msg in client.incoming_messages():
+        messages.append(msg)
+    assert len(messages) == 0
 
 
 async def test_incoming_messages_keyboard_interrupt():
     client = TUIClient()
-    with patch.object(client, "_read_input", side_effect=KeyboardInterrupt):
-        messages = []
-        async for msg in client.incoming_messages():
-            messages.append(msg)
-        assert len(messages) == 0
+    client._read_input = AsyncMock(side_effect=KeyboardInterrupt)
+    messages = []
+    async for msg in client.incoming_messages():
+        messages.append(msg)
+    assert len(messages) == 0
 
 
 async def test_read_input_eof():
     client = TUIClient()
-    with patch("builtins.input", side_effect=EOFError):
-        assert client._read_input() is None
+    mock_session = AsyncMock()
+    mock_session.prompt_async = AsyncMock(side_effect=EOFError)
+    client._session = mock_session
+    assert await client._read_input() is None
+
+
+async def test_read_input_returns_text():
+    client = TUIClient()
+    mock_session = AsyncMock()
+    mock_session.prompt_async = AsyncMock(return_value="hello")
+    client._session = mock_session
+    assert await client._read_input() == "hello"
 
 
 async def test_incoming_messages_closed():
@@ -253,6 +264,20 @@ async def test_redirect_logs_to_file(tmp_path: Path):
         handler.flush()
 
     assert "hello from test" in log_path.read_text()
+
+
+def test_patched_stdout():
+    from docketeer_tui.client import _patched_stdout
+
+    with _patched_stdout():
+        pass
+
+
+async def test_close_without_connect():
+    """close() should not fail if connect() was never called."""
+    client = TUIClient()
+    await client.close()
+    assert client._closed
 
 
 def test_create_client():
