@@ -125,7 +125,7 @@ class Brain:
         if first_run:
             ensure_template(self._workspace, "bootstrap.md")
 
-        ensure_template(self._workspace, "cycles.md")
+        ensure_template(self._workspace, "practice.md")
 
         self.tool_context.summarize = self._summarize_webpage
         self.tool_context.classify_response = self._classify_response

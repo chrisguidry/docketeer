@@ -41,8 +41,8 @@ today's journal.\
 
 
 def _read_cycle_guidance(workspace: Path, section: str) -> str:
-    """Read the agent's notes for a cycle from CYCLES.md."""
-    cycles_path = workspace / "CYCLES.md"
+    """Read the agent's notes for a cycle from PRACTICE.md."""
+    cycles_path = workspace / "PRACTICE.md"
     if not cycles_path.exists():
         return ""
     text = cycles_path.read_text()

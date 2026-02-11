@@ -40,11 +40,11 @@ def test_brain_init_first_run(tool_context: ToolContext, mock_anthropic: MagicMo
     assert (tool_context.workspace / "BOOTSTRAP.md").exists()
 
 
-def test_brain_init_seeds_cycles_md(
+def test_brain_init_seeds_practice_md(
     tool_context: ToolContext, mock_anthropic: MagicMock
 ):
     Brain(tool_context)
-    assert (tool_context.workspace / "CYCLES.md").exists()
+    assert (tool_context.workspace / "PRACTICE.md").exists()
 
 
 def test_brain_init_existing_soul(tool_context: ToolContext, mock_anthropic: MagicMock):

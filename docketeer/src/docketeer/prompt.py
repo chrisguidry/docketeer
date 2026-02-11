@@ -87,6 +87,10 @@ def build_system_blocks(workspace: Path) -> list[SystemBlock]:
     soul_path = workspace / "SOUL.md"
     stable_text = soul_path.read_text()
 
+    practice_path = workspace / "PRACTICE.md"
+    if practice_path.exists():
+        stable_text += "\n\n" + practice_path.read_text()
+
     bootstrap_path = workspace / "BOOTSTRAP.md"
     if bootstrap_path.exists():
         stable_text += "\n\n" + bootstrap_path.read_text()

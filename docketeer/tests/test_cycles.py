@@ -26,7 +26,7 @@ from .conftest import (
 
 
 def test_read_cycle_guidance_extracts_section(workspace: Path):
-    (workspace / "CYCLES.md").write_text(
+    (workspace / "PRACTICE.md").write_text(
         "# Reverie\n\nCheck promises.\n\n# Consolidation\n\nReview journal.\n"
     )
     result = _read_cycle_guidance(workspace, "Reverie")
@@ -34,7 +34,7 @@ def test_read_cycle_guidance_extracts_section(workspace: Path):
 
 
 def test_read_cycle_guidance_last_section(workspace: Path):
-    (workspace / "CYCLES.md").write_text(
+    (workspace / "PRACTICE.md").write_text(
         "# Reverie\n\nCheck promises.\n\n# Consolidation\n\nReview journal.\n"
     )
     result = _read_cycle_guidance(workspace, "Consolidation")
@@ -42,7 +42,7 @@ def test_read_cycle_guidance_last_section(workspace: Path):
 
 
 def test_read_cycle_guidance_missing_section(workspace: Path):
-    (workspace / "CYCLES.md").write_text("# Reverie\n\nCheck promises.\n")
+    (workspace / "PRACTICE.md").write_text("# Reverie\n\nCheck promises.\n")
     result = _read_cycle_guidance(workspace, "Nonexistent")
     assert result == ""
 
@@ -53,7 +53,7 @@ def test_read_cycle_guidance_no_file(workspace: Path):
 
 
 def test_build_cycle_prompt_with_guidance(workspace: Path):
-    (workspace / "CYCLES.md").write_text("# Reverie\n\nMy notes here.\n")
+    (workspace / "PRACTICE.md").write_text("# Reverie\n\nMy notes here.\n")
     result = _build_cycle_prompt(REVERIE_PROMPT, workspace, "Reverie")
     assert result.startswith(REVERIE_PROMPT)
     assert "Your own notes for this cycle:" in result
