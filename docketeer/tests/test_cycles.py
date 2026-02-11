@@ -15,6 +15,7 @@ from docketeer.cycles import (
     consolidation,
     reverie,
 )
+from docketeer.prompt import extract_text
 from docketeer.tasks import docketeer_tasks
 
 from .conftest import (
@@ -68,7 +69,7 @@ async def test_reverie_calls_brain(brain: Brain, workspace: Path, fake_messages:
     await reverie(brain=brain, workspace=workspace)
     assert "__tasks__" in brain._conversations
     msgs = brain._conversations["__tasks__"]
-    assert any(REVERIE_PROMPT in str(m.get("content", "")) for m in msgs)
+    assert any(REVERIE_PROMPT in extract_text(m.get("content", "")) for m in msgs)
 
 
 async def test_consolidation_calls_brain(
@@ -77,7 +78,7 @@ async def test_consolidation_calls_brain(
     await consolidation(brain=brain, workspace=workspace)
     assert "__tasks__" in brain._conversations
     msgs = brain._conversations["__tasks__"]
-    assert any(CONSOLIDATION_PROMPT in str(m.get("content", "")) for m in msgs)
+    assert any(CONSOLIDATION_PROMPT in extract_text(m.get("content", "")) for m in msgs)
 
 
 async def test_reverie_empty_response(

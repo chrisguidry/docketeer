@@ -205,15 +205,16 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
         when: str,
         key: str = "",
         silent: bool = False,
+        model: str = "",
     ) -> str:
         """Schedule a future task — reminder, follow-up, or background work. The time
-        must be in the future — add the delay to the current time shown in your system
-        prompt.
+        must be in the future — add the delay to the current time shown in your context.
 
         prompt: what to do when the task fires (be specific — future-you needs context)
         when: ISO 8601 datetime in the future (e.g. 2026-02-07T15:00:00-05:00)
         key: unique identifier for cancellation/rescheduling (e.g. "remind-chris-dentist")
         silent: if true, work silently without sending a message (default: false)
+        model: intelligence tier — "opus", "sonnet", or "haiku" (default: chat model)
         """
         try:
             fire_at = datetime.fromisoformat(when)
@@ -228,6 +229,7 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
                 prompt=prompt,
                 room_id=room_id,
                 thread_id=thread_id,
+                model=model,
             )
         else:
             key = f"task-{fire_at.strftime('%Y%m%d-%H%M%S')}"
@@ -235,6 +237,7 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
                 prompt=prompt,
                 room_id=room_id,
                 thread_id=thread_id,
+                model=model,
             )
 
         local = fire_at.astimezone().strftime("%Y-%m-%d %H:%M %Z")
@@ -249,6 +252,7 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
         key: str,
         timezone: str = "UTC",
         silent: bool = False,
+        model: str = "",
     ) -> str:
         """Schedule a recurring task on a fixed interval or cron schedule.
 
@@ -257,6 +261,7 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
         key: required — stable identifier for cancellation (e.g. "daily-standup")
         timezone: timezone for cron expressions (default: UTC, ignored for durations)
         silent: if true, work silently without sending a message (default: false)
+        model: intelligence tier — "opus", "sonnet", or "haiku" (default: chat model)
         """
         duration = parse_every(every)
 
@@ -286,6 +291,7 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
             timezone=timezone,
             room_id=room_id,
             thread_id=thread_id,
+            model=model,
         )
 
         local = first_fire.astimezone().strftime("%Y-%m-%d %H:%M %Z")
@@ -336,6 +342,7 @@ async def main() -> None:  # pragma: no cover
     # Ensure data directories exist
     environment.WORKSPACE_PATH.mkdir(parents=True, exist_ok=True)
     environment.AUDIT_PATH.mkdir(parents=True, exist_ok=True)
+    environment.USAGE_PATH.mkdir(parents=True, exist_ok=True)
     log.info("Data directory: %s", environment.DATA_DIR.resolve())
 
     # Discover plugins
@@ -378,6 +385,8 @@ async def main() -> None:  # pragma: no cover
             log.info("Listening for messages...")
             try:
                 await process_messages(client, brain)
+            except asyncio.CancelledError:
+                pass
             finally:
                 worker_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):

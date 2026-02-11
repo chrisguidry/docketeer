@@ -5,7 +5,7 @@ import logging
 
 from anthropic import AuthenticationError, PermissionDeniedError
 
-from docketeer.brain import APOLOGY, Brain, ProcessCallbacks
+from docketeer.brain import APOLOGY, CHAT_MODEL, Brain, ProcessCallbacks
 from docketeer.chat import ChatClient, IncomingMessage, RoomInfo, RoomMessage
 from docketeer.prompt import BrainResponse, MessageContent
 
@@ -98,7 +98,9 @@ async def handle_message(
     )
 
     try:
-        response = await brain.process(msg.room_id, content, callbacks=callbacks)
+        response = await brain.process(
+            msg.room_id, content, callbacks=callbacks, model=CHAT_MODEL
+        )
     except (AuthenticationError, PermissionDeniedError):
         raise
     except Exception:

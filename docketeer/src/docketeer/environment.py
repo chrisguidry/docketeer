@@ -84,3 +84,4 @@ def _parse_iso8601_duration(value: str) -> timedelta:
 DATA_DIR = get_path("DATA_DIR", "~/.docketeer")
 WORKSPACE_PATH = DATA_DIR / "memory"
 AUDIT_PATH = DATA_DIR / "audit"
+USAGE_PATH = DATA_DIR / "token-usage"

@@ -77,17 +77,12 @@ def ensure_template(workspace: Path, filename: str) -> None:
     log.info("Copied %s template to %s", filename, target)
 
 
-def build_system_blocks(
-    workspace: Path,
-    current_time: str,
-    username: str,
-    person_context: str = "",
-    room_info: RoomInfo | None = None,
-) -> list[SystemBlock]:
-    """Build system prompt as content blocks for prompt caching.
+def build_system_blocks(workspace: Path) -> list[SystemBlock]:
+    """Build system prompt as stable content blocks for prompt caching.
 
-    The stable SOUL.md content is cached; the dynamic time/username/person
-    context block is not (but saves tool calls Nix would otherwise make).
+    All content here is static between requests so that tools + system form
+    a fully cacheable prefix. Dynamic per-request context (time, room, person)
+    goes into the user message via build_dynamic_context().
     """
     soul_path = workspace / "SOUL.md"
     stable_text = soul_path.read_text()
@@ -97,10 +92,7 @@ def build_system_blocks(
         stable_text += "\n\n" + bootstrap_path.read_text()
 
     blocks: list[SystemBlock] = [
-        SystemBlock(
-            text=stable_text,
-            cache_control=CacheControl(),
-        ),
+        SystemBlock(text=stable_text),
     ]
 
     for provider in _prompt_providers:
@@ -109,7 +101,23 @@ def build_system_blocks(
         except Exception:
             log.warning("Prompt provider %s failed", provider, exc_info=True)
 
-    dynamic_parts = [f"Current time: {current_time}"]
+    blocks[-1].cache_control = CacheControl()
+
+    return blocks
+
+
+def build_dynamic_context(
+    current_time: str,
+    username: str,
+    person_context: str = "",
+    room_info: RoomInfo | None = None,
+) -> str:
+    """Build per-request dynamic context to prepend to the user message.
+
+    Kept out of the system prompt so that tools + system form a stable
+    cacheable prefix.
+    """
+    parts = [f"Current time: {current_time}"]
     if room_info:
         others = [m for m in room_info.members if m != username]
         match room_info.kind:
@@ -127,16 +135,14 @@ def build_system_blocks(
                 label = f"{name} (with @{', @'.join(others)})" if others else name
             case _:  # pragma: no cover
                 label = room_info.name or room_info.room_id
-        dynamic_parts.append(f"Room: {label}")
+        parts.append(f"Room: {label}")
 
-    dynamic_parts.append(f"Talking to: @{username}")
+    parts.append(f"Talking to: @{username}")
 
     if person_context:
-        dynamic_parts.append(f"\n## What I know about @{username}\n\n{person_context}")
+        parts.append(f"\n## What I know about @{username}\n\n{person_context}")
 
-    blocks.append(SystemBlock(text="\n".join(dynamic_parts)))
-
-    return blocks
+    return "\n".join(parts)
 
 
 def extract_text(content: str | Iterable) -> str:

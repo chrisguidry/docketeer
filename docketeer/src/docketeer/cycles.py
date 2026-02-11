@@ -8,7 +8,7 @@ from anthropic import AuthenticationError, PermissionDeniedError
 from docket.dependencies import Cron, Perpetual
 
 from docketeer import environment
-from docketeer.brain import Brain
+from docketeer.brain import CONSOLIDATION_MODEL, REVERIE_MODEL, Brain
 from docketeer.dependencies import CurrentBrain, WorkspacePath
 from docketeer.prompt import MessageContent
 
@@ -73,7 +73,7 @@ async def reverie(
     now = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M")
     content = MessageContent(username="system", timestamp=now, text=prompt)
     try:
-        response = await brain.process("__tasks__", content)
+        response = await brain.process("__tasks__", content, model=REVERIE_MODEL)
     except (AuthenticationError, PermissionDeniedError):
         raise
     except Exception:
@@ -93,7 +93,7 @@ async def consolidation(
     now = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M")
     content = MessageContent(username="system", timestamp=now, text=prompt)
     try:
-        response = await brain.process("__tasks__", content)
+        response = await brain.process("__tasks__", content, model=CONSOLIDATION_MODEL)
     except (AuthenticationError, PermissionDeniedError):
         raise
     except Exception:

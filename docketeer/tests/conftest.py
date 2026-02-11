@@ -43,6 +43,7 @@ def _isolated_data_dir(tmp_path: Path) -> Iterator[None]:
         patch.object(environment, "DATA_DIR", data_dir),
         patch.object(environment, "WORKSPACE_PATH", data_dir / "memory"),
         patch.object(environment, "AUDIT_PATH", data_dir / "audit"),
+        patch.object(environment, "USAGE_PATH", data_dir / "token-usage"),
     ):
         yield
 

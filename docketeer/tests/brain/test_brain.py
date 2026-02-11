@@ -345,7 +345,7 @@ async def test_compact_history_few_messages(brain: Brain, fake_messages: Any):
         {"role": "user", "content": "hi"},
         {"role": "assistant", "content": "hey"},
     ]
-    await brain._compact_history("room1", [], [])
+    await brain._compact_history("room1", [], [], "claude-haiku-4-5-20251001")
     assert len(brain._conversations["room1"]) == 2
 
 
@@ -365,7 +365,7 @@ async def test_compact_history_empty_transcript(brain: Brain, fake_messages: Any
             ],
         ),
     ] * 10
-    await brain._compact_history("room1", [], [])
+    await brain._compact_history("room1", [], [], "claude-haiku-4-5-20251001")
     assert len(brain._conversations["room1"]) == 10
 
 
@@ -378,7 +378,7 @@ async def test_compact_history_success(brain: Brain, fake_messages: Any):
     fake_messages.responses = [
         FakeMessage(content=[make_text_block(text="Conversation summary")])
     ]
-    await brain._compact_history("room1", [], [])
+    await brain._compact_history("room1", [], [], "claude-haiku-4-5-20251001")
     msgs = brain._conversations["room1"]
     content0 = msgs[0]["content"]
     assert isinstance(content0, str)
@@ -393,7 +393,7 @@ async def test_compact_history_summarization_failure(brain: Brain, fake_messages
             MessageParam(role=role, content=f"msg {i}")
         )
     fake_messages.create = AsyncMock(side_effect=Exception("API error"))
-    await brain._compact_history("room1", [], [])
+    await brain._compact_history("room1", [], [], "claude-haiku-4-5-20251001")
     assert len(brain._conversations["room1"]) == 6
 
 

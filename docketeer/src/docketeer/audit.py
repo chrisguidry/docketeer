@@ -29,6 +29,24 @@ def audit_log(
         f.write(json.dumps(record) + "\n")
 
 
+def record_usage(usage_dir: Path, model: str, usage: anthropic.types.Usage) -> None:
+    """Append a token usage record to today's JSONL file."""
+    now = datetime.now(UTC)
+    usage_dir.mkdir(parents=True, exist_ok=True)
+    path = usage_dir / f"{now.strftime('%Y-%m-%d')}.jsonl"
+
+    record = {
+        "ts": now.isoformat(),
+        "model": model,
+        "input_tokens": usage.input_tokens,
+        "output_tokens": usage.output_tokens,
+        "cache_read_input_tokens": usage.cache_read_input_tokens or 0,
+        "cache_creation_input_tokens": usage.cache_creation_input_tokens or 0,
+    }
+    with path.open("a") as f:
+        f.write(json.dumps(record) + "\n")
+
+
 def log_usage(response: anthropic.types.Message) -> None:
     """Log token usage including cache stats."""
     u = response.usage

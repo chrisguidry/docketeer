@@ -9,7 +9,7 @@ from anthropic import AuthenticationError, PermissionDeniedError
 from croniter import croniter
 from docket.dependencies import Perpetual
 
-from docketeer.brain import APOLOGY, Brain
+from docketeer.brain import APOLOGY, CHAT_MODEL, Brain
 from docketeer.chat import ChatClient
 from docketeer.cycles import consolidation, reverie
 from docketeer.dependencies import CurrentBrain, CurrentChatClient
@@ -43,6 +43,7 @@ async def nudge(
     prompt: str,
     room_id: str = "",
     thread_id: str = "",
+    model: str = "",
     brain: Brain = CurrentBrain(),
     client: ChatClient = CurrentChatClient(),
 ) -> None:
@@ -54,7 +55,9 @@ async def nudge(
 
     context_room = room_id or "__tasks__"
     try:
-        response: BrainResponse = await brain.process(context_room, content)
+        response: BrainResponse = await brain.process(
+            context_room, content, model=model or CHAT_MODEL
+        )
     except (AuthenticationError, PermissionDeniedError):
         raise
     except Exception:
@@ -73,6 +76,7 @@ async def nudge_every(
     timezone: str = "UTC",
     room_id: str = "",
     thread_id: str = "",
+    model: str = "",
     perpetual: Perpetual = Perpetual(),
     brain: Brain = CurrentBrain(),
     client: ChatClient = CurrentChatClient(),
@@ -87,7 +91,9 @@ async def nudge_every(
 
     context_room = room_id or "__tasks__"
     try:
-        response: BrainResponse = await brain.process(context_room, content)
+        response: BrainResponse = await brain.process(
+            context_room, content, model=model or CHAT_MODEL
+        )
     except (AuthenticationError, PermissionDeniedError):
         raise
     except Exception:

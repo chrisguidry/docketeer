@@ -30,6 +30,7 @@ from docketeer.prompt import (
     CacheControl,
     MessageContent,
     SystemBlock,
+    build_dynamic_context,
     build_system_blocks,
     ensure_template,
 )
@@ -38,7 +39,22 @@ from docketeer.tools import ToolContext, ToolDefinition, registry
 log = logging.getLogger(__name__)
 
 ANTHROPIC_API_KEY = environment.get_str("ANTHROPIC_API_KEY")
-CLAUDE_MODEL = environment.get_str("CLAUDE_MODEL", "claude-opus-4-6")
+
+MODEL_TIERS: dict[str, str] = {
+    "opus": environment.get_str("MODEL_OPUS", "claude-opus-4-6"),
+    "sonnet": environment.get_str("MODEL_SONNET", "claude-sonnet-4-5-20250929"),
+    "haiku": environment.get_str("MODEL_HAIKU", "claude-haiku-4-5-20251001"),
+}
+
+CHAT_MODEL = environment.get_str("CHAT_MODEL", "sonnet")
+REVERIE_MODEL = environment.get_str("REVERIE_MODEL", "sonnet")
+CONSOLIDATION_MODEL = environment.get_str("CONSOLIDATION_MODEL", "opus")
+
+
+def resolve_model(tier: str) -> str:
+    """Resolve a tier name like 'opus' to a concrete model ID."""
+    return MODEL_TIERS[tier]
+
 
 CONTEXT_BUDGET = 180_000
 COMPACT_THRESHOLD = 140_000
@@ -66,6 +82,7 @@ class Brain:
         self.tool_context = tool_context
         self._workspace = tool_context.workspace
         self._audit_path = tool_context.workspace.parent / "audit"
+        self._usage_path = tool_context.workspace.parent / "token-usage"
         self._conversations: dict[str, list[MessageParam]] = defaultdict(list)
         self._room_token_counts: dict[str, int] = {}
         self._room_info: dict[str, RoomInfo] = {}
@@ -118,8 +135,12 @@ class Brain:
         room_id: str,
         content: MessageContent,
         callbacks: ProcessCallbacks | None = None,
+        model: str = "",
     ) -> BrainResponse:
         """Process a message and return a response with tool call info."""
+        model = model or CHAT_MODEL
+        model_id = resolve_model(model)
+
         current_time = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M %Z")
         person_context = load_person_context(
             self._workspace,
@@ -127,8 +148,8 @@ class Brain:
             self._person_map,
         )
         room_info = self._room_info.get(room_id)
-        system = build_system_blocks(
-            self._workspace,
+        system = build_system_blocks(self._workspace)
+        dynamic_context = build_dynamic_context(
             current_time,
             content.username,
             person_context=person_context,
@@ -145,9 +166,9 @@ class Brain:
         self.tool_context.thread_id = content.thread_id
 
         if self._room_token_counts.get(room_id, 0) > COMPACT_THRESHOLD:
-            await self._compact_history(room_id, system, tools)
+            await self._compact_history(room_id, system, tools, model_id)
 
-        user_content = self._build_content(content)
+        user_content = self._build_content(content, dynamic_context)
         self._conversations[room_id].append(
             MessageParam(role="user", content=user_content)
         )
@@ -159,11 +180,13 @@ class Brain:
         try:
             reply = await agentic_loop(
                 self.client,
+                model_id,
                 system,
                 messages,
                 tools,
                 self.tool_context,
                 self._audit_path,
+                self._usage_path,
                 callbacks.on_first_text if callbacks else None,
                 callbacks.on_text if callbacks else None,
                 callbacks.on_tool_start if callbacks else None,
@@ -172,15 +195,17 @@ class Brain:
             )
         except RequestTooLargeError:
             log.warning("Request too large, compacting and retrying", exc_info=True)
-            await self._compact_history(room_id, system, tools)
+            await self._compact_history(room_id, system, tools, model_id)
             try:
                 reply = await agentic_loop(
                     self.client,
+                    model_id,
                     system,
                     messages,
                     tools,
                     self.tool_context,
                     self._audit_path,
+                    self._usage_path,
                     callbacks.on_first_text if callbacks else None,
                     callbacks.on_text if callbacks else None,
                     callbacks.on_tool_start if callbacks else None,
@@ -201,7 +226,7 @@ class Brain:
                 MessageParam(role="assistant", content=reply)
             )
 
-        tokens = await self._measure_context(room_id, system, tools)
+        tokens = await self._measure_context(room_id, system, tools, model_id)
         log.info(
             "Context: %d / %d tokens for room %s",
             tokens,
@@ -213,12 +238,16 @@ class Brain:
         return BrainResponse(text=reply)
 
     async def _measure_context(
-        self, room_id: str, system: list[SystemBlock], tools: list[ToolDefinition]
+        self,
+        room_id: str,
+        system: list[SystemBlock],
+        tools: list[ToolDefinition],
+        model_id: str,
     ) -> int:
         """Count tokens for the current conversation state."""
         try:
             result = await self.client.messages.count_tokens(
-                model=CLAUDE_MODEL,
+                model=model_id,
                 system=[b.to_api_dict() for b in system],
                 tools=[t.to_api_dict() for t in tools],
                 messages=self._conversations[room_id],
@@ -230,13 +259,17 @@ class Brain:
         return result.input_tokens
 
     async def _compact_history(
-        self, room_id: str, system: list[SystemBlock], tools: list[ToolDefinition]
+        self,
+        room_id: str,
+        system: list[SystemBlock],
+        tools: list[ToolDefinition],
+        model_id: str,
     ) -> None:
         old_count = len(self._conversations[room_id])
         await compact_history(self.client, self._conversations, room_id)
         new_count = len(self._conversations[room_id])
         if new_count < old_count:
-            tokens = await self._measure_context(room_id, system, tools)
+            tokens = await self._measure_context(room_id, system, tools, model_id)
             log.info(
                 "Compacted room %s: %d → %d messages (%d tokens)",
                 room_id,
@@ -253,9 +286,15 @@ class Brain:
     ) -> bool:
         return await classify_response(self.client, url, status_code, headers)
 
-    def _build_content(self, content: MessageContent) -> list[ContentBlockParam] | str:
+    def _build_content(
+        self, content: MessageContent, dynamic_context: str = ""
+    ) -> list[ContentBlockParam] | str:
         """Build content blocks for Claude."""
         blocks: list[ContentBlockParam] = []
+
+        if dynamic_context:
+            blocks.append(TextBlockParam(type="text", text=dynamic_context))
+
         id_tag = f"[{content.message_id}] " if content.message_id else ""
         ts_tag = f"[{content.timestamp}] " if content.timestamp else ""
         thread_tag = f"[thread:{content.thread_id}] " if content.thread_id else ""
@@ -282,6 +321,6 @@ class Brain:
             blocks.append(TextBlockParam(type="text", text=empty))
 
         if len(blocks) == 1 and blocks[0]["type"] == "text":
-            return text or empty
+            return blocks[0]["text"]
 
         return blocks

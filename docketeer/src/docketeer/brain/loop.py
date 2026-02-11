@@ -13,24 +13,39 @@ from anthropic.types import (
     ToolUseBlock,
 )
 
-from docketeer.audit import audit_log, log_usage
+from docketeer.audit import audit_log, log_usage, record_usage
 from docketeer.prompt import CacheControl, SystemBlock
 from docketeer.tools import ToolContext, ToolDefinition, registry
 
 log = logging.getLogger(__name__)
 
 MAX_TOOL_ROUNDS = 25
-MAX_RESPONSE_TOKENS = 128_000
-CLAUDE_MODEL = "claude-opus-4-6"
+
+MAX_TOKENS_BY_TIER = {
+    "opus": 128_000,
+    "sonnet": 64_000,
+    "haiku": 16_000,
+}
+DEFAULT_MAX_TOKENS = 64_000
+
+
+def _max_tokens_for_model(model: str) -> int:
+    """Return the output token limit for a model."""
+    for tier, limit in MAX_TOKENS_BY_TIER.items():
+        if tier in model:
+            return limit
+    return DEFAULT_MAX_TOKENS
 
 
 async def agentic_loop(
     client: anthropic.AsyncAnthropic,
+    model: str,
     system: list[SystemBlock],
     messages: list[MessageParam],
     tools: list[ToolDefinition],
     tool_context: ToolContext,
     audit_path: Path,
+    usage_path: Path,
     callbacks_on_first_text: Callable[[], Awaitable[None]] | None,
     callbacks_on_text: Callable[[str], Awaitable[None]] | None,
     callbacks_on_tool_start: Callable[[], Awaitable[None]] | None,
@@ -47,10 +62,16 @@ async def agentic_loop(
             return ""
         rounds += 1
         response = await stream_message(
-            client, system, messages, tools, on_first_text=callbacks_on_first_text
+            client,
+            model,
+            system,
+            messages,
+            tools,
+            on_first_text=callbacks_on_first_text,
         )
 
         log_usage(response)
+        record_usage(usage_path, model, response.usage)
 
         tool_blocks = [b for b in response.content if isinstance(b, ToolUseBlock)]
         if tool_blocks:
@@ -69,7 +90,7 @@ async def agentic_loop(
             messages.append(MessageParam(role="assistant", content=response.content))
             messages.append(MessageParam(role="user", content=tool_results))
         elif response.stop_reason == "max_tokens":
-            log.warning("Response truncated at %d tokens", MAX_RESPONSE_TOKENS)
+            log.warning("Response truncated at %d tokens", _max_tokens_for_model(model))
             exhausted = False
             break
         else:
@@ -89,24 +110,32 @@ async def agentic_loop(
             )
         )
         response = await stream_message(
-            client, system, messages, tools=[], on_first_text=callbacks_on_first_text
+            client,
+            model,
+            system,
+            messages,
+            tools=[],
+            on_first_text=callbacks_on_first_text,
         )
         log_usage(response)
+        record_usage(usage_path, model, response.usage)
 
     return build_reply(response, used_tools, rounds)
 
 
 async def stream_message(
     client: anthropic.AsyncAnthropic,
+    model: str,
     system: list[SystemBlock],
     messages: list[MessageParam],
     tools: list[ToolDefinition],
     on_first_text: Callable[[], Awaitable[None]] | None = None,
 ) -> anthropic.types.Message:
     """Stream a response from Claude, optionally firing a callback on first text."""
+    max_tokens = _max_tokens_for_model(model)
     async with client.messages.stream(
-        model=CLAUDE_MODEL,
-        max_tokens=MAX_RESPONSE_TOKENS,
+        model=model,
+        max_tokens=max_tokens,
         system=[b.to_api_dict() for b in system],
         messages=messages,
         tools=[t.to_api_dict() for t in tools],
