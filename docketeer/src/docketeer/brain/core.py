@@ -40,20 +40,38 @@ log = logging.getLogger(__name__)
 
 ANTHROPIC_API_KEY = environment.get_str("ANTHROPIC_API_KEY")
 
-MODEL_TIERS: dict[str, str] = {
-    "opus": environment.get_str("MODEL_OPUS", "claude-opus-4-6"),
-    "sonnet": environment.get_str("MODEL_SONNET", "claude-sonnet-4-5-20250929"),
-    "haiku": environment.get_str("MODEL_HAIKU", "claude-haiku-4-5-20251001"),
+
+@dataclass(frozen=True)
+class InferenceModel:
+    model_id: str
+    max_output_tokens: int
+    thinking_budget: int | None = None
+
+
+MODELS: dict[str, InferenceModel] = {
+    "opus": InferenceModel(
+        model_id=environment.get_str("MODEL_OPUS", "claude-opus-4-6"),
+        max_output_tokens=128_000,
+    ),
+    "sonnet": InferenceModel(
+        model_id=environment.get_str("MODEL_SONNET", "claude-sonnet-4-5-20250929"),
+        max_output_tokens=64_000,
+        thinking_budget=10_000,
+    ),
+    "haiku": InferenceModel(
+        model_id=environment.get_str("MODEL_HAIKU", "claude-haiku-4-5-20251001"),
+        max_output_tokens=16_000,
+    ),
 }
 
-CHAT_MODEL = environment.get_str("CHAT_MODEL", "sonnet")
-REVERIE_MODEL = environment.get_str("REVERIE_MODEL", "sonnet")
+CHAT_MODEL = environment.get_str("CHAT_MODEL", "opus")
+REVERIE_MODEL = environment.get_str("REVERIE_MODEL", "opus")
 CONSOLIDATION_MODEL = environment.get_str("CONSOLIDATION_MODEL", "opus")
 
 
-def resolve_model(tier: str) -> str:
-    """Resolve a tier name like 'opus' to a concrete model ID."""
-    return MODEL_TIERS[tier]
+def resolve_model(tier: str) -> InferenceModel:
+    """Resolve a tier name like 'opus' to its InferenceModel."""
+    return MODELS[tier]
 
 
 CONTEXT_BUDGET = 180_000
@@ -136,10 +154,11 @@ class Brain:
         content: MessageContent,
         callbacks: ProcessCallbacks | None = None,
         model: str = "",
+        thinking: bool = False,
     ) -> BrainResponse:
         """Process a message and return a response with tool call info."""
         model = model or CHAT_MODEL
-        model_id = resolve_model(model)
+        resolved = resolve_model(model)
 
         current_time = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M %Z")
         person_context = load_person_context(
@@ -166,7 +185,7 @@ class Brain:
         self.tool_context.thread_id = content.thread_id
 
         if self._room_token_counts.get(room_id, 0) > COMPACT_THRESHOLD:
-            await self._compact_history(room_id, system, tools, model_id)
+            await self._compact_history(room_id, system, tools, resolved.model_id)
 
         user_content = self._build_content(content, dynamic_context)
         self._conversations[room_id].append(
@@ -180,7 +199,7 @@ class Brain:
         try:
             reply = await agentic_loop(
                 self.client,
-                model_id,
+                resolved,
                 system,
                 messages,
                 tools,
@@ -192,14 +211,15 @@ class Brain:
                 callbacks.on_tool_start if callbacks else None,
                 callbacks.on_tool_end if callbacks else None,
                 callbacks.interrupted if callbacks else None,
+                thinking=thinking,
             )
         except RequestTooLargeError:
             log.warning("Request too large, compacting and retrying", exc_info=True)
-            await self._compact_history(room_id, system, tools, model_id)
+            await self._compact_history(room_id, system, tools, resolved.model_id)
             try:
                 reply = await agentic_loop(
                     self.client,
-                    model_id,
+                    resolved,
                     system,
                     messages,
                     tools,
@@ -211,6 +231,7 @@ class Brain:
                     callbacks.on_tool_start if callbacks else None,
                     callbacks.on_tool_end if callbacks else None,
                     callbacks.interrupted if callbacks else None,
+                    thinking=thinking,
                 )
             except RequestTooLargeError:
                 log.error("Still too large after compaction", exc_info=True)
@@ -226,7 +247,7 @@ class Brain:
                 MessageParam(role="assistant", content=reply)
             )
 
-        tokens = await self._measure_context(room_id, system, tools, model_id)
+        tokens = await self._measure_context(room_id, system, tools, resolved.model_id)
         log.info(
             "Context: %d / %d tokens for room %s",
             tokens,

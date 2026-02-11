@@ -9,8 +9,13 @@ from docketeer.prompt import extract_text
 
 log = logging.getLogger(__name__)
 
-COMPACT_MODEL = "claude-haiku-4-5-20251001"
 MIN_RECENT_MESSAGES = 6
+
+
+def _haiku_model_id() -> str:
+    from docketeer.brain.core import MODELS
+
+    return MODELS["haiku"].model_id
 
 
 async def compact_history(
@@ -54,7 +59,7 @@ async def summarize_transcript(client: AsyncAnthropic, transcript: str) -> str |
     """Ask Haiku for a conversation summary, or None on failure."""
     try:
         summary_response = await client.messages.create(
-            model=COMPACT_MODEL,
+            model=_haiku_model_id(),
             max_tokens=1024,
             messages=[
                 MessageParam(

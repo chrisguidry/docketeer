@@ -7,7 +7,11 @@ from anthropic.types import MessageParam, TextBlock
 
 log = logging.getLogger(__name__)
 
-COMPACT_MODEL = "claude-haiku-4-5-20251001"
+
+def _haiku_model_id() -> str:
+    from docketeer.brain.core import MODELS
+
+    return MODELS["haiku"].model_id
 
 
 async def summarize_webpage(client: AsyncAnthropic, text: str, purpose: str) -> str:
@@ -15,7 +19,7 @@ async def summarize_webpage(client: AsyncAnthropic, text: str, purpose: str) -> 
     focus = f" for someone who wants to: {purpose}" if purpose else ""
     try:
         response = await client.messages.create(
-            model=COMPACT_MODEL,
+            model=_haiku_model_id(),
             max_tokens=2048,
             messages=[
                 MessageParam(
@@ -44,7 +48,7 @@ async def classify_response(
     """Ask Haiku whether an HTTP response body is likely readable text."""
     try:
         response = await client.messages.create(
-            model=COMPACT_MODEL,
+            model=_haiku_model_id(),
             max_tokens=8,
             messages=[
                 MessageParam(
