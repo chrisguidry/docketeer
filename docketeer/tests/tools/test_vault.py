@@ -91,7 +91,7 @@ async def test_generate_secret_no_vault(tool_context: ToolContext):
 async def test_delete_secret(vault_context: ToolContext, vault: MemoryVault):
     result = await registry.execute("delete_secret", {"name": "api-key"}, vault_context)
     assert "Deleted" in result
-    refs = await vault.list()
+    refs = await vault.list_secrets()
     names = {r.name for r in refs}
     assert "api-key" not in names
 

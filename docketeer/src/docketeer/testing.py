@@ -148,7 +148,7 @@ class MemoryVault(Vault):
     def __init__(self, initial: dict[str, str] | None = None) -> None:
         self._secrets: dict[str, str] = dict(initial) if initial else {}
 
-    async def list(self) -> list[SecretReference]:
+    async def list_secrets(self) -> list[SecretReference]:
         return [SecretReference(name=name) for name in self._secrets]
 
     async def resolve(self, name: str) -> str:

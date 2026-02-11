@@ -18,7 +18,7 @@ async def list_secrets(ctx: ToolContext) -> str:
     if ctx.vault is None:
         return NO_VAULT
 
-    refs = await ctx.vault.list()
+    refs = await ctx.vault.list_secrets()
     if not refs:
         return "No secrets available."
     return "\n".join(r.name for r in refs)

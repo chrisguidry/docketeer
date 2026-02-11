@@ -219,7 +219,8 @@ async def test_set_status_retry(rc: RocketChatClient):
         httpx.Response(500),
         httpx.Response(200, json={"success": True}),
     ]
-    await rc.set_status("online")
+    with patch("docketeer_rocketchat.client.asyncio.sleep", new_callable=AsyncMock):
+        await rc.set_status("online")
     assert route.call_count == 2
 
 

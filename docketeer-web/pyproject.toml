@@ -48,6 +48,7 @@ DOCKETEER_BRAVE_API_KEY = "brave-test-key"
 
 [tool.pytest.ini_options]
 minversion = "9.0"
+timeout = 1
 addopts = [
     "--import-mode=importlib",
     "--cov=docketeer_web",

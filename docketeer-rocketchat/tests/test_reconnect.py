@@ -151,6 +151,8 @@ async def test_incoming_messages_calls_on_history():
         history_calls.append((room, messages))
 
     with (
+        patch.object(client, "subscribe_to_my_messages", new_callable=AsyncMock),
+        patch.object(client, "set_status", new_callable=AsyncMock),
         patch.object(client, "list_rooms", return_value=rooms),
         patch.object(client, "fetch_messages", return_value=history_msgs),
     ):
@@ -190,8 +192,9 @@ async def test_incoming_messages_updates_high_water():
     client._ddp = ddp
 
     assert client._high_water is None
-    async for _msg in client.incoming_messages():
-        break
+    with patch.object(client, "_after_connect", new_callable=AsyncMock):
+        async for _msg in client.incoming_messages():
+            break
     assert client._high_water == datetime(2026, 2, 10, 12, 0, tzinfo=UTC)
 
 

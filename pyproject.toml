@@ -31,6 +31,7 @@ dev = [
     "pytest-asyncio",
     "pytest-cov",
     "pytest-env",
+    "pytest-timeout",
     "pytest-xdist",
     "respx>=0.22.0",
     "ruff",

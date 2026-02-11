@@ -9,3 +9,4 @@ build/
 workspace/
 .coverage
 .loq_cache
+.python-version

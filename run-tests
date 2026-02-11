@@ -1,0 +1,47 @@
+#!/usr/bin/env python3
+"""Run the test suite for all workspace packages."""
+
+import subprocess
+import sys
+from pathlib import Path
+
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
+
+
+def main() -> int:
+    root = Path(__file__).resolve().parent
+    with open(root / "pyproject.toml", "rb") as f:
+        config = tomllib.load(f)
+
+    packages = config["tool"]["uv"]["workspace"]["members"]
+
+    extra_args = sys.argv[1:]
+    failed = []
+
+    for pkg in packages:
+        pkg_dir = root / pkg
+        if not (pkg_dir / "tests").is_dir():
+            continue
+
+        print(f"=== {pkg} ===", flush=True)
+        result = subprocess.run(
+            ["pytest", *extra_args],
+            cwd=pkg_dir,
+        )
+        if result.returncode != 0:
+            failed.append(pkg)
+        print(flush=True)
+
+    if failed:
+        print(f"FAILED: {', '.join(failed)}")
+        return 1
+
+    print("All packages passed.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

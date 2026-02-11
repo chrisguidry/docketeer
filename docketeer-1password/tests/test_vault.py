@@ -34,7 +34,7 @@ async def test_op_receives_service_account_token(vault: OnePasswordVault):
         return _mock_op(vaults_json)
 
     with patch("asyncio.create_subprocess_exec", side_effect=fake_exec):
-        await vault.list()
+        await vault.list_secrets()
 
 
 # --- list ---
@@ -70,7 +70,7 @@ async def test_list_secrets(vault: OnePasswordVault):
         return _mock_op(responses[call_count - 1])
 
     with patch("asyncio.create_subprocess_exec", side_effect=fake_exec):
-        refs = await vault.list()
+        refs = await vault.list_secrets()
 
     names = [r.name for r in refs]
     assert "Agent/api-key/password" in names
@@ -99,7 +99,7 @@ async def test_list_multiple_vaults(vault: OnePasswordVault):
         return _mock_op(responses[call_count - 1])
 
     with patch("asyncio.create_subprocess_exec", side_effect=fake_exec):
-        refs = await vault.list()
+        refs = await vault.list_secrets()
 
     names = {r.name for r in refs}
     assert names == {"Vault1/secret-a/password", "Vault2/secret-b/token"}
@@ -118,7 +118,7 @@ async def test_list_empty(vault: OnePasswordVault):
         return _mock_op(responses[call_count - 1])
 
     with patch("asyncio.create_subprocess_exec", side_effect=fake_exec):
-        refs = await vault.list()
+        refs = await vault.list_secrets()
 
     assert refs == []
 
@@ -130,7 +130,7 @@ async def test_list_no_vaults(vault: OnePasswordVault):
         return _mock_op(vaults_json)
 
     with patch("asyncio.create_subprocess_exec", side_effect=fake_exec):
-        refs = await vault.list()
+        refs = await vault.list_secrets()
 
     assert refs == []
 

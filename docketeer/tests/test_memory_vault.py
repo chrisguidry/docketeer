@@ -8,13 +8,13 @@ from docketeer.vault import SecretReference
 
 async def test_empty_vault_lists_nothing():
     vault = MemoryVault()
-    assert await vault.list() == []
+    assert await vault.list_secrets() == []
 
 
 async def test_store_and_list():
     vault = MemoryVault()
     await vault.store("db/password", "secret123")
-    refs = await vault.list()
+    refs = await vault.list_secrets()
     assert refs == [SecretReference(name="db/password")]
 
 
@@ -48,7 +48,7 @@ async def test_delete_removes_secret():
     vault = MemoryVault()
     await vault.store("temp", "val")
     await vault.delete("temp")
-    assert await vault.list() == []
+    assert await vault.list_secrets() == []
 
 
 async def test_delete_missing_raises():
@@ -66,7 +66,7 @@ async def test_store_overwrites_existing():
 
 async def test_preloaded_secrets():
     vault = MemoryVault({"api-key": "sk-123", "token": "tok-456"})
-    refs = await vault.list()
+    refs = await vault.list_secrets()
     names = {r.name for r in refs}
     assert names == {"api-key", "token"}
     assert await vault.resolve("api-key") == "sk-123"

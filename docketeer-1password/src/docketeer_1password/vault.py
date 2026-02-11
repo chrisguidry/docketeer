@@ -43,7 +43,7 @@ class OnePasswordVault(Vault):
             )
         return stdout.decode(errors="replace").strip()
 
-    async def list(self) -> list[SecretReference]:
+    async def list_secrets(self) -> list[SecretReference]:
         vaults_raw = await self._run_op("vault", "list", "--format", "json")
         vaults = json.loads(vaults_raw)
         if not vaults:

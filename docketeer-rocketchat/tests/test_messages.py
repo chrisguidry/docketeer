@@ -2,7 +2,7 @@
 
 from collections.abc import AsyncGenerator
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import httpx
 import respx
@@ -49,9 +49,10 @@ async def test_incoming_messages_filters():
     client._ddp = ddp
 
     results = []
-    async for msg in client.incoming_messages():
-        results.append(msg)
-        break
+    with patch.object(client, "_after_connect", new_callable=AsyncMock):
+        async for msg in client.incoming_messages():
+            results.append(msg)
+            break
     assert len(results) == 1
     assert results[0].text == "hello"
 
@@ -76,10 +77,11 @@ async def test_incoming_messages_dedup():
     client._ddp = ddp
 
     results = []
-    async for msg in client.incoming_messages():
-        results.append(msg)
-        if len(results) == 2:
-            break
+    with patch.object(client, "_after_connect", new_callable=AsyncMock):
+        async for msg in client.incoming_messages():
+            results.append(msg)
+            if len(results) == 2:
+                break
     assert len(results) == 2
     assert results[0].text == "hello"
     assert results[1].text == "world"
