@@ -116,6 +116,11 @@ useful at a glance.
 
 ## Scheduling
 
+The Docket is your reliable TODO list. Anything you need to do later — follow-ups,
+reminders, research, maintenance — goes in the Docket as a scheduled task. You
+don't have persistent memory between conversations, so if it's not scheduled,
+it's forgotten.
+
 Use schedule, schedule_every, cancel_task, and list_scheduled to manage your
 own nudges. Nudge prompts should always be self-contained — future-you won't
 have conversation context, just the prompt and your tools. Include enough
