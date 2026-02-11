@@ -4,9 +4,8 @@ from typing import Any, Never
 from unittest.mock import AsyncMock
 
 import pytest
-from anthropic import AuthenticationError
 
-from docketeer.brain import APOLOGY, Brain
+from docketeer.brain import APOLOGY, BackendAuthError, Brain
 from docketeer.prompt import MessageContent
 
 from ..conftest import (
@@ -87,7 +86,7 @@ async def test_process_auth_error_propagates(brain: Brain, fake_messages: Any):
 
     fake_messages.stream = stream_auth_error
     content = MessageContent(username="chris", text="hello")
-    with pytest.raises(AuthenticationError):
+    with pytest.raises(BackendAuthError):
         await brain.process("room1", content)
 
 

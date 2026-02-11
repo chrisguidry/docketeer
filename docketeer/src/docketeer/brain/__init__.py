@@ -1,5 +1,11 @@
 """Claude reasoning loop with tool use."""
 
+from docketeer.brain.backend import (
+    BackendAuthError,
+    BackendError,
+    ContextTooLargeError,
+    InferenceBackend,
+)
 from docketeer.brain.core import (
     APOLOGY,
     CHAT_MODEL,
@@ -18,7 +24,11 @@ __all__ = [
     "CONSOLIDATION_MODEL",
     "MODELS",
     "REVERIE_MODEL",
+    "BackendAuthError",
+    "BackendError",
     "Brain",
+    "ContextTooLargeError",
+    "InferenceBackend",
     "InferenceModel",
     "ProcessCallbacks",
     "resolve_model",

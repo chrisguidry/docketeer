@@ -8,9 +8,6 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
 
-import anthropic
-from anthropic import APIError, AuthenticationError, PermissionDeniedError
-from anthropic._exceptions import RequestTooLargeError
 from anthropic.types import (
     Base64ImageSourceParam,
     ContentBlockParam,
@@ -20,9 +17,14 @@ from anthropic.types import (
 )
 
 from docketeer import environment
+from docketeer.brain.backend import (
+    BackendAuthError,
+    BackendError,
+    ContextTooLargeError,
+    InferenceBackend,
+)
 from docketeer.brain.compaction import compact_history
 from docketeer.brain.helpers import classify_response, summarize_webpage
-from docketeer.brain.loop import agentic_loop
 from docketeer.chat import RoomInfo, RoomMessage
 from docketeer.people import build_person_map, load_person_context
 from docketeer.prompt import (
@@ -37,8 +39,6 @@ from docketeer.prompt import (
 from docketeer.tools import ToolContext, ToolDefinition, registry
 
 log = logging.getLogger(__name__)
-
-ANTHROPIC_API_KEY = environment.get_str("ANTHROPIC_API_KEY")
 
 
 @dataclass(frozen=True)
@@ -83,6 +83,19 @@ APOLOGY = (
 )
 
 
+def _create_backend() -> InferenceBackend:
+    """Create the inference backend based on DOCKETEER_INFERENCE env var."""
+    mode = environment.get_str("DOCKETEER_INFERENCE", "api")
+    if mode == "api":
+        from docketeer.brain.anthropic_backend import AnthropicAPIBackend
+
+        api_key = environment.get_str("ANTHROPIC_API_KEY")
+        return AnthropicAPIBackend(api_key)
+    if mode == "claude-code":
+        raise NotImplementedError("claude-code backend not yet implemented")
+    raise ValueError(f"Unknown inference backend: {mode!r}")
+
+
 @dataclass
 class ProcessCallbacks:
     """Optional callbacks fired during process() for typing/presence signals."""
@@ -96,7 +109,7 @@ class ProcessCallbacks:
 
 class Brain:
     def __init__(self, tool_context: ToolContext) -> None:
-        self.client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
+        self._backend = _create_backend()
         self.tool_context = tool_context
         self._workspace = tool_context.workspace
         self._audit_path = tool_context.workspace.parent / "audit"
@@ -197,8 +210,7 @@ class Brain:
         log.debug("Processing message with %d history messages", len(messages))
 
         try:
-            reply = await agentic_loop(
-                self.client,
+            reply = await self._backend.run_agentic_loop(
                 resolved,
                 system,
                 messages,
@@ -206,19 +218,14 @@ class Brain:
                 self.tool_context,
                 self._audit_path,
                 self._usage_path,
-                callbacks.on_first_text if callbacks else None,
-                callbacks.on_text if callbacks else None,
-                callbacks.on_tool_start if callbacks else None,
-                callbacks.on_tool_end if callbacks else None,
-                callbacks.interrupted if callbacks else None,
+                callbacks,
                 thinking=thinking,
             )
-        except RequestTooLargeError:
+        except ContextTooLargeError:
             log.warning("Request too large, compacting and retrying", exc_info=True)
             await self._compact_history(room_id, system, tools, resolved.model_id)
             try:
-                reply = await agentic_loop(
-                    self.client,
+                reply = await self._backend.run_agentic_loop(
                     resolved,
                     system,
                     messages,
@@ -226,19 +233,15 @@ class Brain:
                     self.tool_context,
                     self._audit_path,
                     self._usage_path,
-                    callbacks.on_first_text if callbacks else None,
-                    callbacks.on_text if callbacks else None,
-                    callbacks.on_tool_start if callbacks else None,
-                    callbacks.on_tool_end if callbacks else None,
-                    callbacks.interrupted if callbacks else None,
+                    callbacks,
                     thinking=thinking,
                 )
-            except RequestTooLargeError:
+            except ContextTooLargeError:
                 log.error("Still too large after compaction", exc_info=True)
                 return BrainResponse(text=APOLOGY)
-        except (AuthenticationError, PermissionDeniedError):
+        except BackendAuthError:
             raise
-        except APIError:
+        except BackendError:
             log.error("API error during processing", exc_info=True)
             return BrainResponse(text=APOLOGY)
 
@@ -266,18 +269,13 @@ class Brain:
         model_id: str,
     ) -> int:
         """Count tokens for the current conversation state."""
-        try:
-            result = await self.client.messages.count_tokens(
-                model=model_id,
-                system=[b.to_api_dict() for b in system],
-                tools=[t.to_api_dict() for t in tools],
-                messages=self._conversations[room_id],
-            )
-        except APIError:
-            log.warning("Token counting failed, using stale count", exc_info=True)
+        count = await self._backend.count_tokens(
+            model_id, system, tools, self._conversations[room_id]
+        )
+        if count < 0:
             return self._room_token_counts.get(room_id, 0)
-        self._room_token_counts[room_id] = result.input_tokens
-        return result.input_tokens
+        self._room_token_counts[room_id] = count
+        return count
 
     async def _compact_history(
         self,
@@ -287,7 +285,7 @@ class Brain:
         model_id: str,
     ) -> None:
         old_count = len(self._conversations[room_id])
-        await compact_history(self.client, self._conversations, room_id)
+        await compact_history(self._backend, self._conversations, room_id)
         new_count = len(self._conversations[room_id])
         if new_count < old_count:
             tokens = await self._measure_context(room_id, system, tools, model_id)
@@ -300,12 +298,12 @@ class Brain:
             )
 
     async def _summarize_webpage(self, text: str, purpose: str) -> str:
-        return await summarize_webpage(self.client, text, purpose)
+        return await summarize_webpage(self._backend, text, purpose)
 
     async def _classify_response(
         self, url: str, status_code: int, headers: str
     ) -> bool:
-        return await classify_response(self.client, url, status_code, headers)
+        return await classify_response(self._backend, url, status_code, headers)
 
     def _build_content(
         self, content: MessageContent, dynamic_context: str = ""

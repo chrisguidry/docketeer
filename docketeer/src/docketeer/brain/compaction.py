@@ -1,25 +1,24 @@
 """History compaction: summarize old messages to free context space."""
 
-import logging
+from __future__ import annotations
 
-from anthropic import AsyncAnthropic
-from anthropic.types import MessageParam, TextBlock
+import logging
+from typing import TYPE_CHECKING
+
+from anthropic.types import MessageParam
 
 from docketeer.prompt import extract_text
+
+if TYPE_CHECKING:
+    from docketeer.brain.backend import InferenceBackend
 
 log = logging.getLogger(__name__)
 
 MIN_RECENT_MESSAGES = 6
 
 
-def _haiku_model_id() -> str:
-    from docketeer.brain.core import MODELS
-
-    return MODELS["haiku"].model_id
-
-
 async def compact_history(
-    client: AsyncAnthropic,
+    backend: InferenceBackend,
     conversations: dict[str, list[MessageParam]],
     room_id: str,
 ) -> None:
@@ -40,7 +39,7 @@ async def compact_history(
     if not transcript.strip():
         return
 
-    summary = await summarize_transcript(client, transcript)
+    summary = await summarize_transcript(backend, transcript)
     if summary is None:
         conversations[room_id] = recent_messages
         return
@@ -55,27 +54,18 @@ async def compact_history(
     ]
 
 
-async def summarize_transcript(client: AsyncAnthropic, transcript: str) -> str | None:
-    """Ask Haiku for a conversation summary, or None on failure."""
+async def summarize_transcript(
+    backend: InferenceBackend, transcript: str
+) -> str | None:
+    """Ask the backend for a conversation summary, or None on failure."""
     try:
-        summary_response = await client.messages.create(
-            model=_haiku_model_id(),
-            max_tokens=1024,
-            messages=[
-                MessageParam(
-                    role="user",
-                    content=(
-                        "Summarize this conversation into a concise recap. "
-                        "Preserve key facts, decisions, and context that would "
-                        "be needed to continue the conversation naturally. "
-                        "Be brief but thorough.\n\n"
-                        f"{transcript}"
-                    ),
-                )
-            ],
+        return await backend.utility_complete(
+            "Summarize this conversation into a concise recap. "
+            "Preserve key facts, decisions, and context that would "
+            "be needed to continue the conversation naturally. "
+            "Be brief but thorough.\n\n"
+            f"{transcript}",
         )
-        block = summary_response.content[0]
-        return block.text if isinstance(block, TextBlock) else str(block)
     except Exception:
         log.exception("Summarization failed, falling back to truncation")
         return None

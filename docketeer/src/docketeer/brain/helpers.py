@@ -1,72 +1,49 @@
 """Lightweight LLM helpers for webpage summarization and response classification."""
 
-import logging
+from __future__ import annotations
 
-from anthropic import APIError, AsyncAnthropic
-from anthropic.types import MessageParam, TextBlock
+import logging
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from docketeer.brain.backend import InferenceBackend
 
 log = logging.getLogger(__name__)
 
 
-def _haiku_model_id() -> str:
-    from docketeer.brain.core import MODELS
-
-    return MODELS["haiku"].model_id
-
-
-async def summarize_webpage(client: AsyncAnthropic, text: str, purpose: str) -> str:
-    """Ask Haiku to summarize a web page, guided by the fetch purpose."""
+async def summarize_webpage(backend: InferenceBackend, text: str, purpose: str) -> str:
+    """Ask the backend to summarize a web page, guided by the fetch purpose."""
     focus = f" for someone who wants to: {purpose}" if purpose else ""
     try:
-        response = await client.messages.create(
-            model=_haiku_model_id(),
+        return await backend.utility_complete(
+            f"Summarize this web page{focus}. "
+            "Preserve key facts, URLs, numbers, and any structured data. "
+            "Omit navigation, ads, and boilerplate.\n\n"
+            f"{text}",
             max_tokens=2048,
-            messages=[
-                MessageParam(
-                    role="user",
-                    content=(
-                        f"Summarize this web page{focus}. "
-                        "Preserve key facts, URLs, numbers, and any structured data. "
-                        "Omit navigation, ads, and boilerplate.\n\n"
-                        f"{text}"
-                    ),
-                )
-            ],
         )
-    except APIError:
+    except Exception:
         log.warning(
             "Webpage summarization failed, returning truncated text", exc_info=True
         )
         return text[:4000]
-    block = response.content[0]
-    return block.text if isinstance(block, TextBlock) else str(block)
 
 
 async def classify_response(
-    client: AsyncAnthropic, url: str, status_code: int, headers: str
+    backend: InferenceBackend, url: str, status_code: int, headers: str
 ) -> bool:
-    """Ask Haiku whether an HTTP response body is likely readable text."""
+    """Ask the backend whether an HTTP response body is likely readable text."""
     try:
-        response = await client.messages.create(
-            model=_haiku_model_id(),
+        answer = await backend.utility_complete(
+            "Given this HTTP response, is the body likely readable text "
+            "(HTML, JSON, plain text, etc.) that would be useful to read? "
+            "Answer only 'true' or 'false'.\n\n"
+            f"URL: {url}\n"
+            f"Status: {status_code}\n"
+            f"Headers:\n{headers}",
             max_tokens=8,
-            messages=[
-                MessageParam(
-                    role="user",
-                    content=(
-                        "Given this HTTP response, is the body likely readable text "
-                        "(HTML, JSON, plain text, etc.) that would be useful to read? "
-                        "Answer only 'true' or 'false'.\n\n"
-                        f"URL: {url}\n"
-                        f"Status: {status_code}\n"
-                        f"Headers:\n{headers}"
-                    ),
-                )
-            ],
         )
-    except APIError:
+    except Exception:
         log.warning("Response classification failed, assuming readable", exc_info=True)
         return True
-    block = response.content[0]
-    answer = block.text if isinstance(block, TextBlock) else ""
     return answer.strip().lower() == "true"

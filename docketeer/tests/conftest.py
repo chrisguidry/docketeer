@@ -156,9 +156,11 @@ def fake_messages() -> FakeMessages:
 def mock_anthropic(fake_messages: FakeMessages) -> Iterator[MagicMock]:
     mock_client = MagicMock()
     mock_client.messages = fake_messages
-    with patch(
-        "docketeer.brain.core.anthropic.AsyncAnthropic", return_value=mock_client
-    ):
+    from docketeer.brain.anthropic_backend import AnthropicAPIBackend
+
+    backend = AnthropicAPIBackend.__new__(AnthropicAPIBackend)
+    backend._client = mock_client
+    with patch("docketeer.brain.core._create_backend", return_value=backend):
         yield mock_client
 
 
