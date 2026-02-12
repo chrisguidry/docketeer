@@ -355,44 +355,44 @@ async def main() -> None:  # pragma: no cover
         workspace=environment.WORKSPACE_PATH, executor=executor, vault=vault
     )
 
-    brain = Brain(tool_context)
-    tool_context.on_people_write = brain.rebuild_person_map
+    async with Brain(tool_context) as brain:
+        tool_context.on_people_write = brain.rebuild_person_map
 
-    # Make brain/client/executor/vault available to docket task handlers
-    set_brain(brain)
-    set_client(client)
-    if executor:
-        set_executor(executor)
-    if vault:
-        set_vault(vault)
+        # Make brain/client/executor/vault available to docket task handlers
+        set_brain(brain)
+        set_client(client)
+        if executor:
+            set_executor(executor)
+        if vault:
+            set_vault(vault)
 
-    async with Docket(name=DOCKET_NAME, url=DOCKET_URL) as docket:
-        set_docket(docket)
-        docket.register_collection("docketeer.tasks:docketeer_tasks")
-        _register_task_plugins(docket)
+        async with Docket(name=DOCKET_NAME, url=DOCKET_URL) as docket:
+            set_docket(docket)
+            docket.register_collection("docketeer.tasks:docketeer_tasks")
+            _register_task_plugins(docket)
 
-        # Register tools (core chat + provider-specific + docket)
-        _register_core_chat_tools(client)
-        register_chat_tools(client, tool_context)
-        _register_docket_tools(docket, tool_context)
+            # Register tools (core chat + provider-specific + docket)
+            _register_core_chat_tools(client)
+            register_chat_tools(client, tool_context)
+            _register_docket_tools(docket, tool_context)
 
-        async with Worker(docket) as worker:
-            worker_task = asyncio.create_task(worker.run_forever())
+            async with Worker(docket) as worker:
+                worker_task = asyncio.create_task(worker.run_forever())
 
-            await client.connect()
-            tool_context.agent_username = client.username
+                await client.connect()
+                tool_context.agent_username = client.username
 
-            log.info("Listening for messages...")
-            try:
-                await process_messages(client, brain)
-            except asyncio.CancelledError:
-                pass
-            finally:
-                worker_task.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    await worker_task
-                await client.close()
-                log.info("Disconnected.")
+                log.info("Listening for messages...")
+                try:
+                    await process_messages(client, brain)
+                except asyncio.CancelledError:
+                    pass
+                finally:
+                    worker_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await worker_task
+                    await client.close()
+                    log.info("Disconnected.")
 
 
 def _filter_rooms(rooms: list[RoomInfo], username: str) -> list[RoomInfo]:

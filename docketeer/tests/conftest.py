@@ -1,6 +1,6 @@
 """Shared test fixtures for Docketeer."""
 
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -165,5 +165,8 @@ def mock_anthropic(fake_messages: FakeMessages) -> Iterator[MagicMock]:
 
 
 @pytest.fixture()
-def brain(tool_context: ToolContext, mock_anthropic: MagicMock) -> Brain:
-    return Brain(tool_context)
+async def brain(
+    tool_context: ToolContext, mock_anthropic: MagicMock
+) -> AsyncIterator[Brain]:
+    async with Brain(tool_context) as brain:
+        yield brain

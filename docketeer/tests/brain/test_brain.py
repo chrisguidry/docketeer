@@ -54,6 +54,13 @@ def test_brain_init_existing_soul(tool_context: ToolContext, mock_anthropic: Mag
     assert not (tool_context.workspace / "BOOTSTRAP.md").exists()
 
 
+async def test_brain_async_context_manager(
+    tool_context: ToolContext, mock_anthropic: MagicMock
+):
+    async with Brain(tool_context) as brain:
+        assert isinstance(brain, Brain)
+
+
 def test_brain_init_builds_person_map(brain: Brain):
     people = brain._workspace / "people" / "chris"
     people.mkdir(parents=True)
@@ -446,53 +453,3 @@ async def test_process_with_no_callbacks(brain: Brain, fake_messages: Any):
     content = MessageContent(username="chris", text="hello")
     response = await brain.process("room1", content, callbacks=None)
     assert response.text == "Hi!"
-
-
-async def test_summarize_webpage_with_purpose(brain: Brain, fake_messages: Any):
-    fake_messages.responses = [FakeMessage(content=[make_text_block(text="Summary!")])]
-    result = await brain._summarize_webpage("page content", "find pricing info")
-    assert result == "Summary!"
-    assert (
-        "for someone who wants to: find pricing info"
-        in fake_messages.last_kwargs["messages"][0]["content"]
-    )
-
-
-async def test_summarize_webpage_without_purpose(brain: Brain, fake_messages: Any):
-    fake_messages.responses = [FakeMessage(content=[make_text_block(text="Summary!")])]
-    result = await brain._summarize_webpage("page content", "")
-    assert result == "Summary!"
-    assert (
-        "for someone who wants to"
-        not in fake_messages.last_kwargs["messages"][0]["content"]
-    )
-
-
-async def test_summarize_webpage_non_text_block(brain: Brain, fake_messages: Any):
-    fake_messages.responses = [FakeMessage(content=[MagicMock(spec=[])])]
-    result = await brain._summarize_webpage("page content", "")
-    assert isinstance(result, str)
-
-
-async def test_classify_response_returns_true(brain: Brain, fake_messages: Any):
-    fake_messages.responses = [FakeMessage(content=[make_text_block(text="true")])]
-    result = await brain._classify_response(
-        "https://example.com", 200, "content-type: text/html"
-    )
-    assert result is True
-
-
-async def test_classify_response_returns_false(brain: Brain, fake_messages: Any):
-    fake_messages.responses = [FakeMessage(content=[make_text_block(text="false")])]
-    result = await brain._classify_response(
-        "https://example.com/file.bin", 200, "content-type: application/octet-stream"
-    )
-    assert result is False
-
-
-async def test_classify_response_non_text_block(brain: Brain, fake_messages: Any):
-    fake_messages.responses = [FakeMessage(content=[MagicMock(spec=[])])]
-    result = await brain._classify_response(
-        "https://example.com", 200, "content-type: text/html"
-    )
-    assert result is False

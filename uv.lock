@@ -472,6 +472,7 @@ source = { editable = "docketeer" }
 dependencies = [
     { name = "anthropic" },
     { name = "croniter" },
+    { name = "mcp" },
     { name = "pydocket" },
     { name = "pyyaml" },
     { name = "watchfiles" },
@@ -481,6 +482,7 @@ dependencies = [
 requires-dist = [
     { name = "anthropic" },
     { name = "croniter" },
+    { name = "mcp" },
     { name = "pydocket", specifier = ">=0.17.7" },
     { name = "pyyaml" },
     { name = "watchfiles" },

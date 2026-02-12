@@ -7,20 +7,20 @@ import json
 import logging
 import os
 import shutil
+from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from docketeer import environment
-from docketeer.brain.backend import (
-    BackendAuthError,
-    BackendError,
-    ContextTooLargeError,
-    InferenceBackend,
-)
+from docketeer.brain.backend import BackendError, InferenceBackend
+from docketeer.brain.claude_code_output import extract_text, handle_claude_output
+from docketeer.toolshed import _find_install_root
 
 if TYPE_CHECKING:
     from docketeer.brain.core import InferenceModel, ProcessCallbacks
+    from docketeer.brain.mcp_transport import MCPSocketServer
     from docketeer.prompt import SystemBlock
     from docketeer.tools import ToolContext, ToolDefinition
 
@@ -50,14 +50,53 @@ class ClaudeCodeBackend(InferenceBackend):
     claude_dir: Path = field(default_factory=lambda: environment.DATA_DIR / "claude")
 
     def __post_init__(self) -> None:
-        if not shutil.which("bwrap"):
-            raise BackendError("bwrap not found on PATH")
-        if not shutil.which("claude"):
-            raise BackendError("claude not found on PATH")
+        for binary in ("bwrap", "claude", "socat"):
+            if not shutil.which(binary):
+                raise BackendError(f"{binary} not found on PATH")
+
+        claude_which = shutil.which("claude")
+        assert claude_which is not None
+        self._claude_binary = Path(claude_which).resolve()
+        self._claude_install_root = _find_install_root(self._claude_binary)
 
         self.claude_dir.mkdir(parents=True, exist_ok=True)
         self._sessions: dict[str, _Session] = {}
-        log.info("ClaudeCodeBackend initialized, claude_dir=%s", self.claude_dir)
+        self._socket_name = f"mcp-{uuid4().hex[:8]}.sock"
+        self._mcp_socket: MCPSocketServer | None = None
+        self._mcp_config: str | None = None
+        log.info(
+            "ClaudeCodeBackend initialized, claude_dir=%s, claude_binary=%s",
+            self.claude_dir,
+            self._claude_binary,
+        )
+
+    async def __aenter__(self) -> ClaudeCodeBackend:
+        from docketeer.brain.mcp_transport import bind_mcp_socket
+
+        socket_path = self.claude_dir / self._socket_name
+        self._mcp_socket = await bind_mcp_socket(socket_path)
+        sandbox_socket = str(Path.home() / ".claude" / self._socket_name)
+        self._mcp_config = json.dumps(
+            {
+                "mcpServers": {
+                    "docketeer": {
+                        "command": "socat",
+                        "args": ["STDIO", f"UNIX-CONNECT:{sandbox_socket}"],
+                    }
+                }
+            }
+        )
+        log.info("MCP socket bound at %s", socket_path)
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        if self._mcp_socket is not None:
+            self._mcp_socket.close()
+            await self._mcp_socket.wait_closed()
+            (self.claude_dir / self._socket_name).unlink(missing_ok=True)
+            self._mcp_socket = None
+            self._mcp_config = None
+            log.info("MCP socket closed")
 
     async def run_agentic_loop(
         self,
@@ -85,7 +124,7 @@ class ClaudeCodeBackend(InferenceBackend):
         )
 
         if session and len(messages) >= session.message_count:
-            prompt = _extract_text(messages[-1])
+            prompt = extract_text(messages[-1])
             session_id = session.session_id
             log.info(
                 "Resuming session %s for room %s (messages %d >= stored %d)",
@@ -95,7 +134,7 @@ class ClaudeCodeBackend(InferenceBackend):
                 session.message_count,
             )
         else:
-            prompt = _extract_text(messages[-1])
+            prompt = extract_text(messages[-1])
             session_id = None
             if session and room_id:
                 log.info(
@@ -118,7 +157,15 @@ class ClaudeCodeBackend(InferenceBackend):
             prompt,
             self.oauth_token,
             self.claude_dir,
+            tool_context.workspace,
+            audit_path,
+            self._claude_binary,
+            self._claude_install_root,
             session_id=session_id,
+            tools=tools,
+            tool_context=tool_context,
+            mcp_socket=self._mcp_socket,
+            mcp_config=self._mcp_config,
         )
 
         log.info(
@@ -162,6 +209,11 @@ class ClaudeCodeBackend(InferenceBackend):
     ) -> str:
         from docketeer.brain.core import MODELS
 
+        scratch = self.claude_dir / "scratch"
+        scratch.mkdir(exist_ok=True)
+        audit = self.claude_dir / "audit"
+        audit.mkdir(exist_ok=True)
+
         log.info("utility_complete: prompt (%d chars): %.200s", len(prompt), prompt)
         text, _ = await _invoke_claude(
             MODELS["haiku"].model_id,
@@ -169,23 +221,13 @@ class ClaudeCodeBackend(InferenceBackend):
             prompt,
             self.oauth_token,
             self.claude_dir,
+            scratch,
+            audit,
+            self._claude_binary,
+            self._claude_install_root,
         )
         log.info("utility_complete: response (%d chars)", len(text))
         return text
-
-
-def _extract_text(message: dict) -> str:
-    """Pull text from a message's content (string or list-of-blocks)."""
-    content = message.get("content", "")
-    if isinstance(content, str):
-        return content
-    parts: list[str] = []
-    for block in content:
-        if isinstance(block, str):
-            parts.append(block)
-        elif isinstance(block, dict) and block.get("type") == "text":
-            parts.append(block.get("text", ""))
-    return "\n".join(parts)
 
 
 def _build_bwrap_command(
@@ -193,8 +235,12 @@ def _build_bwrap_command(
     system_text: str,
     prompt: str,
     claude_dir: Path,
+    workspace: Path,
+    claude_binary: Path,
+    claude_install_root: Path,
     *,
     session_id: str | None = None,
+    mcp_config: str | None = None,
 ) -> list[str]:
     """Build the bwrap + claude -p command."""
     uid = os.getuid()
@@ -211,25 +257,36 @@ def _build_bwrap_command(
     args.extend(["--dev", "/dev"])
     args.extend(["--tmpfs", "/tmp"])
 
-    args.extend(["--ro-bind", str(home), str(home)])
+    # Empty home — no host files leak into the sandbox
+    args.extend(["--tmpfs", str(home)])
 
     args.extend(["--bind", str(claude_dir), str(home / ".claude")])
 
+    # Mount the claude binary's install root if not already under system paths
+    if not any(claude_install_root.is_relative_to(p) for p in SYSTEM_RO_BINDS):
+        args.extend(["--ro-bind", str(claude_install_root), str(claude_install_root)])
+
+    args.extend(["--ro-bind", str(workspace), str(workspace)])
+
     args.extend(["--uid", str(uid), "--gid", str(gid)])
+    args.extend(["--chdir", str(workspace)])
 
     args.extend(
         [
-            "claude",
+            str(claude_binary),
             "-p",
             "--output-format",
             "stream-json",
             "--verbose",
-            "--tools",
-            "",
             "--dangerously-skip-permissions",
             "--disable-slash-commands",
         ]
     )
+
+    if mcp_config:
+        args.extend(["--mcp-config", mcp_config])
+    else:
+        args.extend(["--tools", ""])
 
     if session_id:
         args.extend(["--resume", session_id])
@@ -252,22 +309,41 @@ async def _invoke_claude(
     prompt: str,
     oauth_token: str,
     claude_dir: Path,
+    workspace: Path,
+    audit_path: Path,
+    claude_binary: Path,
+    claude_install_root: Path,
     *,
     session_id: str | None = None,
+    tools: list[ToolDefinition] | None = None,
+    tool_context: ToolContext | None = None,
+    mcp_socket: MCPSocketServer | None = None,
+    mcp_config: str | None = None,
 ) -> tuple[str, str | None]:
-    """Run claude -p inside bwrap and return (response_text, session_id)."""
+    """Run claude -p inside bwrap and return (response_text, session_id).
+
+    When tools, tool_context, and mcp_socket are provided, accepts a
+    connection on the pre-bound MCP socket so the sandboxed claude process
+    can call host-side tools via socat.
+    """
     cmd = _build_bwrap_command(
         model,
         system_text,
         prompt,
         claude_dir,
+        workspace,
+        claude_binary,
+        claude_install_root,
         session_id=session_id,
+        mcp_config=mcp_config if tools and tool_context else None,
     )
 
     log.info(
-        "Invoking claude: model=%s, session=%s, system_prompt=%d chars, prompt=%d chars",
+        "Invoking claude: model=%s, session=%s, mcp=%s, "
+        "system_prompt=%d chars, prompt=%d chars",
         model,
         session_id or "(new)",
+        "yes" if (tools and tool_context and mcp_socket) else "no",
         len(system_text),
         len(prompt),
     )
@@ -275,6 +351,20 @@ async def _invoke_claude(
 
     env = {**os.environ, "CLAUDE_CODE_OAUTH_TOKEN": oauth_token}
 
+    if tools and tool_context and mcp_socket:
+        return await _invoke_claude_with_mcp(
+            cmd, env, prompt, mcp_socket, tool_context, audit_path
+        )
+
+    return await _invoke_claude_simple(cmd, env, prompt)
+
+
+async def _invoke_claude_simple(
+    cmd: list[str],
+    env: dict[str, str],
+    prompt: str,
+) -> tuple[str, str | None]:
+    """Run claude -p without MCP (utility calls, no tools)."""
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         stdin=asyncio.subprocess.PIPE,
@@ -284,68 +374,56 @@ async def _invoke_claude(
     )
 
     log.info("claude subprocess started, pid=%s", proc.pid)
-
     stdout_bytes, stderr_bytes = await proc.communicate(input=prompt.encode())
+    return handle_claude_output(proc, stdout_bytes, stderr_bytes)
 
-    log.info(
-        "claude subprocess exited: code=%s, stdout=%d bytes, stderr=%d bytes",
-        proc.returncode,
-        len(stdout_bytes),
-        len(stderr_bytes),
+
+async def _invoke_claude_with_mcp(  # pragma: no cover — integration path
+    cmd: list[str],
+    env: dict[str, str],
+    prompt: str,
+    mcp_socket: MCPSocketServer,
+    tool_context: ToolContext,
+    audit_path: Path,
+) -> tuple[str, str | None]:
+    """Run claude -p with an MCP server bridged over the pre-bound Unix socket."""
+    from docketeer.brain.mcp_server import create_mcp_server
+    from docketeer.brain.mcp_transport import accept_mcp_connection
+    from docketeer.tools import registry
+
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        env=env,
     )
+    log.info("claude subprocess started (MCP), pid=%s", proc.pid)
 
-    if stderr_bytes:
-        log.info("claude stderr: %s", stderr_bytes.decode(errors="replace").strip())
+    server = create_mcp_server(registry, tool_context, audit_path=audit_path)
 
-    if proc.returncode != 0:
-        stderr_text = stderr_bytes.decode(errors="replace")
-        _check_error(stderr_text, proc.returncode or 1)
+    # Send the prompt concurrently — claude needs stdin before it launches socat,
+    # but accept_mcp_connection blocks waiting for socat to connect.
+    comm_task = asyncio.create_task(proc.communicate(input=prompt.encode()))
 
-    stdout_text = stdout_bytes.decode(errors="replace")
-    lines = stdout_text.splitlines()
-    log.info("Parsing %d lines of stream-json output", len(lines))
-    return _parse_response(lines)
+    try:
+        async with accept_mcp_connection(mcp_socket) as (read_stream, write_stream):
+            opts = server.create_initialization_options()
+            server_task = asyncio.create_task(
+                server.run(read_stream, write_stream, opts)
+            )
+            try:
+                stdout_bytes, stderr_bytes = await comm_task
+            finally:
+                server_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await server_task
+    except BaseException:
+        if not comm_task.done():
+            proc.kill()
+            comm_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await comm_task
+        raise
 
-
-def _parse_response(lines: list[str]) -> tuple[str, str | None]:
-    """Parse stream-json output from claude -p."""
-    text_parts: list[str] = []
-    session_id: str | None = None
-
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            event = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-
-        etype = event.get("type")
-
-        if etype == "assistant":
-            msg = event.get("message", {})
-            for block in msg.get("content", []):
-                if block.get("type") == "text":
-                    text = block.get("text", "")
-                    if text:  # pragma: no branch
-                        text_parts.append(text)
-
-        elif etype == "result":  # pragma: no branch
-            session_id = event.get("session_id", session_id)
-
-    return "".join(text_parts).strip(), session_id
-
-
-def _check_error(stderr: str, returncode: int) -> None:
-    """Map stderr content to appropriate backend exceptions."""
-    lower = stderr.lower()
-    if any(word in lower for word in ("auth", "unauthorized", "token")):
-        raise BackendAuthError(
-            f"claude auth error (exit {returncode}): {stderr.strip()}"
-        )
-    if any(word in lower for word in ("context", "too large")):
-        raise ContextTooLargeError(
-            f"context too large (exit {returncode}): {stderr.strip()}"
-        )
-    raise BackendError(f"claude error (exit {returncode}): {stderr.strip()}")
+    return handle_claude_output(proc, stdout_bytes, stderr_bytes)

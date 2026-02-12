@@ -56,3 +56,10 @@ def test_context_too_large_is_backend_error():
 
 def test_backend_auth_error_is_backend_error():
     assert issubclass(BackendAuthError, BackendError)
+
+
+async def test_inference_backend_default_context_manager():
+    with patch("docketeer.brain.anthropic_backend.anthropic.AsyncAnthropic"):
+        backend = _create_backend()
+    async with backend as entered:
+        assert entered is backend

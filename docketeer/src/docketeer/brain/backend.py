@@ -25,6 +25,12 @@ class BackendAuthError(BackendError):
 
 
 class InferenceBackend(ABC):
+    async def __aenter__(self) -> InferenceBackend:
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:  # noqa: B027
+        pass
+
     @abstractmethod
     async def run_agentic_loop(
         self,
