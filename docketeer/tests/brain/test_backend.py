@@ -27,15 +27,19 @@ def test_create_backend_explicit_api():
     assert isinstance(backend, AnthropicAPIBackend)
 
 
-def test_create_backend_claude_code_raises():
+def test_create_backend_claude_code():
     with (
         patch(
             "docketeer.brain.core.environment.get_str",
-            side_effect=["claude-code"],
+            side_effect=["claude-code", "fake-oauth-token"],
         ),
-        pytest.raises(NotImplementedError, match="claude-code"),
+        patch("shutil.which", return_value="/usr/bin/fake"),
+        patch("pathlib.Path.mkdir"),
     ):
-        _create_backend()
+        backend = _create_backend()
+    from docketeer.brain.claude_code_backend import ClaudeCodeBackend
+
+    assert isinstance(backend, ClaudeCodeBackend)
 
 
 def test_create_backend_unknown_raises():

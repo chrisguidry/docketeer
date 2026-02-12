@@ -85,14 +85,17 @@ APOLOGY = (
 
 def _create_backend() -> InferenceBackend:
     """Create the inference backend based on DOCKETEER_INFERENCE env var."""
-    mode = environment.get_str("DOCKETEER_INFERENCE", "api")
+    mode = environment.get_str("INFERENCE", "api")
     if mode == "api":
         from docketeer.brain.anthropic_backend import AnthropicAPIBackend
 
         api_key = environment.get_str("ANTHROPIC_API_KEY")
         return AnthropicAPIBackend(api_key)
     if mode == "claude-code":
-        raise NotImplementedError("claude-code backend not yet implemented")
+        from docketeer.brain.claude_code_backend import ClaudeCodeBackend
+
+        oauth_token = environment.get_str("CLAUDE_CODE_OAUTH_TOKEN")
+        return ClaudeCodeBackend(oauth_token)
     raise ValueError(f"Unknown inference backend: {mode!r}")
 
 
