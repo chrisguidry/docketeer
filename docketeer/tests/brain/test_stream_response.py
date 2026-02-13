@@ -50,8 +50,8 @@ def _callbacks() -> tuple[ProcessCallbacks, dict[str, list]]:
     async def on_text(text: str) -> None:
         calls["on_text"].append(text)
 
-    async def on_tool_start() -> None:
-        calls["on_tool_start"].append(True)
+    async def on_tool_start(tool_name: str) -> None:
+        calls["on_tool_start"].append(tool_name)
 
     async def on_tool_end() -> None:
         calls["on_tool_end"].append(True)
@@ -98,7 +98,7 @@ async def test_stream_response_multi_turn_with_tool_use():
     assert session_id == "sess-2"
     assert calls["on_first_text"] == [True]
     assert calls["on_text"] == ["Let me check."]
-    assert calls["on_tool_start"] == [True]
+    assert calls["on_tool_start"] == ["search"]
     assert calls["on_tool_end"] == [True]
 
 
@@ -115,7 +115,7 @@ async def test_stream_response_tool_only_turn():
     text, session_id, _ = await stream_response(stream, cb)
     assert text == "Result."
     assert calls["on_text"] == []
-    assert calls["on_tool_start"] == [True]
+    assert calls["on_tool_start"] == ["search"]
     assert calls["on_tool_end"] == [True]
 
 
@@ -134,7 +134,7 @@ async def test_stream_response_consecutive_tool_rounds():
     assert text == "Done."
     assert calls["on_first_text"] == [True]
     assert calls["on_text"] == ["First thought.", "Second thought."]
-    assert calls["on_tool_start"] == [True, True]
+    assert calls["on_tool_start"] == ["search", "search"]
     assert calls["on_tool_end"] == [True, True]
 
 
@@ -215,7 +215,7 @@ async def test_stream_response_text_tool_text_tool_text():
     text, session_id, _ = await stream_response(stream, cb)
     assert text == "Final answer."
     assert calls["on_text"] == ["Step 1.", "Step 2."]
-    assert calls["on_tool_start"] == [True, True]
+    assert calls["on_tool_start"] == ["search", "search"]
     assert calls["on_tool_end"] == [True, True]
 
 
@@ -327,7 +327,7 @@ async def test_stream_event_tool_start_end():
     text, _, _ = await stream_response(stream, cb)
     assert text == "Done."
     assert calls["on_first_text"] == [True]
-    assert calls["on_tool_start"] == [True]
+    assert calls["on_tool_start"] == ["Read"]
     assert calls["on_tool_end"] == [True]
 
 
@@ -348,7 +348,7 @@ async def test_stream_event_consecutive_tools():
     )
     text, _, _ = await stream_response(stream, cb)
     assert text == "Done."
-    assert calls["on_tool_start"] == [True, True]
+    assert calls["on_tool_start"] == ["Read", "Grep"]
     assert calls["on_tool_end"] == [True, True]
 
 

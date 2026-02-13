@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from docketeer.brain.claude_code_backend import ClaudeCodeBackend
-from docketeer.brain.core import InferenceModel, ProcessCallbacks
+from docketeer.brain.core import InferenceModel
 
 MODEL = InferenceModel(model_id="claude-opus-4-6", max_output_tokens=128_000)
 
@@ -404,64 +404,3 @@ async def test_resumed_session_passes_resume_session_id(backend: ClaudeCodeBacke
         )
     assert mock.call_args[1]["resume_session_id"] == first_session_id
     assert mock.call_args[1].get("session_id") is None
-
-
-# -- busy/available callbacks bracket --
-
-
-async def test_busy_available_callbacks_bracket_invocation(
-    backend: ClaudeCodeBackend,
-):
-    """on_tool_start fires before _invoke_claude, on_tool_end fires after."""
-    call_order: list[str] = []
-
-    async def on_tool_start() -> None:
-        call_order.append("tool_start")
-
-    async def on_tool_end() -> None:
-        call_order.append("tool_end")
-
-    callbacks = ProcessCallbacks(
-        on_tool_start=on_tool_start,
-        on_tool_end=on_tool_end,
-    )
-
-    async def fake_invoke(
-        *args: object, **kwargs: object
-    ) -> tuple[str, str | None, dict | None]:
-        call_order.append("invoke")
-        return ("reply", "sess-1", None)
-
-    messages = [{"role": "user", "content": "hello"}]
-    with patch(
-        "docketeer.brain.claude_code_backend._invoke_claude",
-        side_effect=fake_invoke,
-    ):
-        await backend.run_agentic_loop(
-            MODEL,
-            [],
-            messages,
-            [],
-            _mock_tool_context(),
-            Path("/tmp"),
-            Path("/tmp"),
-            callbacks,
-        )
-    assert call_order == ["tool_start", "invoke", "tool_end"]
-
-
-async def test_busy_available_no_callbacks(backend: ClaudeCodeBackend):
-    """No crash when callbacks is None."""
-    messages = [{"role": "user", "content": "hello"}]
-    with _patch_invoke(("reply", "sess-1", None)):
-        result = await backend.run_agentic_loop(
-            MODEL,
-            [],
-            messages,
-            [],
-            _mock_tool_context(),
-            Path("/tmp"),
-            Path("/tmp"),
-            None,
-        )
-    assert result == "reply"

@@ -134,14 +134,6 @@ class ChatClient(ABC):
     @abstractmethod
     async def set_status(self, status: str, message: str = "") -> None: ...
 
-    async def set_status_busy(self) -> None:
-        """Signal that the bot is busy (e.g. executing tools)."""
-        await self.set_status("away")
-
-    async def set_status_available(self) -> None:
-        """Signal that the bot is idle and ready."""
-        await self.set_status("online")
-
     @abstractmethod
     async def send_typing(self, room_id: str, typing: bool) -> None: ...
 

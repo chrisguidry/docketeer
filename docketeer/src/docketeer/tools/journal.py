@@ -14,7 +14,7 @@ def _journal_path_for_date(workspace: Path, date: str) -> Path:
     return _journal_dir(workspace) / f"{date}.md"
 
 
-@registry.tool
+@registry.tool(emoji=":pencil:")
 async def journal_add(ctx: ToolContext, entry: str) -> str:
     """Add a timestamped entry to today's journal. Use [[wikilinks]] to reference workspace files.
 
@@ -35,7 +35,7 @@ async def journal_add(ctx: ToolContext, entry: str) -> str:
     return f"Added to journal at {date} {time}"
 
 
-@registry.tool
+@registry.tool(emoji=":pencil:")
 async def journal_read(
     ctx: ToolContext, date: str = "", start: str = "", end: str = ""
 ) -> str:
@@ -77,7 +77,7 @@ async def journal_read(
     return path.read_text()
 
 
-@registry.tool
+@registry.tool(emoji=":pencil:")
 async def journal_search(ctx: ToolContext, query: str) -> str:
     """Search across all journal entries.
 

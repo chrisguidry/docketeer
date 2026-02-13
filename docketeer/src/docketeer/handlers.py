@@ -8,6 +8,7 @@ from anthropic import AuthenticationError, PermissionDeniedError
 from docketeer.brain import APOLOGY, CHAT_MODEL, Brain, ProcessCallbacks
 from docketeer.chat import ChatClient, IncomingMessage, RoomInfo, RoomMessage
 from docketeer.prompt import BrainResponse, MessageContent
+from docketeer.tools import registry
 
 log = logging.getLogger(__name__)
 
@@ -81,11 +82,16 @@ async def handle_message(
 
     content = await build_content(client, msg)
 
-    async def _on_tool_start() -> None:
-        await client.send_typing(msg.room_id, False)
-        await client.set_status_busy()
-
     thread_id = msg.thread_id
+    tool_emojis: set[str] = set()
+
+    async def _on_tool_start(tool_name: str) -> None:
+        await client.send_typing(msg.room_id, False)
+        emoji = registry.emoji_for(tool_name)
+        log.debug("on_tool_start: tool_name=%r, emoji=%r", tool_name, emoji)
+        if emoji and emoji not in tool_emojis:
+            tool_emojis.add(emoji)
+            await client.react(msg.message_id, emoji)
 
     callbacks = ProcessCallbacks(
         on_first_text=lambda: client.send_typing(msg.room_id, True),
@@ -93,10 +99,10 @@ async def handle_message(
             msg.room_id, text, thread_id=thread_id
         ),
         on_tool_start=_on_tool_start,
-        on_tool_end=lambda: client.set_status_available(),
         interrupted=interrupted,
     )
 
+    await client.react(msg.message_id, ":eyes:")
     try:
         response = await brain.process(
             msg.room_id, content, callbacks=callbacks, model=CHAT_MODEL
@@ -109,6 +115,9 @@ async def handle_message(
         )
         response = BrainResponse(text=APOLOGY)
     finally:
+        await client.unreact(msg.message_id, ":eyes:")
+        for emoji in tool_emojis:
+            await client.unreact(msg.message_id, emoji)
         await client.send_typing(msg.room_id, False)
 
     try:

@@ -108,7 +108,7 @@ class ProcessCallbacks:
 
     on_first_text: Callable[[], Awaitable[None]] | None = None
     on_text: Callable[[str], Awaitable[None]] | None = None
-    on_tool_start: Callable[[], Awaitable[None]] | None = None
+    on_tool_start: Callable[[str], Awaitable[None]] | None = None
     on_tool_end: Callable[[], Awaitable[None]] | None = None
     interrupted: asyncio.Event | None = None
 

@@ -28,6 +28,7 @@ class ToolDefinition:
     name: str
     description: str
     input_schema: dict[str, Any]
+    emoji: str = ""
     cache_control: CacheControl | None = None
 
     def to_api_dict(self) -> ToolParam:
@@ -60,17 +61,38 @@ class ToolRegistry:
         self._tools: dict[str, Callable] = {}
         self._schemas: dict[str, ToolDefinition] = {}
 
-    def tool[F: FunctionType](self, fn: F) -> F:
-        """Decorator that registers a tool and derives its schema."""
-        name = fn.__name__
-        schema = _schema_from_hints(fn)
-        self._tools[name] = fn
-        self._schemas[name] = ToolDefinition(
-            name=name,
-            description=inspect.cleandoc(fn.__doc__ or ""),
-            input_schema=schema,
-        )
-        return fn
+    def tool[F: FunctionType](self, fn: F | None = None, *, emoji: str = "") -> F:
+        """Decorator that registers a tool and derives its schema.
+
+        Supports both ``@registry.tool`` and ``@registry.tool(emoji=":mag:")``.
+        """
+
+        def _register(fn: F) -> F:
+            name = fn.__name__
+            schema = _schema_from_hints(fn)
+            self._tools[name] = fn
+            self._schemas[name] = ToolDefinition(
+                name=name,
+                description=inspect.cleandoc(fn.__doc__ or ""),
+                input_schema=schema,
+                emoji=emoji,
+            )
+            return fn
+
+        if fn is not None:
+            return _register(fn)
+        return _register  # type: ignore[return-value]
+
+    def emoji_for(self, name: str) -> str:
+        """Look up the emoji for a registered tool.
+
+        Handles MCP-prefixed names like ``mcp__docketeer__list_files``
+        by stripping everything before the last ``__`` separator.
+        """
+        defn = self._schemas.get(name)
+        if not defn and "__" in name:
+            defn = self._schemas.get(name.rsplit("__", 1)[-1])
+        return defn.emoji if defn else ""
 
     def definitions(self) -> list[ToolDefinition]:
         """Return tool definitions."""

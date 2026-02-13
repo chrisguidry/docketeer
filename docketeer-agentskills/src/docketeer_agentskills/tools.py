@@ -10,7 +10,7 @@ from docketeer.tools import ToolContext, _safe_path, registry
 from .discovery import discover_skills, parse_skill
 
 
-@registry.tool
+@registry.tool(emoji=":books:")
 async def list_skills(ctx: ToolContext) -> str:
     """List all installed skills with their descriptions."""
     skills = discover_skills(ctx.workspace / "skills")
@@ -22,7 +22,7 @@ async def list_skills(ctx: ToolContext) -> str:
     return "\n".join(lines)
 
 
-@registry.tool
+@registry.tool(emoji=":books:")
 async def activate_skill(ctx: ToolContext, name: str) -> str:
     """Load the full instructions for an installed skill.
 
@@ -38,7 +38,7 @@ async def activate_skill(ctx: ToolContext, name: str) -> str:
     return skill.body
 
 
-@registry.tool
+@registry.tool(emoji=":books:")
 async def read_skill_file(ctx: ToolContext, name: str, path: str) -> str:
     """Read a file from an installed skill's directory.
 
@@ -63,7 +63,7 @@ async def read_skill_file(ctx: ToolContext, name: str, path: str) -> str:
         return f"Cannot read binary file: {path}"
 
 
-@registry.tool
+@registry.tool(emoji=":books:")
 async def install_skill(
     ctx: ToolContext, url: str, name: str = "", path: str = ""
 ) -> str:
@@ -116,7 +116,7 @@ async def install_skill(
     return f"Installed skill {skill.name!r}: {skill.description}"
 
 
-@registry.tool
+@registry.tool(emoji=":books:")
 async def uninstall_skill(ctx: ToolContext, name: str) -> str:
     """Remove an installed skill.
 

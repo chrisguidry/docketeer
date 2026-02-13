@@ -398,7 +398,7 @@ class RocketChatClient(ChatClient):
     ) -> None:
         """Subscribe, set status, and prime history after a successful connect."""
         await self.subscribe_to_my_messages()
-        await self.set_status_available()
+        await self.set_status("online")
         await self._prime_history(on_history, since=since)
 
     async def _prime_history(

@@ -152,9 +152,6 @@ class ClaudeCodeBackend(InferenceBackend):
         prompt = format_prompt(messages, resume=resume_session_id is not None)
         log.info("Prompt (%d chars): %.200s", len(prompt), prompt)
 
-        if callbacks and callbacks.on_tool_start:
-            await callbacks.on_tool_start()
-
         text, _, result_event = await _invoke_claude(
             model.model_id,
             system_text,
@@ -173,9 +170,6 @@ class ClaudeCodeBackend(InferenceBackend):
             mcp_config=self._mcp_config,
             callbacks=callbacks,
         )
-
-        if callbacks and callbacks.on_tool_end:
-            await callbacks.on_tool_end()
 
         effective_session_id = resume_session_id or session_id
         log.info(

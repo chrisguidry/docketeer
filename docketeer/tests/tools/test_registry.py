@@ -220,6 +220,55 @@ def test_safe_path_traversal_blocked(tmp_path: Path):
         _safe_path(workspace, "../../../etc/passwd")
 
 
+def test_tool_registration_with_emoji():
+    reg = ToolRegistry()
+
+    @reg.tool(emoji=":mag:")
+    async def search(ctx: ToolContext, query: str) -> str:
+        """Search."""
+        return ""
+
+    assert reg._schemas["search"].emoji == ":mag:"
+
+
+def test_tool_registration_without_emoji():
+    reg = ToolRegistry()
+
+    @reg.tool
+    async def plain(ctx: ToolContext) -> str:
+        """Plain."""
+        return ""
+
+    assert reg._schemas["plain"].emoji == ""
+
+
+def test_emoji_for_registered_tool():
+    reg = ToolRegistry()
+
+    @reg.tool(emoji=":lock:")
+    async def my_tool(ctx: ToolContext) -> str:
+        """Tool."""
+        return ""
+
+    assert reg.emoji_for("my_tool") == ":lock:"
+
+
+def test_emoji_for_unknown_tool():
+    reg = ToolRegistry()
+    assert reg.emoji_for("nonexistent") == ""
+
+
+def test_emoji_for_mcp_prefixed_name():
+    reg = ToolRegistry()
+
+    @reg.tool(emoji=":open_file_folder:")
+    async def list_files(ctx: ToolContext) -> str:
+        """List files."""
+        return ""
+
+    assert reg.emoji_for("mcp__docketeer__list_files") == ":open_file_folder:"
+
+
 def test_load_tool_plugins_delegates_to_discover_all():
     with patch("docketeer.tools.discover_all", return_value=[]) as mock:
         _load_tool_plugins()

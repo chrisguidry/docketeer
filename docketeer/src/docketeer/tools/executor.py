@@ -43,7 +43,7 @@ async def _resolve_secret_env(
     return resolved
 
 
-@registry.tool
+@registry.tool(emoji=":hammer_and_wrench:")
 async def run(
     ctx: ToolContext,
     args: list[str],
@@ -76,7 +76,7 @@ async def run(
     return _format_result(await running.wait())
 
 
-@registry.tool
+@registry.tool(emoji=":hammer_and_wrench:")
 async def shell(
     ctx: ToolContext,
     command: str,

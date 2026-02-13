@@ -63,7 +63,7 @@ async def test_incoming_messages_reconnects_on_disconnect():
 
     client._open_connections = fake_open_connections  # type: ignore[assignment]
     client.subscribe_to_my_messages = AsyncMock()  # type: ignore[assignment]
-    client.set_status_available = AsyncMock()  # type: ignore[assignment]
+    client.set_status = AsyncMock()  # type: ignore[assignment]
 
     results = []
     with patch("asyncio.sleep", new_callable=AsyncMock):
@@ -101,7 +101,7 @@ async def test_incoming_messages_backoff_on_reconnect_failure():
 
     client._open_connections = failing_open_connections  # type: ignore[assignment]
     client.subscribe_to_my_messages = AsyncMock()  # type: ignore[assignment]
-    client.set_status_available = AsyncMock()  # type: ignore[assignment]
+    client.set_status = AsyncMock()  # type: ignore[assignment]
 
     sleep_values: list[float] = []
 

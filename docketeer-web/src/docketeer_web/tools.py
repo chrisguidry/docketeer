@@ -98,7 +98,7 @@ def _human_size(n: int) -> str:
     return f"{n} bytes"  # pragma: no cover
 
 
-@registry.tool
+@registry.tool(emoji=":globe_with_meridians:")
 async def web_search(ctx: ToolContext, query: str, count: int = 5) -> str:
     """Search the web using Brave Search.
 
@@ -152,7 +152,7 @@ async def web_search(ctx: ToolContext, query: str, count: int = 5) -> str:
     return "\n\n".join(lines)
 
 
-@registry.tool
+@registry.tool(emoji=":globe_with_meridians:")
 async def web_request(
     ctx: ToolContext,
     url: str,
@@ -240,7 +240,7 @@ async def web_request(
     return f"{status_line}\n\n{resp_headers}\n\n{text}"
 
 
-@registry.tool
+@registry.tool(emoji=":globe_with_meridians:")
 async def download_file(ctx: ToolContext, url: str, path: str) -> str:
     """Download a file from a URL to the workspace.
 

@@ -11,7 +11,7 @@ from docketeer.chat import Attachment, IncomingMessage, RoomKind, RoomMessage
 from docketeer.handlers import build_content, handle_message, send_response
 from docketeer.main import run
 from docketeer.prompt import BrainResponse
-from docketeer.testing import MemoryChat
+from docketeer.testing import MemoryChat, Reaction
 
 from ..conftest import (
     FakeMessage,
@@ -84,7 +84,7 @@ async def test_handle_message_new_room(
     assert info.members == ["alice"]
 
 
-async def test_handle_message_text_only_no_status_change(
+async def test_handle_message_eyes_reaction(
     chat: MemoryChat, brain: Brain, fake_messages: FakeMessages
 ):
     brain.load_history(
@@ -111,7 +111,8 @@ async def test_handle_message_text_only_no_status_change(
         kind=RoomKind.direct,
     )
     await handle_message(chat, brain, msg)
-    assert chat.status_changes == []
+    assert chat.reactions[0] == Reaction("m1", ":eyes:", "react")
+    assert chat.reactions[1] == Reaction("m1", ":eyes:", "unreact")
 
 
 async def test_build_content_text_only(chat: MemoryChat):
@@ -232,7 +233,7 @@ async def test_handle_message_sends_typing_events(
     assert ("room1", False) in chat.typing_events
 
 
-async def test_handle_message_tool_use_status_changes(
+async def test_handle_message_tool_use_stops_typing(
     chat: MemoryChat, brain: Brain, fake_messages: FakeMessages
 ):
     brain.load_history(
@@ -264,9 +265,95 @@ async def test_handle_message_tool_use_status_changes(
         kind=RoomKind.direct,
     )
     await handle_message(chat, brain, msg)
-    statuses = [s[0] for s in chat.status_changes]
-    # on_tool_start sets away, on_tool_end sets online — only around tool execution
-    assert statuses == ["away", "online"]
+    # on_tool_start stops typing, no status changes
+    assert ("room1", False) in chat.typing_events
+    assert chat.status_changes == []
+
+
+async def test_handle_message_tool_emoji_reactions(
+    chat: MemoryChat, brain: Brain, fake_messages: FakeMessages
+):
+    """Tool use reacts with the tool's emoji and unreacts in finally."""
+    brain.load_history(
+        "room1",
+        [
+            RoomMessage(
+                message_id="m0",
+                timestamp=datetime(2026, 2, 6, 10, 0, tzinfo=UTC),
+                username="a",
+                display_name="A",
+                text="x",
+            )
+        ],
+    )
+    fake_messages.responses = [
+        FakeMessage(
+            content=[make_tool_use_block(name="list_files", input={"path": ""})],
+        ),
+        FakeMessage(content=[make_text_block(text="Done!")]),
+    ]
+
+    msg = IncomingMessage(
+        message_id="m1",
+        user_id="u1",
+        username="alice",
+        display_name="Alice",
+        text="list files",
+        room_id="room1",
+        kind=RoomKind.direct,
+    )
+    await handle_message(chat, brain, msg)
+    # Should have :eyes: react, :open_file_folder: react, then unreacts for both
+    reacted = [r for r in chat.reactions if r.action == "react"]
+    unreacted = [r for r in chat.reactions if r.action == "unreact"]
+    assert Reaction("m1", ":eyes:", "react") in reacted
+    assert Reaction("m1", ":open_file_folder:", "react") in reacted
+    assert Reaction("m1", ":eyes:", "unreact") in unreacted
+    assert Reaction("m1", ":open_file_folder:", "unreact") in unreacted
+
+
+async def test_handle_message_tool_emoji_no_duplicates(
+    chat: MemoryChat, brain: Brain, fake_messages: FakeMessages
+):
+    """Multiple tools with the same emoji only react once."""
+    brain.load_history(
+        "room1",
+        [
+            RoomMessage(
+                message_id="m0",
+                timestamp=datetime(2026, 2, 6, 10, 0, tzinfo=UTC),
+                username="a",
+                display_name="A",
+                text="x",
+            )
+        ],
+    )
+    fake_messages.responses = [
+        FakeMessage(
+            content=[
+                make_tool_use_block(id="t1", name="list_files", input={"path": ""}),
+                make_tool_use_block(id="t2", name="read_file", input={"path": "x"}),
+            ],
+        ),
+        FakeMessage(content=[make_text_block(text="Done!")]),
+    ]
+
+    msg = IncomingMessage(
+        message_id="m1",
+        user_id="u1",
+        username="alice",
+        display_name="Alice",
+        text="list and read",
+        room_id="room1",
+        kind=RoomKind.direct,
+    )
+    await handle_message(chat, brain, msg)
+    folder_reacts = [
+        r
+        for r in chat.reactions
+        if r.emoji == ":open_file_folder:" and r.action == "react"
+    ]
+    assert len(folder_reacts) == 1
 
 
 def test_run_start_dev():

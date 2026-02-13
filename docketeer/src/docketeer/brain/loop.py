@@ -40,7 +40,7 @@ async def agentic_loop(
     usage_path: Path,
     callbacks_on_first_text: Callable[[], Awaitable[None]] | None,
     callbacks_on_text: Callable[[str], Awaitable[None]] | None,
-    callbacks_on_tool_start: Callable[[], Awaitable[None]] | None,
+    callbacks_on_tool_start: Callable[[str], Awaitable[None]] | None,
     callbacks_on_tool_end: Callable[[], Awaitable[None]] | None,
     interrupted: asyncio.Event | None = None,
     *,
@@ -77,7 +77,8 @@ async def agentic_loop(
                 await callbacks_on_text(text)
             used_tools = True
             if callbacks_on_tool_start:
-                await callbacks_on_tool_start()
+                for block in tool_blocks:
+                    await callbacks_on_tool_start(block.name)
             tool_results = await execute_tools(tool_blocks, tool_context, audit_path)
             if callbacks_on_tool_end:
                 await callbacks_on_tool_end()

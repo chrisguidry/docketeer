@@ -96,7 +96,7 @@ def _format_room_message(msg: RoomMessage) -> str:
 def _register_core_chat_tools(client: ChatClient) -> None:
     """Register chat tools that work with any chat provider."""
 
-    @registry.tool
+    @registry.tool(emoji=":speech_balloon:")
     async def list_rooms(ctx: ToolContext) -> str:
         """List all rooms you belong to — channels, groups, and DMs."""
         rooms = _filter_rooms(await client.list_rooms(), client.username)
@@ -124,7 +124,7 @@ def _register_core_chat_tools(client: ChatClient) -> None:
 
         return f"{len(rooms)} room(s):\n" + "\n".join(lines)
 
-    @registry.tool
+    @registry.tool(emoji=":speech_balloon:")
     async def room_messages(
         ctx: ToolContext,
         count: int = 50,
@@ -158,7 +158,7 @@ def _register_core_chat_tools(client: ChatClient) -> None:
 
         return "\n".join(_format_room_message(m) for m in messages)
 
-    @registry.tool
+    @registry.tool(emoji=":speech_balloon:")
     async def send_message(
         ctx: ToolContext,
         text: str,
@@ -177,7 +177,7 @@ def _register_core_chat_tools(client: ChatClient) -> None:
         await client.send_message(target_room, text, thread_id=thread_id)
         return f"Sent message to {target_room}"
 
-    @registry.tool
+    @registry.tool(emoji=":speech_balloon:")
     async def react(
         ctx: ToolContext,
         message_id: str,
@@ -201,7 +201,7 @@ def _register_core_chat_tools(client: ChatClient) -> None:
 def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
     """Register scheduling tools that need the docket instance."""
 
-    @registry.tool
+    @registry.tool(emoji=":alarm_clock:")
     async def schedule(
         ctx: ToolContext,
         prompt: str,
@@ -247,7 +247,7 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
         mode = "silently" if silent else "in this room"
         return f'Scheduled "{key}" for {local} ({mode})'
 
-    @registry.tool
+    @registry.tool(emoji=":alarm_clock:")
     async def schedule_every(
         ctx: ToolContext,
         prompt: str,
@@ -301,7 +301,7 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
         mode = "silently" if silent else "in this room"
         return f'Scheduled "{key}" ({mode_desc}, {mode}), first run {local}'
 
-    @registry.tool
+    @registry.tool(emoji=":alarm_clock:")
     async def cancel_task(ctx: ToolContext, key: str) -> str:
         """Cancel a scheduled task.
 
@@ -310,7 +310,7 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
         await docket.cancel(key)
         return f'Cancelled "{key}"'
 
-    @registry.tool
+    @registry.tool(emoji=":alarm_clock:")
     async def list_scheduled(ctx: ToolContext) -> str:
         """List all scheduled and running tasks."""
         snap = await docket.snapshot()

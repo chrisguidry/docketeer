@@ -48,7 +48,7 @@ def _build_external_functions(
     return functions
 
 
-@registry.tool
+@registry.tool(emoji=":snake:")
 async def run_python(ctx: ToolContext, code: str) -> str:
     """Run Python code in a sandboxed interpreter. Workspace tools are available as async functions (e.g. await read_file("path")).
 

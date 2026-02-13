@@ -444,7 +444,7 @@ async def test_on_tool_start_end_fire_around_tool_execution(
     callbacks = ProcessCallbacks(on_tool_start=on_tool_start, on_tool_end=on_tool_end)
     content = MessageContent(username="chris", text="do stuff")
     await brain.process("room1", content, callbacks=callbacks)
-    on_tool_start.assert_awaited_once()
+    on_tool_start.assert_awaited_once_with("list_files")
     on_tool_end.assert_awaited_once()
 
 

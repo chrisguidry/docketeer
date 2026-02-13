@@ -12,7 +12,7 @@ NO_EXECUTOR = (
 )
 
 
-@registry.tool
+@registry.tool(emoji=":lock:")
 async def list_secrets(ctx: ToolContext) -> str:
     """List available secrets by name. Values are never shown."""
     if ctx.vault is None:
@@ -24,7 +24,7 @@ async def list_secrets(ctx: ToolContext) -> str:
     return "\n".join(r.name for r in refs)
 
 
-@registry.tool
+@registry.tool(emoji=":lock:")
 async def store_secret(ctx: ToolContext, name: str, value: str) -> str:
     """Store a secret value in the vault.
 
@@ -38,7 +38,7 @@ async def store_secret(ctx: ToolContext, name: str, value: str) -> str:
     return f"Stored secret '{name}'."
 
 
-@registry.tool
+@registry.tool(emoji=":lock:")
 async def generate_secret(ctx: ToolContext, name: str, length: int = 32) -> str:
     """Generate a random secret and store it in the vault. The value is never returned.
 
@@ -52,7 +52,7 @@ async def generate_secret(ctx: ToolContext, name: str, length: int = 32) -> str:
     return f"Generated secret '{name}' ({length} chars)."
 
 
-@registry.tool
+@registry.tool(emoji=":lock:")
 async def delete_secret(ctx: ToolContext, name: str) -> str:
     """Delete a secret from the vault.
 
@@ -65,7 +65,7 @@ async def delete_secret(ctx: ToolContext, name: str) -> str:
     return f"Deleted secret '{name}'."
 
 
-@registry.tool
+@registry.tool(emoji=":lock:")
 async def capture_secret(
     ctx: ToolContext, name: str, command: str, network: bool = False
 ) -> str:

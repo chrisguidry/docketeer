@@ -175,7 +175,7 @@ async def stream_response(
                     if in_tool_round and callbacks and callbacks.on_tool_end:
                         await callbacks.on_tool_end()
                     if callbacks and callbacks.on_tool_start:
-                        await callbacks.on_tool_start()
+                        await callbacks.on_tool_start(block.get("name", ""))
                     in_tool_round = True
                 elif block.get("type") == "text" and in_tool_round:
                     if callbacks and callbacks.on_tool_end:
@@ -217,7 +217,9 @@ async def stream_response(
                     if in_tool_round and callbacks and callbacks.on_tool_end:
                         await callbacks.on_tool_end()
                     if callbacks and callbacks.on_tool_start:
-                        await callbacks.on_tool_start()
+                        for block in content:
+                            if block.get("type") == "tool_use":
+                                await callbacks.on_tool_start(block.get("name", ""))
                     in_tool_round = True
             else:
                 if (

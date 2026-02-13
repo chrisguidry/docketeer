@@ -13,7 +13,7 @@ def create_client() -> RocketChatClient:
 def register_tools(client: ChatClient, tool_context: ToolContext) -> None:
     """Register Rocket Chat-specific tools (send_file)."""
 
-    @registry.tool
+    @registry.tool(emoji=":paperclip:")
     async def send_file(ctx: ToolContext, path: str, message: str = "") -> str:
         """Send a file from the workspace to the current chat room.
 

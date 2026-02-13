@@ -42,7 +42,7 @@ def current_docket() -> Docket:
     return _docket_var.get()
 
 
-@registry.tool
+@registry.tool(emoji=":electric_plug:")
 async def list_mcp_servers(ctx: ToolContext) -> str:
     """List configured MCP servers and their connection status."""
     servers = config.load_servers()
@@ -62,7 +62,7 @@ async def list_mcp_servers(ctx: ToolContext) -> str:
     return "\n".join(lines)
 
 
-@registry.tool
+@registry.tool(emoji=":electric_plug:")
 async def connect_mcp_server(
     ctx: ToolContext,
     name: str,
@@ -189,7 +189,7 @@ async def _start_oauth_flow(
     )
 
 
-@registry.tool
+@registry.tool(emoji=":electric_plug:")
 async def mcp_oauth_complete(
     ctx: ToolContext,
     server: str,
@@ -292,7 +292,7 @@ async def _schedule_token_refresh(
     )
 
 
-@registry.tool
+@registry.tool(emoji=":electric_plug:")
 async def disconnect_mcp_server(ctx: ToolContext, name: str) -> str:
     """Disconnect from a connected MCP server.
 
@@ -304,7 +304,7 @@ async def disconnect_mcp_server(ctx: ToolContext, name: str) -> str:
     return f"Disconnected from {name!r}."
 
 
-@registry.tool
+@registry.tool(emoji=":electric_plug:")
 async def search_mcp_tools(ctx: ToolContext, query: str, server: str = "") -> str:
     """Search connected MCP servers for tools matching a query.
 
@@ -325,7 +325,7 @@ async def search_mcp_tools(ctx: ToolContext, query: str, server: str = "") -> st
     return "\n".join(lines)
 
 
-@registry.tool
+@registry.tool(emoji=":electric_plug:")
 async def use_mcp_tool(
     ctx: ToolContext, server: str, tool: str, arguments: str = "{}"
 ) -> str:
@@ -346,7 +346,7 @@ async def use_mcp_tool(
         return f"Error calling {server}/{tool}: {e}"
 
 
-@registry.tool
+@registry.tool(emoji=":electric_plug:")
 async def add_mcp_server(
     ctx: ToolContext,
     name: str,
@@ -403,7 +403,7 @@ async def add_mcp_server(
     return f"Saved server {name!r} ({kind})."
 
 
-@registry.tool
+@registry.tool(emoji=":electric_plug:")
 async def remove_mcp_server(ctx: ToolContext, name: str) -> str:
     """Remove an MCP server configuration.
 
