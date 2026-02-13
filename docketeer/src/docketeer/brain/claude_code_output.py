@@ -56,8 +56,14 @@ def handle_claude_output(
 
 
 def parse_response(lines: list[str]) -> tuple[str, str | None]:
-    """Parse stream-json output from claude -p."""
-    text_parts: list[str] = []
+    """Parse stream-json output from claude -p.
+
+    Each ``assistant`` event is a separate turn (possibly separated by tool
+    calls).  Text blocks *within* a single turn are concatenated directly;
+    text from *different* turns is joined with a blank line so the output
+    doesn't smoosh together.
+    """
+    turn_texts: list[str] = []
     session_id: str | None = None
 
     for line in lines:
@@ -73,16 +79,19 @@ def parse_response(lines: list[str]) -> tuple[str, str | None]:
 
         if etype == "assistant":
             msg = event.get("message", {})
+            parts: list[str] = []
             for block in msg.get("content", []):
                 if block.get("type") == "text":
                     text = block.get("text", "")
                     if text:  # pragma: no branch
-                        text_parts.append(text)
+                        parts.append(text)
+            if parts:
+                turn_texts.append("".join(parts))
 
         elif etype == "result":  # pragma: no branch
             session_id = event.get("session_id", session_id)
 
-    return "".join(text_parts).strip(), session_id
+    return "\n\n".join(turn_texts).strip(), session_id
 
 
 def check_error(stderr: str, returncode: int) -> None:

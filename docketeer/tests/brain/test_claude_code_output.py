@@ -62,7 +62,7 @@ def test_parse_response_text_and_session():
         json.dumps({"type": "result", "session_id": "sess-42"}),
     ]
     text, session_id = parse_response(lines)
-    assert text == "Hello world!"
+    assert text == "Hello \n\nworld!"
     assert session_id == "sess-42"
 
 
@@ -100,7 +100,28 @@ def test_parse_response_skips_tool_use():
         ),
         json.dumps({"type": "result", "session_id": "s1"}),
     ]
-    assert parse_response(lines)[0] == "Let me check. Done!"
+    assert parse_response(lines)[0] == "Let me check. \n\nDone!"
+
+
+def test_parse_response_skips_tool_only_turn():
+    lines = [
+        json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [{"type": "tool_use", "name": "search", "input": {}}]
+                },
+            }
+        ),
+        json.dumps(
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "text", "text": "Found it!"}]},
+            }
+        ),
+        json.dumps({"type": "result", "session_id": "s1"}),
+    ]
+    assert parse_response(lines)[0] == "Found it!"
 
 
 def test_parse_response_malformed_json():
