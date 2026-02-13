@@ -7,7 +7,7 @@ import json
 import logging
 import os
 import shutil
-from contextlib import suppress
+from contextlib import AsyncExitStack, suppress
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -62,6 +62,7 @@ class ClaudeCodeBackend(InferenceBackend):
         self.claude_dir.mkdir(parents=True, exist_ok=True)
         self._sessions: dict[str, _Session] = {}
         self._socket_name = f"mcp-{uuid4().hex[:8]}.sock"
+        self._stack: AsyncExitStack | None = None
         self._mcp_socket: MCPSocketServer | None = None
         self._mcp_config: str | None = None
         log.info(
@@ -74,7 +75,10 @@ class ClaudeCodeBackend(InferenceBackend):
         from docketeer.brain.mcp_transport import bind_mcp_socket
 
         socket_path = self.claude_dir / self._socket_name
-        self._mcp_socket = await bind_mcp_socket(socket_path)
+        self._stack = AsyncExitStack()
+        self._mcp_socket = await self._stack.enter_async_context(
+            await bind_mcp_socket(socket_path)
+        )
         sandbox_socket = str(Path.home() / ".claude" / self._socket_name)
         self._mcp_config = json.dumps(
             {
@@ -90,13 +94,10 @@ class ClaudeCodeBackend(InferenceBackend):
         return self
 
     async def __aexit__(self, *exc: object) -> None:
-        if self._mcp_socket is not None:
-            self._mcp_socket.close()
-            await self._mcp_socket.wait_closed()
-            (self.claude_dir / self._socket_name).unlink(missing_ok=True)
-            self._mcp_socket = None
-            self._mcp_config = None
-            log.info("MCP socket closed")
+        if self._stack:
+            await self._stack.aclose()
+        self._mcp_socket = None
+        self._mcp_config = None
 
     async def run_agentic_loop(
         self,

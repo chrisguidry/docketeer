@@ -56,12 +56,12 @@ async def test_incoming_messages_reconnects_on_disconnect():
 
     client._ddp = ddp1
 
-    async def fake_connect() -> None:
+    async def fake_open_connections() -> None:
         client._ddp = ddp2
         client._http = AsyncMock()
         client._user_id = "bot_uid"
 
-    client.connect = fake_connect  # type: ignore[assignment]
+    client._open_connections = fake_open_connections  # type: ignore[assignment]
     client.subscribe_to_my_messages = AsyncMock()  # type: ignore[assignment]
     client.set_status_available = AsyncMock()  # type: ignore[assignment]
 
@@ -92,14 +92,14 @@ async def test_incoming_messages_backoff_on_reconnect_failure():
 
     connect_attempts = 0
 
-    async def failing_connect() -> None:
+    async def failing_open_connections() -> None:
         nonlocal connect_attempts
         connect_attempts += 1
         if connect_attempts >= 3:
             raise asyncio.CancelledError()
         raise ConnectionError("refused")
 
-    client.connect = failing_connect  # type: ignore[assignment]
+    client._open_connections = failing_open_connections  # type: ignore[assignment]
     client.subscribe_to_my_messages = AsyncMock()  # type: ignore[assignment]
     client.set_status_available = AsyncMock()  # type: ignore[assignment]
 

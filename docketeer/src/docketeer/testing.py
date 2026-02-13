@@ -1,5 +1,7 @@
 """In-memory test doubles — no network, full control."""
 
+from __future__ import annotations
+
 import asyncio
 import secrets
 from collections.abc import AsyncGenerator
@@ -64,10 +66,11 @@ class MemoryChat(ChatClient):
         self._attachments: dict[str, bytes] = {}
         self._messages: dict[str, dict[str, Any]] = {}
 
-    async def connect(self) -> None:
+    async def __aenter__(self) -> MemoryChat:
         self.connected = True
+        return self
 
-    async def close(self) -> None:
+    async def __aexit__(self, *exc: object) -> None:
         self.closed = True
 
     async def subscribe_to_my_messages(self) -> None:

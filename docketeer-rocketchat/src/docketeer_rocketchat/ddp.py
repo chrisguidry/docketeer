@@ -1,5 +1,7 @@
 """Minimal DDP (Distributed Data Protocol) client for Rocket Chat subscriptions."""
 
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import json
@@ -31,7 +33,7 @@ class DDPClient:
         self._msg_id += 1
         return str(self._msg_id)
 
-    async def connect(self) -> None:
+    async def __aenter__(self) -> DDPClient:
         """Connect to DDP server and establish session."""
         self._ws = await websockets.connect(self.url)
         self._receiver_task = asyncio.create_task(self._receiver())
@@ -44,6 +46,8 @@ class DDPClient:
                 self._session = msg.get("session")
             elif msg.get("msg") == "failed":
                 raise ConnectionError(f"DDP connection failed: {msg}")
+
+        return self
 
     async def _send(self, data: dict[str, Any]) -> None:
         """Send a message to the server."""
@@ -106,7 +110,7 @@ class DDPClient:
                 break
             yield msg
 
-    async def close(self) -> None:
+    async def __aexit__(self, *exc: object) -> None:
         """Close the connection."""
         if self._receiver_task:
             self._receiver_task.cancel()

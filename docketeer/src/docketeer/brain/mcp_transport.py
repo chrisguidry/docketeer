@@ -26,6 +26,7 @@ log = logging.getLogger(__name__)
 class MCPSocketServer:
     """A Unix socket server that accepts sequential MCP connections."""
 
+    socket_path: Path
     _server: asyncio.Server
     _connections: asyncio.Queue[tuple[asyncio.StreamReader, asyncio.StreamWriter]] = (
         field(default_factory=asyncio.Queue)
@@ -35,11 +36,13 @@ class MCPSocketServer:
     def is_serving(self) -> bool:
         return self._server.is_serving()
 
-    def close(self) -> None:
-        self._server.close()
+    async def __aenter__(self) -> MCPSocketServer:
+        return self
 
-    async def wait_closed(self) -> None:
+    async def __aexit__(self, *exc: object) -> None:
+        self._server.close()
         await self._server.wait_closed()
+        self.socket_path.unlink(missing_ok=True)
 
 
 async def bind_mcp_socket(socket_path: Path) -> MCPSocketServer:
@@ -59,7 +62,9 @@ async def bind_mcp_socket(socket_path: Path) -> MCPSocketServer:
         connections.put_nowait((reader, writer))
 
     server = await asyncio.start_unix_server(on_connect, path=str(socket_path))
-    mcp_server = MCPSocketServer(_server=server, _connections=connections)
+    mcp_server = MCPSocketServer(
+        socket_path=socket_path, _server=server, _connections=connections
+    )
     log.info("MCP socket bound at %s", socket_path)
     return mcp_server
 

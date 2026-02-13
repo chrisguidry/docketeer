@@ -25,17 +25,16 @@ def _isolate_logging() -> Generator[None]:
     root.handlers = original_handlers
 
 
-async def test_connect_and_close(tmp_path: Path):
+async def test_context_manager(tmp_path: Path):
     log_path = tmp_path / "docketeer.log"
     with (
         patch("docketeer_tui.client._redirect_logs_to_file", return_value=log_path),
         patch("docketeer_tui.client._patched_stdout", return_value=MagicMock()),
     ):
         client = TUIClient()
-        await client.connect()
-        assert not client._closed
-        assert client._session is not None
-        await client.close()
+        async with client:
+            assert not client._closed
+            assert client._session is not None
         assert client._closed
 
 
@@ -280,10 +279,10 @@ def test_patched_stdout():
         pass
 
 
-async def test_close_without_connect():
-    """close() should not fail if connect() was never called."""
+async def test_aexit_without_aenter():
+    """__aexit__ should not fail if __aenter__ was never called."""
     client = TUIClient()
-    await client.close()
+    await client.__aexit__(None, None, None)
     assert client._closed
 
 

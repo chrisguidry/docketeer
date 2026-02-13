@@ -6,9 +6,10 @@ import contextlib
 import fcntl
 import logging
 import sys
+from collections.abc import Iterator
+from contextlib import AsyncExitStack, contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 from zoneinfo import ZoneInfo
 
 from croniter import croniter
@@ -45,23 +46,25 @@ log = logging.getLogger(__name__)
 DOCKET_URL = environment.get_str("DOCKET_URL", "redis://localhost:6379/0")
 DOCKET_NAME = environment.get_str("DOCKET_NAME", "docketeer")
 
-_lock_file: Any = None
 
-
-def _acquire_lock(data_dir: Path) -> None:
+@contextmanager
+def _instance_lock(data_dir: Path) -> Iterator[None]:
     """Acquire an exclusive lock file, or exit if another instance is running."""
-    global _lock_file
     data_dir.mkdir(parents=True, exist_ok=True)
     lock_path = data_dir / "docketeer.lock"
-    # Keep the file open for the lifetime of the process; flock is released on exit.
-    _lock_file = lock_path.open("w")
+    lock_file = lock_path.open("w")
     try:
-        fcntl.flock(_lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
+        lock_file.close()
         log.warning(
             "Another docketeer instance is already running (lock: %s)", lock_path
         )
         sys.exit(1)
+    try:
+        yield
+    finally:
+        lock_file.close()
 
 
 def _register_task_plugins(docket: Docket) -> None:
@@ -337,25 +340,26 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
 
 
 async def main() -> None:  # pragma: no cover
-    _acquire_lock(environment.DATA_DIR)
+    async with AsyncExitStack() as stack:
+        stack.enter_context(_instance_lock(environment.DATA_DIR))
 
-    # Ensure data directories exist
-    environment.WORKSPACE_PATH.mkdir(parents=True, exist_ok=True)
-    environment.AUDIT_PATH.mkdir(parents=True, exist_ok=True)
-    environment.USAGE_PATH.mkdir(parents=True, exist_ok=True)
-    log.info("Data directory: %s", environment.DATA_DIR.resolve())
+        # Ensure data directories exist
+        environment.WORKSPACE_PATH.mkdir(parents=True, exist_ok=True)
+        environment.AUDIT_PATH.mkdir(parents=True, exist_ok=True)
+        environment.USAGE_PATH.mkdir(parents=True, exist_ok=True)
+        log.info("Data directory: %s", environment.DATA_DIR.resolve())
 
-    # Discover plugins
-    client, register_chat_tools = discover_chat_backend()
-    executor = discover_executor()
-    vault = discover_vault()
+        # Discover plugins
+        client, register_chat_tools = discover_chat_backend()
+        executor = discover_executor()
+        vault = discover_vault()
 
-    # Create tool context
-    tool_context = ToolContext(
-        workspace=environment.WORKSPACE_PATH, executor=executor, vault=vault
-    )
+        # Create tool context
+        tool_context = ToolContext(
+            workspace=environment.WORKSPACE_PATH, executor=executor, vault=vault
+        )
 
-    async with Brain(tool_context) as brain:
+        brain = await stack.enter_async_context(Brain(tool_context))
         tool_context.on_people_write = brain.rebuild_person_map
 
         # Make brain/client/executor/vault available to docket task handlers
@@ -366,33 +370,34 @@ async def main() -> None:  # pragma: no cover
         if vault:
             set_vault(vault)
 
-        async with Docket(name=DOCKET_NAME, url=DOCKET_URL) as docket:
-            set_docket(docket)
-            docket.register_collection("docketeer.tasks:docketeer_tasks")
-            _register_task_plugins(docket)
+        docket = await stack.enter_async_context(
+            Docket(name=DOCKET_NAME, url=DOCKET_URL)
+        )
+        set_docket(docket)
+        docket.register_collection("docketeer.tasks:docketeer_tasks")
+        _register_task_plugins(docket)
 
-            # Register tools (core chat + provider-specific + docket)
-            _register_core_chat_tools(client)
-            register_chat_tools(client, tool_context)
-            _register_docket_tools(docket, tool_context)
+        # Register tools (core chat + provider-specific + docket)
+        _register_core_chat_tools(client)
+        register_chat_tools(client, tool_context)
+        _register_docket_tools(docket, tool_context)
 
-            async with Worker(docket) as worker:
-                worker_task = asyncio.create_task(worker.run_forever())
+        worker = await stack.enter_async_context(Worker(docket))
+        worker_task = asyncio.create_task(worker.run_forever())
 
-                await client.connect()
-                tool_context.agent_username = client.username
+        await stack.enter_async_context(client)
+        tool_context.agent_username = client.username
 
-                log.info("Listening for messages...")
-                try:
-                    await process_messages(client, brain)
-                except asyncio.CancelledError:
-                    pass
-                finally:
-                    worker_task.cancel()
-                    with contextlib.suppress(asyncio.CancelledError):
-                        await worker_task
-                    await client.close()
-                    log.info("Disconnected.")
+        log.info("Listening for messages...")
+        try:
+            await process_messages(client, brain)
+        except asyncio.CancelledError:
+            pass
+        finally:
+            worker_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await worker_task
+            log.info("Disconnected.")
 
 
 def _filter_rooms(rooms: list[RoomInfo], username: str) -> list[RoomInfo]:

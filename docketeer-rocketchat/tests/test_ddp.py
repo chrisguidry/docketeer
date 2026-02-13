@@ -15,10 +15,9 @@ from docketeer_rocketchat.ddp import DDPClient
 async def ddp_server():
     """Fixture providing a configurable fake DDP server.
 
-    Returns a factory(handler) -> (server, url). Servers cleaned up after test.
+    Returns a factory(handler) -> (client, url). Servers cleaned up after test.
     """
     servers: list[Any] = []
-    clients: list[DDPClient] = []
 
     async def factory(handler: Any) -> tuple[DDPClient, str]:
         server = await websockets.serve(handler, "127.0.0.1", 0)
@@ -26,13 +25,10 @@ async def ddp_server():
         servers.append(server)
         url = f"ws://127.0.0.1:{port}"
         client = DDPClient(url=url)
-        clients.append(client)
         return client, url
 
     yield factory
 
-    for c in clients:
-        await c.close()
     for s in servers:
         s.close()
         await s.wait_closed()
@@ -60,8 +56,8 @@ async def _ok_handler(ws: ServerConnection) -> None:
 
 async def test_connect_success(ddp_server: Any):
     client, _ = await ddp_server(_ok_handler)
-    await client.connect()
-    assert client._session == "sess-1"
+    async with client:
+        assert client._session == "sess-1"
 
 
 async def test_connect_failed(ddp_server: Any):
@@ -75,7 +71,8 @@ async def test_connect_failed(ddp_server: Any):
 
     client, _ = await ddp_server(handler)
     with pytest.raises(ConnectionError, match="DDP connection failed"):
-        await client.connect()
+        async with client:
+            pass
 
 
 async def test_send_not_connected():
@@ -100,15 +97,15 @@ async def test_receiver_ping_pong(ddp_server: Any):
             pass
 
     client, _ = await ddp_server(handler)
-    await client.connect()
-    await asyncio.wait_for(pong_seen.wait(), timeout=2)
+    async with client:
+        await asyncio.wait_for(pong_seen.wait(), timeout=2)
 
 
 async def test_receiver_result_dispatch(ddp_server: Any):
     client, _ = await ddp_server(_ok_handler)
-    await client.connect()
-    result = await client.call("test.method", [])
-    assert result["result"]["ok"] is True
+    async with client:
+        result = await client.call("test.method", [])
+        assert result["result"]["ok"] is True
 
 
 async def test_receiver_events(ddp_server: Any):
@@ -124,13 +121,12 @@ async def test_receiver_events(ddp_server: Any):
             pass
 
     client, _ = await ddp_server(handler)
-    await client.connect()
-
-    events = []
-    async for event in client.events():
-        events.append(event)
-    assert len(events) == 1
-    assert events[0]["msg"] == "changed"
+    async with client:
+        events = []
+        async for event in client.events():
+            events.append(event)
+        assert len(events) == 1
+        assert events[0]["msg"] == "changed"
 
 
 async def test_receiver_connection_closed(ddp_server: Any):
@@ -144,33 +140,32 @@ async def test_receiver_connection_closed(ddp_server: Any):
             pass
 
     client, _ = await ddp_server(handler)
-    await client.connect()
-
-    events = []
-    async for event in client.events():
-        events.append(event)
-    assert events == []
+    async with client:
+        events = []
+        async for event in client.events():
+            events.append(event)
+        assert events == []
 
 
 async def test_call(ddp_server: Any):
     client, _ = await ddp_server(_ok_handler)
-    await client.connect()
-    result = await client.call("rpc", ["arg1"])
-    assert "result" in result
+    async with client:
+        result = await client.call("rpc", ["arg1"])
+        assert "result" in result
 
 
 async def test_subscribe(ddp_server: Any):
     client, _ = await ddp_server(_ok_handler)
-    await client.connect()
-    sub_id = await client.subscribe("coll", ["param"])
-    assert sub_id is not None
+    async with client:
+        sub_id = await client.subscribe("coll", ["param"])
+        assert sub_id is not None
 
 
 async def test_unsubscribe(ddp_server: Any):
     client, _ = await ddp_server(_ok_handler)
-    await client.connect()
-    sub_id = await client.subscribe("coll", [])
-    await client.unsubscribe(sub_id)
+    async with client:
+        sub_id = await client.subscribe("coll", [])
+        await client.unsubscribe(sub_id)
 
 
 async def test_events_iterator(ddp_server: Any):
@@ -187,25 +182,24 @@ async def test_events_iterator(ddp_server: Any):
             pass
 
     client, _ = await ddp_server(handler)
-    await client.connect()
+    async with client:
+        events = []
+        async for event in client.events():
+            events.append(event)
+        assert len(events) == 3
 
-    events = []
-    async for event in client.events():
-        events.append(event)
-    assert len(events) == 3
 
-
-async def test_close(ddp_server: Any):
+async def test_aexit_cleans_up(ddp_server: Any):
     client, _ = await ddp_server(_ok_handler)
-    await client.connect()
-    await client.close()
+    async with client:
+        pass
     assert client._receiver_task is not None
     assert client._receiver_task.cancelled() or client._receiver_task.done()
 
 
-async def test_close_no_task_or_ws():
+async def test_aexit_without_aenter():
     client = DDPClient(url="ws://localhost:1")
-    await client.close()
+    await client.__aexit__(None, None, None)
 
 
 async def test_receiver_no_ws():
@@ -230,12 +224,12 @@ async def test_receiver_connection_closed_exception(ddp_server: Any):
             pass
 
     client, _ = await ddp_server(handler)
-    await client.connect()
-    # Wait for the receiver to process the connection abort
-    events = []
-    async for event in client.events():
-        events.append(event)
-    assert events == []
+    async with client:
+        # Wait for the receiver to process the connection abort
+        events = []
+        async for event in client.events():
+            events.append(event)
+        assert events == []
 
 
 async def test_connect_ignores_unrelated_messages(ddp_server: Any):
@@ -254,8 +248,8 @@ async def test_connect_ignores_unrelated_messages(ddp_server: Any):
             pass
 
     client, _ = await ddp_server(handler)
-    await client.connect()
-    assert client._session == "s2"
+    async with client:
+        assert client._session == "s2"
 
 
 async def test_receiver_drops_unknown_result_id(ddp_server: Any):
@@ -278,9 +272,8 @@ async def test_receiver_drops_unknown_result_id(ddp_server: Any):
             pass
 
     client, _ = await ddp_server(handler)
-    await client.connect()
-
-    events = []
-    async for event in client.events():
-        events.append(event)
-    assert any(e.get("id") == "ev1" for e in events)
+    async with client:
+        events = []
+        async for event in client.events():
+            events.append(event)
+        assert any(e.get("id") == "ev1" for e in events)

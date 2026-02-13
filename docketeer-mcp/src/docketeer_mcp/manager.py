@@ -1,6 +1,7 @@
 """MCP client manager — connections, tool catalog, and dispatch."""
 
 import logging
+from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -72,6 +73,7 @@ class MCPClientManager:
 
     def __init__(self) -> None:
         self._clients: dict[str, Client] = {}
+        self._stacks: dict[str, AsyncExitStack] = {}
         self._tools: dict[str, list[MCPToolInfo]] = {}
         self._pending_oauth: dict[str, PendingOAuth] = {}
 
@@ -89,12 +91,13 @@ class MCPClientManager:
 
         transport = _build_transport(config, executor, workspace, auth=auth)
         client = Client(transport)
-        await client.__aenter__()
+        stack = AsyncExitStack()
+        await stack.enter_async_context(client)
 
         try:
             raw_tools = await client.list_tools()
         except Exception:
-            await client.__aexit__(None, None, None)
+            await stack.aclose()
             raise
 
         tools = [
@@ -107,15 +110,17 @@ class MCPClientManager:
             for t in raw_tools
         ]
         self._clients[name] = client
+        self._stacks[name] = stack
         self._tools[name] = tools
         return tools
 
     async def disconnect(self, name: str) -> None:
         """Disconnect from a server."""
-        client = self._clients.pop(name, None)
+        self._clients.pop(name, None)
         self._tools.pop(name, None)
-        if client:
-            await client.__aexit__(None, None, None)
+        stack = self._stacks.pop(name, None)
+        if stack:
+            await stack.aclose()
 
     async def disconnect_all(self) -> None:
         """Disconnect from all servers."""

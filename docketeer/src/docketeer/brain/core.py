@@ -7,6 +7,7 @@ import base64
 import logging
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
+from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -139,11 +140,12 @@ class Brain:
         log.info("Person map: %s", self._person_map)
 
     async def __aenter__(self) -> Brain:
-        await self._backend.__aenter__()
+        self._stack = AsyncExitStack()
+        await self._stack.enter_async_context(self._backend)
         return self
 
     async def __aexit__(self, *exc: object) -> None:
-        await self._backend.__aexit__(*exc)
+        await self._stack.aclose()
 
     def set_room_info(self, room_id: str, info: RoomInfo) -> None:
         """Store metadata about a room for use in the system prompt."""

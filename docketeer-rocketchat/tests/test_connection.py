@@ -8,20 +8,28 @@ import respx
 from docketeer_rocketchat.client import RocketChatClient
 
 
-async def test_close():
+async def test_aexit_cleans_up():
     client = RocketChatClient()
     client._http = httpx.AsyncClient()
     ddp = AsyncMock()
+    ddp.__aexit__ = AsyncMock(return_value=None)
     client._ddp = ddp
-    await client.close()
-    ddp.close.assert_called_once()
+    # Simulate having a conn_stack that owns the resources
+    from contextlib import AsyncExitStack
+
+    stack = AsyncExitStack()
+    stack.push_async_callback(ddp.__aexit__, None, None, None)
+    stack.push_async_callback(client._http.aclose)
+    client._conn_stack = stack
+    await client.__aexit__(None, None, None)
     assert client._ddp is None
     assert client._http is None
+    assert client._conn_stack is None
 
 
-async def test_close_no_connections():
+async def test_aexit_without_aenter():
     client = RocketChatClient()
-    await client.close()
+    await client.__aexit__(None, None, None)
     assert client._ddp is None
     assert client._http is None
 
@@ -34,11 +42,13 @@ def test_user_id_property():
 
 
 @respx.mock
-async def test_connect():
+async def test_aenter_authenticates():
     client = RocketChatClient()
 
     with patch("docketeer_rocketchat.client.DDPClient") as mock_ddp_cls:
         ddp = AsyncMock()
+        ddp.__aenter__ = AsyncMock(return_value=ddp)
+        ddp.__aexit__ = AsyncMock(return_value=None)
         mock_ddp_cls.return_value = ddp
 
         respx.post("http://localhost:3000/api/v1/login").mock(
@@ -54,13 +64,11 @@ async def test_connect():
             )
         )
 
-        await client.connect()
-
-    assert client._user_id == "uid_bot"
-    assert client._ddp is ddp
-    ddp.connect.assert_called_once()
-    ddp.call.assert_called_once()
-    await client.close()
+        async with client:
+            assert client._user_id == "uid_bot"
+            assert client._ddp is ddp
+            ddp.__aenter__.assert_called_once()
+            ddp.call.assert_called_once()
 
 
 async def test_subscribe_to_my_messages():

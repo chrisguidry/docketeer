@@ -1,5 +1,8 @@
 """Terminal chat client for local development."""
 
+from __future__ import annotations
+
+import contextlib
 import getpass
 import logging
 import os
@@ -72,13 +75,13 @@ class TUIClient(ChatClient):
         self._session: PromptSession[str] | None = None
         self._messages: list[RoomMessage] = []
         self._closed = False
-        self._stdout_ctx: Any = None
+        self._stdout_ctx: contextlib.ExitStack | None = None
         self._human_username = os.environ.get(
             "DOCKETEER_TUI_USERNAME", getpass.getuser()
         )
         self._human_user_id = f"tui-{self._human_username}"
 
-    async def connect(self) -> None:
+    async def __aenter__(self) -> TUIClient:
         from docketeer import environment
 
         log_path = _redirect_logs_to_file(environment.DATA_DIR)
@@ -88,8 +91,8 @@ class TUIClient(ChatClient):
 
         # patch_stdout makes all print() / Console.print() output render
         # above the prompt_toolkit input line — the key to two-region UX
-        self._stdout_ctx = _patched_stdout()
-        self._stdout_ctx.__enter__()
+        self._stdout_ctx = contextlib.ExitStack()
+        self._stdout_ctx.enter_context(_patched_stdout())
 
         # recreate Console AFTER patch_stdout so it writes through the proxy;
         # force_terminal=True because the proxy doesn't report as a TTY
@@ -101,13 +104,14 @@ class TUIClient(ChatClient):
         self._console.print("  type a message and press enter. ctrl-c to quit.")
         self._console.print(f"  logs: {log_path}")
         self._console.print()
+        return self
 
-    async def close(self) -> None:
+    async def __aexit__(self, *exc: object) -> None:
         self._closed = True
         self._console.print()
         self._console.rule("[dim]disconnected[/dim]")
         if self._stdout_ctx:
-            self._stdout_ctx.__exit__(None, None, None)
+            self._stdout_ctx.close()
             self._stdout_ctx = None
 
     async def subscribe_to_my_messages(self) -> None:

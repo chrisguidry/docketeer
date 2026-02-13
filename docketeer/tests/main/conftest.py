@@ -24,19 +24,6 @@ def _save_registry() -> Iterator[None]:
     registry._schemas = original_schemas
 
 
-@pytest.fixture(autouse=True)
-def _reset_lock_file() -> Iterator[None]:
-    """Reset the global _lock_file between tests."""
-    import docketeer.main as m
-
-    original = m._lock_file
-    m._lock_file = None
-    yield
-    if m._lock_file is not None:
-        m._lock_file.close()
-    m._lock_file = original
-
-
 @pytest.fixture()
 def mock_docket() -> MagicMock:
     docket = MagicMock()

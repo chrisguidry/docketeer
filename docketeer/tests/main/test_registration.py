@@ -10,7 +10,7 @@ import pytest
 from docketeer.chat import discover_chat_backend
 from docketeer.executor import discover_executor
 from docketeer.main import (
-    _acquire_lock,
+    _instance_lock,
     _load_task_collections,
     _register_docket_tools,
     _register_task_plugins,
@@ -145,12 +145,12 @@ async def test_schedule_every_with_cron_shorthand(
     mock_docket.replace.assert_called_once()
 
 
-def test_acquire_lock_success(tmp_path: Path):
-    _acquire_lock(tmp_path)
-    assert (tmp_path / "docketeer.lock").exists()
+def test_instance_lock_success(tmp_path: Path):
+    with _instance_lock(tmp_path):
+        assert (tmp_path / "docketeer.lock").exists()
 
 
-def test_acquire_lock_already_held(tmp_path: Path):
+def test_instance_lock_already_held(tmp_path: Path):
     import fcntl
 
     lock_path = tmp_path / "docketeer.lock"
@@ -158,7 +158,8 @@ def test_acquire_lock_already_held(tmp_path: Path):
     fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
     try:
         with pytest.raises(SystemExit):
-            _acquire_lock(tmp_path)
+            with _instance_lock(tmp_path):
+                pass
     finally:
         held.close()
 

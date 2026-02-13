@@ -1,5 +1,7 @@
 """Chat client interface for the Docketeer agent."""
 
+from __future__ import annotations
+
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator, Awaitable, Callable
@@ -81,10 +83,10 @@ class ChatClient(ABC):
     user_id: str
 
     @abstractmethod
-    async def connect(self) -> None: ...
+    async def __aenter__(self) -> ChatClient: ...
 
     @abstractmethod
-    async def close(self) -> None: ...
+    async def __aexit__(self, *exc: object) -> None: ...
 
     @abstractmethod
     async def subscribe_to_my_messages(self) -> None: ...
@@ -153,11 +155,11 @@ class ChatClient(ABC):
 RegisterToolsFn = Callable[["ChatClient", "ToolContext"], None]
 
 
-def _noop_register_tools(_client: "ChatClient", _ctx: "ToolContext") -> None:
+def _noop_register_tools(_client: ChatClient, _ctx: ToolContext) -> None:
     pass
 
 
-def discover_chat_backend() -> tuple["ChatClient", RegisterToolsFn]:
+def discover_chat_backend() -> tuple[ChatClient, RegisterToolsFn]:
     """Discover the chat backend via entry_points."""
     ep = discover_one("docketeer.chat", "CHAT")
     if ep is None:

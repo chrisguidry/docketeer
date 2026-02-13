@@ -19,28 +19,25 @@ def socket_path(tmp_path: Path) -> Path:
 
 
 async def test_bind_creates_listening_socket(socket_path: Path):
-    mcp_server = await bind_mcp_socket(socket_path)
-    try:
+    async with await bind_mcp_socket(socket_path) as mcp_server:
         assert socket_path.exists()
         assert mcp_server.is_serving
-    finally:
-        mcp_server.close()
-        await mcp_server.wait_closed()
 
 
 async def test_bind_cleans_up_stale_socket(socket_path: Path):
     socket_path.touch()
-    mcp_server = await bind_mcp_socket(socket_path)
-    try:
+    async with await bind_mcp_socket(socket_path) as mcp_server:
         assert mcp_server.is_serving
-    finally:
-        mcp_server.close()
-        await mcp_server.wait_closed()
+
+
+async def test_aexit_deletes_socket_file(socket_path: Path):
+    async with await bind_mcp_socket(socket_path):
+        assert socket_path.exists()
+    assert not socket_path.exists()
 
 
 async def test_client_message_arrives_on_read_stream(socket_path: Path):
-    mcp_server = await bind_mcp_socket(socket_path)
-    try:
+    async with await bind_mcp_socket(socket_path) as mcp_server:
         msg = {"jsonrpc": "2.0", "method": "test", "id": 1}
 
         async def connect_and_send() -> None:
@@ -59,14 +56,10 @@ async def test_client_message_arrives_on_read_stream(socket_path: Path):
             )
             assert data["method"] == "test"
             await task
-    finally:
-        mcp_server.close()
-        await mcp_server.wait_closed()
 
 
 async def test_write_stream_sends_to_client(socket_path: Path):
-    mcp_server = await bind_mcp_socket(socket_path)
-    try:
+    async with await bind_mcp_socket(socket_path) as mcp_server:
         msg = {"jsonrpc": "2.0", "method": "response", "id": 1}
         received_lines: list[str] = []
 
@@ -87,14 +80,10 @@ async def test_write_stream_sends_to_client(socket_path: Path):
         assert len(received_lines) == 1
         parsed = json.loads(received_lines[0])
         assert parsed["method"] == "response"
-    finally:
-        mcp_server.close()
-        await mcp_server.wait_closed()
 
 
 async def test_bidirectional_exchange(socket_path: Path):
-    mcp_server = await bind_mcp_socket(socket_path)
-    try:
+    async with await bind_mcp_socket(socket_path) as mcp_server:
         reply_lines: list[str] = []
 
         async def client_exchange() -> None:
@@ -116,14 +105,10 @@ async def test_bidirectional_exchange(socket_path: Path):
             await task
 
         assert json.loads(reply_lines[0])["result"]["status"] == "pong"
-    finally:
-        mcp_server.close()
-        await mcp_server.wait_closed()
 
 
 async def test_invalid_json_sent_as_exception(socket_path: Path):
-    mcp_server = await bind_mcp_socket(socket_path)
-    try:
+    async with await bind_mcp_socket(socket_path) as mcp_server:
 
         async def send_garbage() -> None:
             reader, writer = await asyncio.open_unix_connection(str(socket_path))
@@ -137,14 +122,10 @@ async def test_invalid_json_sent_as_exception(socket_path: Path):
             received = await read_stream.receive()
             assert isinstance(received, Exception)
             await task
-    finally:
-        mcp_server.close()
-        await mcp_server.wait_closed()
 
 
 async def test_blank_lines_are_skipped(socket_path: Path):
-    mcp_server = await bind_mcp_socket(socket_path)
-    try:
+    async with await bind_mcp_socket(socket_path) as mcp_server:
         msg = {"jsonrpc": "2.0", "method": "real", "id": 1}
 
         async def send_with_blanks() -> None:
@@ -164,15 +145,11 @@ async def test_blank_lines_are_skipped(socket_path: Path):
             )
             assert data["method"] == "real"
             await task
-    finally:
-        mcp_server.close()
-        await mcp_server.wait_closed()
 
 
 async def test_sequential_connections(socket_path: Path):
     """The same MCPSocketServer can accept multiple sequential connections."""
-    mcp_server = await bind_mcp_socket(socket_path)
-    try:
+    async with await bind_mcp_socket(socket_path) as mcp_server:
         for i in range(3):
             msg = {"jsonrpc": "2.0", "method": f"call-{i}", "id": i}
 
@@ -192,6 +169,3 @@ async def test_sequential_connections(socket_path: Path):
                 )
                 assert data["method"] == f"call-{i}"
                 await task
-    finally:
-        mcp_server.close()
-        await mcp_server.wait_closed()
