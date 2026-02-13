@@ -199,7 +199,7 @@ async def test_run_secret_env_missing_secret(
         {"args": ["app"], "secret_env": {"KEY": "nonexistent"}},
         ctx,
     )
-    assert "Error" in result
+    assert "Could not resolve secret 'nonexistent'" in result
 
 
 async def test_run_secret_env_no_vault(
@@ -232,6 +232,18 @@ async def test_shell_secret_env_resolves(
     )
     env = mock_executor.start.call_args.kwargs["env"]
     assert env == {"API_KEY": "sk-123"}
+
+
+async def test_shell_secret_env_missing_secret(
+    vault_executor_context: tuple[ToolContext, MemoryVault],
+):
+    ctx, _ = vault_executor_context
+    result = await registry.execute(
+        "shell",
+        {"command": "echo", "secret_env": {"KEY": "nonexistent"}},
+        ctx,
+    )
+    assert "Could not resolve secret 'nonexistent'" in result
 
 
 async def test_shell_secret_env_no_vault(

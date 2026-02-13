@@ -185,7 +185,7 @@ def _parse_param_docs(docstring: str) -> dict[str, str]:
 def _safe_path(workspace: Path, path: str) -> Path:
     """Resolve path and ensure it's within workspace."""
     resolved = (workspace / path).resolve()
-    if not str(resolved).startswith(str(workspace.resolve())):
+    if not resolved.is_relative_to(workspace.resolve()):
         raise ValueError(f"Path '{path}' is outside workspace")
     return resolved
 

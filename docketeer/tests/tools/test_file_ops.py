@@ -132,7 +132,7 @@ async def test_search_files_max_results(tool_context: ToolContext):
     lines = "\n".join(f"match line {i}" for i in range(60))
     (tool_context.workspace / "big.txt").write_text(lines)
     result = await registry.execute("search_files", {"query": "match"}, tool_context)
-    assert result.count("\n") == 49  # 50 lines, 49 newlines
+    assert result.endswith("(results truncated at 50 matches)")
 
 
 async def test_search_files_skips_binary(tool_context: ToolContext):

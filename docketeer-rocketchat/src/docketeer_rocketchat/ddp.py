@@ -35,7 +35,7 @@ class DDPClient:
 
     async def __aenter__(self) -> DDPClient:
         """Connect to DDP server and establish session."""
-        self._ws = await websockets.connect(self.url)
+        self._ws = await websockets.connect(self.url, open_timeout=30)
         self._receiver_task = asyncio.create_task(self._receiver())
 
         await self._send({"msg": "connect", "version": "1", "support": ["1"]})

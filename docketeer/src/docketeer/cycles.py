@@ -1,6 +1,7 @@
 """Internal processing cycles — reverie and consolidation."""
 
 import logging
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -13,6 +14,8 @@ from docketeer.dependencies import CurrentBrain, WorkspacePath
 from docketeer.prompt import MessageContent
 
 log = logging.getLogger(__name__)
+
+_consecutive_failures: dict[str, int] = {}
 
 REVERIE_INTERVAL = environment.get_timedelta("REVERIE_INTERVAL", timedelta(minutes=30))
 CONSOLIDATION_CRON = environment.get_str("CONSOLIDATION_CRON", "0 3 * * *")
@@ -46,13 +49,12 @@ def _read_cycle_guidance(workspace: Path, section: str) -> str:
     if not cycles_path.exists():
         return ""
     text = cycles_path.read_text()
-    marker = f"# {section}"
-    start = text.find(marker)
-    if start == -1:
-        return ""
-    start += len(marker)
-    end = text.find("\n# ", start)
-    return text[start:end].strip() if end != -1 else text[start:].strip()
+    match = re.search(
+        rf"^# {re.escape(section)}$\n(.*?)(?=^# |\Z)",
+        text,
+        re.MULTILINE | re.DOTALL,
+    )
+    return match.group(1).strip() if match else ""
 
 
 def _build_cycle_prompt(base: str, workspace: Path, section: str) -> str:
@@ -77,8 +79,18 @@ async def reverie(
     except (AuthenticationError, PermissionDeniedError):
         raise
     except Exception:
-        log.exception("Error during reverie cycle")
+        _consecutive_failures["reverie"] = _consecutive_failures.get("reverie", 0) + 1
+        level = (
+            logging.ERROR if _consecutive_failures["reverie"] >= 3 else logging.WARNING
+        )
+        log.log(
+            level,
+            "Error during reverie cycle (attempt %d)",
+            _consecutive_failures["reverie"],
+            exc_info=True,
+        )
         return
+    _consecutive_failures.pop("reverie", None)
     if response.text:
         log.info("Reverie: %s", response.text)
 
@@ -97,7 +109,21 @@ async def consolidation(
     except (AuthenticationError, PermissionDeniedError):
         raise
     except Exception:
-        log.exception("Error during consolidation cycle")
+        _consecutive_failures["consolidation"] = (
+            _consecutive_failures.get("consolidation", 0) + 1
+        )
+        level = (
+            logging.ERROR
+            if _consecutive_failures["consolidation"] >= 3
+            else logging.WARNING
+        )
+        log.log(
+            level,
+            "Error during consolidation cycle (attempt %d)",
+            _consecutive_failures["consolidation"],
+            exc_info=True,
+        )
         return
+    _consecutive_failures.pop("consolidation", None)
     if response.text:
         log.info("Consolidation: %s", response.text)

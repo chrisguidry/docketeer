@@ -92,6 +92,7 @@ async def search_files(ctx: ToolContext, query: str, path: str = "") -> str:
                 rel = file.relative_to(ctx.workspace.resolve())
                 matches.append(f"{rel}:{line_num}:{line.rstrip()}")
                 if len(matches) >= 50:
+                    matches.append("(results truncated at 50 matches)")
                     return "\n".join(matches)
 
     if not matches:

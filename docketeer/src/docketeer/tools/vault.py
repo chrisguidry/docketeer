@@ -47,6 +47,8 @@ async def generate_secret(ctx: ToolContext, name: str, length: int = 32) -> str:
     """
     if ctx.vault is None:
         return NO_VAULT
+    if length < 1:
+        return "length must be at least 1"
 
     await ctx.vault.generate(name, length)
     return f"Generated secret '{name}' ({length} chars)."

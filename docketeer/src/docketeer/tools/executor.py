@@ -35,11 +35,17 @@ def _format_result(result: CompletedProcess) -> str:
 
 async def _resolve_secret_env(
     ctx: ToolContext, secret_env: dict[str, str]
-) -> dict[str, str]:
-    """Resolve secret names to values via the vault."""
+) -> dict[str, str] | str:
+    """Resolve secret names to values via the vault.
+
+    Returns the resolved env dict, or an error string if any secret fails.
+    """
     resolved = {}
     for env_var, secret_name in secret_env.items():
-        resolved[env_var] = await ctx.vault.resolve(secret_name)  # type: ignore[union-attr]
+        try:
+            resolved[env_var] = await ctx.vault.resolve(secret_name)  # type: ignore[union-attr]
+        except Exception:
+            return f"Could not resolve secret '{secret_name}' for ${env_var}"
     return resolved
 
 
@@ -65,6 +71,8 @@ async def run(
         return NO_VAULT
 
     env = await _resolve_secret_env(ctx, secret_env) if secret_env else None
+    if isinstance(env, str):
+        return env
 
     running = await ctx.executor.start(
         args,
@@ -98,6 +106,8 @@ async def shell(
         return NO_VAULT
 
     env = await _resolve_secret_env(ctx, secret_env) if secret_env else None
+    if isinstance(env, str):
+        return env
 
     running = await ctx.executor.start(
         ["sh", "-c", command],

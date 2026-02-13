@@ -126,6 +126,9 @@ class Brain:
         self._audit_path = tool_context.workspace.parent / "audit"
         self._usage_path = tool_context.workspace.parent / "token-usage"
         self._conversations: dict[str, list[MessageParam]] = defaultdict(list)
+        self._conversation_locks: defaultdict[str, asyncio.Lock] = defaultdict(
+            asyncio.Lock
+        )
         self._room_token_counts: dict[str, int] = {}
         self._room_info: dict[str, RoomInfo] = {}
         self._person_map: dict[str, str] = {}
@@ -216,33 +219,19 @@ class Brain:
         self.tool_context.room_id = room_id if not room_id.startswith("__") else ""
         self.tool_context.thread_id = content.thread_id
 
-        if self._room_token_counts.get(room_id, 0) > COMPACT_THRESHOLD:
-            await self._compact_history(room_id, system, tools, resolved.model_id)
+        async with self._conversation_locks[room_id]:
+            if self._room_token_counts.get(room_id, 0) > COMPACT_THRESHOLD:
+                await self._compact_history(room_id, system, tools, resolved.model_id)
 
-        user_content = self._build_content(content, dynamic_context)
-        self._conversations[room_id].append(
-            MessageParam(role="user", content=user_content)
-        )
-
-        messages = self._conversations[room_id]
-
-        log.debug("Processing message with %d history messages", len(messages))
-
-        try:
-            reply = await self._backend.run_agentic_loop(
-                resolved,
-                system,
-                messages,
-                tools,
-                self.tool_context,
-                self._audit_path,
-                self._usage_path,
-                callbacks,
-                thinking=thinking,
+            user_content = self._build_content(content, dynamic_context)
+            self._conversations[room_id].append(
+                MessageParam(role="user", content=user_content)
             )
-        except ContextTooLargeError:
-            log.warning("Request too large, compacting and retrying", exc_info=True)
-            await self._compact_history(room_id, system, tools, resolved.model_id)
+
+            messages = self._conversations[room_id]
+
+            log.debug("Processing message with %d history messages", len(messages))
+
             try:
                 reply = await self._backend.run_agentic_loop(
                     resolved,
@@ -256,29 +245,46 @@ class Brain:
                     thinking=thinking,
                 )
             except ContextTooLargeError:
-                log.error("Still too large after compaction", exc_info=True)
+                log.warning("Request too large, compacting and retrying", exc_info=True)
+                await self._compact_history(room_id, system, tools, resolved.model_id)
+                try:
+                    reply = await self._backend.run_agentic_loop(
+                        resolved,
+                        system,
+                        messages,
+                        tools,
+                        self.tool_context,
+                        self._audit_path,
+                        self._usage_path,
+                        callbacks,
+                        thinking=thinking,
+                    )
+                except ContextTooLargeError:
+                    log.error("Still too large after compaction", exc_info=True)
+                    return BrainResponse(text=APOLOGY)
+            except BackendAuthError:
+                raise
+            except BackendError:
+                log.error("API error during processing", exc_info=True)
                 return BrainResponse(text=APOLOGY)
-        except BackendAuthError:
-            raise
-        except BackendError:
-            log.error("API error during processing", exc_info=True)
-            return BrainResponse(text=APOLOGY)
 
-        if reply:
-            self._conversations[room_id].append(
-                MessageParam(role="assistant", content=reply)
+            if reply:
+                self._conversations[room_id].append(
+                    MessageParam(role="assistant", content=reply)
+                )
+
+            tokens = await self._measure_context(
+                room_id, system, tools, resolved.model_id
+            )
+            log.info(
+                "Context: %d / %d tokens for room %s",
+                tokens,
+                CONTEXT_BUDGET,
+                room_id,
             )
 
-        tokens = await self._measure_context(room_id, system, tools, resolved.model_id)
-        log.info(
-            "Context: %d / %d tokens for room %s",
-            tokens,
-            CONTEXT_BUDGET,
-            room_id,
-        )
-
-        log.debug("Response: %s", reply[:100])
-        return BrainResponse(text=reply)
+            log.debug("Response: %s", reply[:100])
+            return BrainResponse(text=reply)
 
     async def _measure_context(
         self,
@@ -292,6 +298,9 @@ class Brain:
             model_id, system, tools, self._conversations[room_id]
         )
         if count < 0:
+            log.warning(
+                "Token counting failed for room %s, using cached value", room_id
+            )
             return self._room_token_counts.get(room_id, 0)
         self._room_token_counts[room_id] = count
         return count

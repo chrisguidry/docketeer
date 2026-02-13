@@ -17,6 +17,8 @@ from docketeer.prompt import BrainResponse, MessageContent
 
 log = logging.getLogger(__name__)
 
+_consecutive_failures: dict[str, int] = {}
+
 _ISO_DURATION_RE = re.compile(
     r"^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$",
     re.IGNORECASE,
@@ -54,6 +56,7 @@ async def nudge(
     )
 
     context_room = room_id or "__tasks__"
+    key = f"nudge:{room_id or '__tasks__'}"
     try:
         response: BrainResponse = await brain.process(
             context_room, content, model=model or CHAT_MODEL
@@ -61,10 +64,18 @@ async def nudge(
     except (AuthenticationError, PermissionDeniedError):
         raise
     except Exception:
-        log.exception("Error processing nudge task")
+        _consecutive_failures[key] = _consecutive_failures.get(key, 0) + 1
+        level = logging.ERROR if _consecutive_failures[key] >= 3 else logging.WARNING
+        log.log(
+            level,
+            "Error processing nudge task (attempt %d)",
+            _consecutive_failures[key],
+            exc_info=True,
+        )
         if room_id:
             await client.send_message(room_id, APOLOGY, thread_id=thread_id)
         return
+    _consecutive_failures.pop(key, None)
 
     if room_id and response.text:
         await client.send_message(room_id, response.text, thread_id=thread_id)
@@ -90,6 +101,7 @@ async def nudge_every(
     )
 
     context_room = room_id or "__tasks__"
+    key = f"nudge_every:{room_id or '__tasks__'}"
     try:
         response: BrainResponse = await brain.process(
             context_room, content, model=model or CHAT_MODEL
@@ -97,10 +109,18 @@ async def nudge_every(
     except (AuthenticationError, PermissionDeniedError):
         raise
     except Exception:
-        log.exception("Error processing recurring nudge task")
+        _consecutive_failures[key] = _consecutive_failures.get(key, 0) + 1
+        level = logging.ERROR if _consecutive_failures[key] >= 3 else logging.WARNING
+        log.log(
+            level,
+            "Error processing recurring nudge task (attempt %d)",
+            _consecutive_failures[key],
+            exc_info=True,
+        )
         if room_id:
             await client.send_message(room_id, APOLOGY, thread_id=thread_id)
     else:
+        _consecutive_failures.pop(key, None)
         if room_id and response.text:
             await client.send_message(room_id, response.text, thread_id=thread_id)
 

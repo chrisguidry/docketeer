@@ -209,6 +209,13 @@ def test_check_error_generic():
         check_error("something went wrong", 1)
 
 
+@pytest.mark.parametrize("stderr", ["tokenizer error", "author not found"])
+def test_check_error_word_boundary_no_false_positive(stderr: str):
+    """Words like 'tokenizer' and 'author' should not match 'token' and 'auth'."""
+    with pytest.raises(BackendError):
+        check_error(stderr, 1)
+
+
 # -- check_process_exit --
 
 

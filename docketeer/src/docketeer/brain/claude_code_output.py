@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from typing import TYPE_CHECKING
 
 from docketeer.brain.backend import (
@@ -243,11 +244,11 @@ async def stream_response(
 def check_error(stderr: str, returncode: int) -> None:
     """Map stderr content to appropriate backend exceptions."""
     lower = stderr.lower()
-    if any(word in lower for word in ("auth", "unauthorized", "token")):
+    if any(re.search(rf"\b{w}\b", lower) for w in ("auth", "unauthorized", "token")):
         raise BackendAuthError(
             f"claude auth error (exit {returncode}): {stderr.strip()}"
         )
-    if any(word in lower for word in ("context", "too large")):
+    if any(re.search(rf"\b{w}\b", lower) for w in ("context", "too large")):
         raise ContextTooLargeError(
             f"context too large (exit {returncode}): {stderr.strip()}"
         )

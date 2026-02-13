@@ -85,6 +85,14 @@ async def test_generate_secret_no_vault(tool_context: ToolContext):
     assert "No vault" in result
 
 
+@pytest.mark.parametrize("length", [0, -1, -100])
+async def test_generate_secret_invalid_length(vault_context: ToolContext, length: int):
+    result = await registry.execute(
+        "generate_secret", {"name": "bad", "length": length}, vault_context
+    )
+    assert "length must be at least 1" in result
+
+
 # --- delete_secret ---
 
 
