@@ -235,6 +235,25 @@ async def test_stream_response_consecutive_text_only_turns():
     assert calls["on_text"] == ["First thought."]
 
 
+async def test_stream_response_text_turn_before_tool_turn_suppressed():
+    """A text-only turn immediately before a tool turn is suppressed."""
+    cb, calls = _callbacks()
+    stream = _make_stream(
+        [
+            _assistant_event("Let me search for that."),
+            _assistant_event(tool_use=True),
+            _assistant_event("Here's what I found."),
+            _result_event("sess-text-before-tool"),
+        ]
+    )
+    text, session_id, _ = await stream_response(stream, cb)
+    assert text == "Here's what I found."
+    assert calls["on_first_text"] == [True]
+    assert calls["on_text"] == []
+    assert calls["on_tool_start"] == ["search"]
+    assert calls["on_tool_end"] == [True]
+
+
 async def test_stream_response_consecutive_text_only_turns_no_callbacks():
     """Consecutive text-only turns without callbacks still returns final text."""
     stream = _make_stream(
