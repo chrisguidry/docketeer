@@ -84,7 +84,7 @@ async def test_stream_response_single_text_turn():
 
 
 async def test_stream_response_multi_turn_with_tool_use():
-    """Intermediate text+tool_use turns fire on_text, final text is returned."""
+    """Intermediate text+tool_use turns are suppressed, final text is returned."""
     cb, calls = _callbacks()
     stream = _make_stream(
         [
@@ -97,7 +97,7 @@ async def test_stream_response_multi_turn_with_tool_use():
     assert text == "Here's what I found."
     assert session_id == "sess-2"
     assert calls["on_first_text"] == [True]
-    assert calls["on_text"] == ["Let me check."]
+    assert calls["on_text"] == []
     assert calls["on_tool_start"] == ["search"]
     assert calls["on_tool_end"] == [True]
 
@@ -133,7 +133,7 @@ async def test_stream_response_consecutive_tool_rounds():
     text, session_id, _ = await stream_response(stream, cb)
     assert text == "Done."
     assert calls["on_first_text"] == [True]
-    assert calls["on_text"] == ["First thought.", "Second thought."]
+    assert calls["on_text"] == []
     assert calls["on_tool_start"] == ["search", "search"]
     assert calls["on_tool_end"] == [True, True]
 
@@ -202,7 +202,7 @@ async def test_stream_response_empty_stream():
 
 
 async def test_stream_response_text_tool_text_tool_text():
-    """Complex multi-turn: text+tool, text+tool, text — intermediate texts dispatched."""
+    """Complex multi-turn: text+tool, text+tool, text — narration suppressed."""
     cb, calls = _callbacks()
     stream = _make_stream(
         [
@@ -214,7 +214,7 @@ async def test_stream_response_text_tool_text_tool_text():
     )
     text, session_id, _ = await stream_response(stream, cb)
     assert text == "Final answer."
-    assert calls["on_text"] == ["Step 1.", "Step 2."]
+    assert calls["on_text"] == []
     assert calls["on_tool_start"] == ["search", "search"]
     assert calls["on_tool_end"] == [True, True]
 

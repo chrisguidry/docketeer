@@ -211,8 +211,6 @@ async def stream_response(
                     await callbacks.on_first_text()
 
             if has_tool_use:
-                if turn_text and callbacks and callbacks.on_text:
-                    await callbacks.on_text(turn_text)
                 if not stream_events_seen:
                     if in_tool_round and callbacks and callbacks.on_tool_end:
                         await callbacks.on_tool_end()
