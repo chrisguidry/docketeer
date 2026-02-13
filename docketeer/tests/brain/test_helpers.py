@@ -20,7 +20,7 @@ from docketeer.prompt import (
     extract_text,
 )
 
-from ..conftest import FakeMessage, make_text_block
+from ..conftest import FakeMessage, FakeUsage, make_text_block
 
 
 def test_ensure_template_copies_when_missing(workspace: Path):
@@ -139,9 +139,9 @@ def testaudit_log_appends_to_existing(tmp_path: Path):
 
 
 def testlog_usage(caplog: pytest.LogCaptureFixture):
-    msg = FakeMessage()
+    usage = FakeUsage()
     with caplog.at_level("INFO", logger="docketeer.audit"):
-        log_usage(msg)  # type: ignore[arg-type]
+        log_usage("claude-opus-4-6", usage)  # type: ignore[arg-type]
     assert "Tokens:" in caplog.text
 
 

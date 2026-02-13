@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -24,24 +25,52 @@ def _mock_tool_context(
     return ctx
 
 
+def _make_mock_proc(
+    stdout_lines: list[str],
+    stderr: bytes = b"",
+    returncode: int = 0,
+) -> AsyncMock:
+    """Create a mock subprocess with streaming-compatible stdin/stdout/stderr."""
+    mock_proc = AsyncMock()
+    mock_proc.returncode = returncode
+    mock_proc.pid = 12345
+
+    # stdin: write and close are sync, drain is async
+    mock_proc.stdin = MagicMock()
+    mock_proc.stdin.drain = AsyncMock()
+
+    # stdout: StreamReader that yields lines
+    reader = asyncio.StreamReader()
+    for line in stdout_lines:
+        reader.feed_data((line + "\n").encode())
+    reader.feed_eof()
+    mock_proc.stdout = reader
+
+    # stderr: async read returning bytes
+    stderr_mock = AsyncMock()
+    stderr_mock.read = AsyncMock(return_value=stderr)
+    mock_proc.stderr = stderr_mock
+
+    # wait() returns when process exits
+    mock_proc.wait = AsyncMock(return_value=returncode)
+
+    return mock_proc
+
+
 # -- _invoke_claude subprocess --
 
 
 async def test_invoke_claude_success(tmp_path: Path):
-    stdout = "\n".join(
-        [
-            json.dumps(
-                {
-                    "type": "assistant",
-                    "message": {"content": [{"type": "text", "text": "hi"}]},
-                }
-            ),
-            json.dumps({"type": "result", "session_id": "s1"}),
-        ]
-    )
-    mock_proc = AsyncMock()
-    mock_proc.communicate.return_value = (stdout.encode(), b"")
-    mock_proc.returncode = 0
+    stdout_lines = [
+        json.dumps(
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "text", "text": "hi"}]},
+            }
+        ),
+        json.dumps({"type": "result", "session_id": "s1"}),
+    ]
+    mock_proc = _make_mock_proc(stdout_lines)
     with (
         patch("asyncio.create_subprocess_exec", return_value=mock_proc),
         patch(
@@ -49,7 +78,7 @@ async def test_invoke_claude_success(tmp_path: Path):
             return_value=["fake"],
         ),
     ):
-        text, session_id = await _invoke_claude(
+        text, session_id, result_event = await _invoke_claude(
             "model",
             "sys",
             "prompt",
@@ -62,12 +91,12 @@ async def test_invoke_claude_success(tmp_path: Path):
         )
     assert text == "hi"
     assert session_id == "s1"
+    assert result_event is not None
+    assert result_event["session_id"] == "s1"
 
 
 async def test_invoke_claude_nonzero_exit(tmp_path: Path):
-    mock_proc = AsyncMock()
-    mock_proc.communicate.return_value = (b"", b"something went wrong")
-    mock_proc.returncode = 1
+    mock_proc = _make_mock_proc([], stderr=b"something went wrong", returncode=1)
     with (
         patch("asyncio.create_subprocess_exec", return_value=mock_proc),
         patch(
@@ -90,9 +119,7 @@ async def test_invoke_claude_nonzero_exit(tmp_path: Path):
 
 
 async def test_invoke_claude_auth_error(tmp_path: Path):
-    mock_proc = AsyncMock()
-    mock_proc.communicate.return_value = (b"", b"unauthorized")
-    mock_proc.returncode = 1
+    mock_proc = _make_mock_proc([], stderr=b"unauthorized", returncode=1)
     with (
         patch("asyncio.create_subprocess_exec", return_value=mock_proc),
         patch(
@@ -127,14 +154,14 @@ async def test_invoke_claude_dispatches_to_mcp_with_socket(tmp_path: Path):
         patch(
             "docketeer.brain.claude_code_backend._invoke_claude_with_mcp",
             new_callable=AsyncMock,
-            return_value=("mcp result", "s1"),
+            return_value=("mcp result", "s1", None),
         ) as mock_mcp,
         patch(
             "docketeer.brain.claude_code_backend._build_bwrap_command",
             return_value=["fake-cmd"],
         ),
     ):
-        text, session_id = await _invoke_claude(
+        text, session_id, _ = await _invoke_claude(
             "model",
             "sys",
             "prompt",
@@ -165,10 +192,10 @@ async def test_invoke_claude_uses_simple_path_without_socket(tmp_path: Path):
         patch(
             "docketeer.brain.claude_code_backend._invoke_claude_simple",
             new_callable=AsyncMock,
-            return_value=("simple result", "s1"),
+            return_value=("simple result", "s1", None),
         ) as mock_simple,
     ):
-        text, _ = await _invoke_claude(
+        text, _, _ = await _invoke_claude(
             "model",
             "sys",
             "prompt",
@@ -194,10 +221,10 @@ async def test_invoke_claude_no_mcp_without_tools(tmp_path: Path):
         patch(
             "docketeer.brain.claude_code_backend._invoke_claude_simple",
             new_callable=AsyncMock,
-            return_value=("no tools", "s1"),
+            return_value=("no tools", "s1", None),
         ) as mock_simple,
     ):
-        text, _ = await _invoke_claude(
+        text, _, _ = await _invoke_claude(
             "model",
             "sys",
             "prompt",
@@ -217,19 +244,16 @@ async def test_invoke_claude_no_mcp_without_tools(tmp_path: Path):
 
 async def test_invoke_claude_mcp_config_only_passed_with_tools(tmp_path: Path):
     """mcp_config is only forwarded to bwrap when tools and tool_context are present."""
-    mock_proc = AsyncMock()
-    stdout = (
+    stdout_lines = [
         json.dumps(
             {
                 "type": "assistant",
                 "message": {"content": [{"type": "text", "text": "hi"}]},
             }
-        )
-        + "\n"
-        + json.dumps({"type": "result", "session_id": "s1"})
-    )
-    mock_proc.communicate.return_value = (stdout.encode(), b"")
-    mock_proc.returncode = 0
+        ),
+        json.dumps({"type": "result", "session_id": "s1"}),
+    ]
+    mock_proc = _make_mock_proc(stdout_lines)
 
     with (
         patch("asyncio.create_subprocess_exec", return_value=mock_proc),

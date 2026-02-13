@@ -13,9 +13,16 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
+from anthropic.types import Usage
+
 from docketeer import environment
+from docketeer.audit import log_usage, record_usage
 from docketeer.brain.backend import BackendError, InferenceBackend
-from docketeer.brain.claude_code_output import extract_text, handle_claude_output
+from docketeer.brain.claude_code_output import (
+    check_process_exit,
+    extract_text,
+    stream_response,
+)
 from docketeer.toolshed import _find_install_root
 
 if TYPE_CHECKING:
@@ -152,7 +159,7 @@ class ClaudeCodeBackend(InferenceBackend):
 
         log.info("Prompt (%d chars): %.200s", len(prompt), prompt)
 
-        text, new_session_id = await _invoke_claude(
+        text, new_session_id, result_event = await _invoke_claude(
             model.model_id,
             system_text,
             prompt,
@@ -167,6 +174,7 @@ class ClaudeCodeBackend(InferenceBackend):
             tool_context=tool_context,
             mcp_socket=self._mcp_socket,
             mcp_config=self._mcp_config,
+            callbacks=callbacks,
         )
 
         log.info(
@@ -174,6 +182,22 @@ class ClaudeCodeBackend(InferenceBackend):
             len(text),
             new_session_id or "(none)",
         )
+
+        if result_event:
+            model_usage = result_event.get("modelUsage")
+            if model_usage:
+                _record_model_usage(usage_path, model_usage)
+            cost = result_event.get("total_cost_usd")
+            duration = result_event.get("duration_ms")
+            api_duration = result_event.get("duration_api_ms")
+            num_turns = result_event.get("num_turns")
+            log.info(
+                "CC metadata: cost=$%s, duration=%sms, api_duration=%sms, turns=%s",
+                cost,
+                duration,
+                api_duration,
+                num_turns,
+            )
 
         if new_session_id and room_id:
             self._sessions[room_id] = _Session(
@@ -216,7 +240,7 @@ class ClaudeCodeBackend(InferenceBackend):
         audit.mkdir(exist_ok=True)
 
         log.info("utility_complete: prompt (%d chars): %.200s", len(prompt), prompt)
-        text, _ = await _invoke_claude(
+        text, _, _ = await _invoke_claude(
             MODELS["haiku"].model_id,
             "You are a helpful assistant. Be concise.",
             prompt,
@@ -229,6 +253,19 @@ class ClaudeCodeBackend(InferenceBackend):
         )
         log.info("utility_complete: response (%d chars)", len(text))
         return text
+
+
+def _record_model_usage(usage_path: Path, model_usage: dict) -> None:
+    """Translate CC modelUsage dicts into Usage objects and record them."""
+    for model_id, data in model_usage.items():
+        usage = Usage(
+            input_tokens=data.get("inputTokens", 0),
+            output_tokens=data.get("outputTokens", 0),
+            cache_read_input_tokens=data.get("cacheReadInputTokens", 0),
+            cache_creation_input_tokens=data.get("cacheCreationInputTokens", 0),
+        )
+        log_usage(model_id, usage)
+        record_usage(usage_path, model_id, usage)
 
 
 def _build_bwrap_command(
@@ -320,8 +357,9 @@ async def _invoke_claude(
     tool_context: ToolContext | None = None,
     mcp_socket: MCPSocketServer | None = None,
     mcp_config: str | None = None,
-) -> tuple[str, str | None]:
-    """Run claude -p inside bwrap and return (response_text, session_id).
+    callbacks: ProcessCallbacks | None = None,
+) -> tuple[str, str | None, dict | None]:
+    """Run claude -p inside bwrap and return (response_text, session_id, result_event).
 
     When tools, tool_context, and mcp_socket are provided, accepts a
     connection on the pre-bound MCP socket so the sandboxed claude process
@@ -354,17 +392,18 @@ async def _invoke_claude(
 
     if tools and tool_context and mcp_socket:
         return await _invoke_claude_with_mcp(
-            cmd, env, prompt, mcp_socket, tool_context, audit_path
+            cmd, env, prompt, mcp_socket, tool_context, audit_path, callbacks
         )
 
-    return await _invoke_claude_simple(cmd, env, prompt)
+    return await _invoke_claude_simple(cmd, env, prompt, callbacks)
 
 
 async def _invoke_claude_simple(
     cmd: list[str],
     env: dict[str, str],
     prompt: str,
-) -> tuple[str, str | None]:
+    callbacks: ProcessCallbacks | None = None,
+) -> tuple[str, str | None, dict | None]:
     """Run claude -p without MCP (utility calls, no tools)."""
     proc = await asyncio.create_subprocess_exec(
         *cmd,
@@ -375,8 +414,22 @@ async def _invoke_claude_simple(
     )
 
     log.info("claude subprocess started, pid=%s", proc.pid)
-    stdout_bytes, stderr_bytes = await proc.communicate(input=prompt.encode())
-    return handle_claude_output(proc, stdout_bytes, stderr_bytes)
+
+    assert proc.stdin is not None
+    assert proc.stdout is not None
+    assert proc.stderr is not None
+
+    proc.stdin.write(prompt.encode())
+    await proc.stdin.drain()
+    proc.stdin.close()
+
+    stderr_task = asyncio.create_task(proc.stderr.read())
+    text, session_id, result_event = await stream_response(proc.stdout, callbacks)
+
+    stderr_bytes = await stderr_task
+    await proc.wait()
+    check_process_exit(proc, stderr_bytes)
+    return text, session_id, result_event
 
 
 async def _invoke_claude_with_mcp(  # pragma: no cover — integration path
@@ -386,7 +439,8 @@ async def _invoke_claude_with_mcp(  # pragma: no cover — integration path
     mcp_socket: MCPSocketServer,
     tool_context: ToolContext,
     audit_path: Path,
-) -> tuple[str, str | None]:
+    callbacks: ProcessCallbacks | None = None,
+) -> tuple[str, str | None, dict | None]:
     """Run claude -p with an MCP server bridged over the pre-bound Unix socket."""
     from docketeer.brain.mcp_server import create_mcp_server
     from docketeer.brain.mcp_transport import accept_mcp_connection
@@ -401,11 +455,20 @@ async def _invoke_claude_with_mcp(  # pragma: no cover — integration path
     )
     log.info("claude subprocess started (MCP), pid=%s", proc.pid)
 
+    assert proc.stdin is not None
+    assert proc.stdout is not None
+    assert proc.stderr is not None
+
     server = create_mcp_server(registry, tool_context, audit_path=audit_path)
 
     # Send the prompt concurrently — claude needs stdin before it launches socat,
     # but accept_mcp_connection blocks waiting for socat to connect.
-    comm_task = asyncio.create_task(proc.communicate(input=prompt.encode()))
+    proc.stdin.write(prompt.encode())
+    await proc.stdin.drain()
+    proc.stdin.close()
+
+    stderr_task = asyncio.create_task(proc.stderr.read())
+    stream_task = asyncio.create_task(stream_response(proc.stdout, callbacks))
 
     try:
         async with accept_mcp_connection(mcp_socket) as (read_stream, write_stream):
@@ -414,17 +477,20 @@ async def _invoke_claude_with_mcp(  # pragma: no cover — integration path
                 server.run(read_stream, write_stream, opts)
             )
             try:
-                stdout_bytes, stderr_bytes = await comm_task
+                text, session_id, result_event = await stream_task
             finally:
                 server_task.cancel()
                 with suppress(asyncio.CancelledError):
                     await server_task
     except BaseException:
-        if not comm_task.done():
+        if not stream_task.done():
             proc.kill()
-            comm_task.cancel()
+            stream_task.cancel()
             with suppress(asyncio.CancelledError):
-                await comm_task
+                await stream_task
         raise
 
-    return handle_claude_output(proc, stdout_bytes, stderr_bytes)
+    stderr_bytes = await stderr_task
+    await proc.wait()
+    check_process_exit(proc, stderr_bytes)
+    return text, session_id, result_event

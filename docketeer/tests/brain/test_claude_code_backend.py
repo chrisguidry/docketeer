@@ -158,7 +158,9 @@ def _mock_tool_context(
     return ctx
 
 
-def _patch_invoke(return_value: tuple[str, str | None]) -> patch:  # type: ignore[type-arg]
+def _patch_invoke(
+    return_value: tuple[str, str | None, dict | None],
+) -> patch:  # type: ignore[type-arg]
     return patch(
         "docketeer.brain.claude_code_backend._invoke_claude",
         new_callable=AsyncMock,
@@ -178,7 +180,7 @@ async def test_count_tokens_returns_negative_one(backend: ClaudeCodeBackend):
 
 async def test_first_call_sends_latest_message(backend: ClaudeCodeBackend):
     messages = [{"role": "user", "content": "@chris: hello"}]
-    with _patch_invoke(("Hi Chris!", "sess-1")) as mock:
+    with _patch_invoke(("Hi Chris!", "sess-1", None)) as mock:
         result = await backend.run_agentic_loop(
             MODEL,
             [],
@@ -198,7 +200,7 @@ async def test_first_call_passes_tools_and_context(backend: ClaudeCodeBackend):
     messages = [{"role": "user", "content": "hello"}]
     tool_context = _mock_tool_context()
     fake_tools = [AsyncMock(name="tool1")]
-    with _patch_invoke(("reply", "sess-1")) as mock:
+    with _patch_invoke(("reply", "sess-1", None)) as mock:
         await backend.run_agentic_loop(
             MODEL,
             [],
@@ -218,7 +220,7 @@ async def test_first_call_passes_workspace_and_audit_path(backend: ClaudeCodeBac
     workspace = Path("/my/workspace")
     tool_context = _mock_tool_context(workspace=workspace)
     audit_path = Path("/audit/dir")
-    with _patch_invoke(("reply", "sess-1")) as mock:
+    with _patch_invoke(("reply", "sess-1", None)) as mock:
         await backend.run_agentic_loop(
             MODEL,
             [],
@@ -236,7 +238,7 @@ async def test_first_call_passes_workspace_and_audit_path(backend: ClaudeCodeBac
 
 async def test_first_call_passes_mcp_socket_and_config(backend: ClaudeCodeBackend):
     messages = [{"role": "user", "content": "hello"}]
-    with _patch_invoke(("reply", "sess-1")) as mock:
+    with _patch_invoke(("reply", "sess-1", None)) as mock:
         await backend.run_agentic_loop(
             MODEL,
             [],
@@ -254,7 +256,7 @@ async def test_first_call_passes_mcp_socket_and_config(backend: ClaudeCodeBacken
 async def test_subsequent_call_uses_resume(backend: ClaudeCodeBackend):
     messages: list[dict] = [{"role": "user", "content": "@chris: hello"}]
     tool_context = _mock_tool_context()
-    with _patch_invoke(("Hi!", "sess-1")):
+    with _patch_invoke(("Hi!", "sess-1", None)):
         await backend.run_agentic_loop(
             MODEL,
             [],
@@ -267,7 +269,7 @@ async def test_subsequent_call_uses_resume(backend: ClaudeCodeBackend):
         )
     messages.append({"role": "assistant", "content": "Hi!"})
     messages.append({"role": "user", "content": "@chris: how are you?"})
-    with _patch_invoke(("Great!", "sess-1")) as mock:
+    with _patch_invoke(("Great!", "sess-1", None)) as mock:
         await backend.run_agentic_loop(
             MODEL,
             [],
@@ -289,7 +291,7 @@ async def test_compaction_resets_session(backend: ClaudeCodeBackend):
         {"role": "user", "content": "msg 2"},
     ]
     tool_context = _mock_tool_context()
-    with _patch_invoke(("reply 2", "sess-1")):
+    with _patch_invoke(("reply 2", "sess-1", None)):
         await backend.run_agentic_loop(
             MODEL,
             [],
@@ -302,7 +304,7 @@ async def test_compaction_resets_session(backend: ClaudeCodeBackend):
         )
     messages.clear()
     messages.append({"role": "user", "content": "compacted summary"})
-    with _patch_invoke(("fresh reply", "sess-2")) as mock:
+    with _patch_invoke(("fresh reply", "sess-2", None)) as mock:
         await backend.run_agentic_loop(
             MODEL,
             [],
@@ -319,7 +321,7 @@ async def test_compaction_resets_session(backend: ClaudeCodeBackend):
 
 async def test_no_session_tracking_without_room_id(backend: ClaudeCodeBackend):
     messages = [{"role": "user", "content": "internal task"}]
-    with _patch_invoke(("done", "sess-99")):
+    with _patch_invoke(("done", "sess-99", None)):
         await backend.run_agentic_loop(
             MODEL,
             [],
@@ -337,10 +339,96 @@ async def test_no_session_tracking_without_room_id(backend: ClaudeCodeBackend):
 
 
 async def test_utility_complete(backend: ClaudeCodeBackend):
-    with _patch_invoke(("summary text", None)) as mock:
+    with _patch_invoke(("summary text", None, None)) as mock:
         result = await backend.utility_complete("summarize this")
     assert result == "summary text"
     assert mock.call_args[0][2] == "summarize this"
     # scratch and audit dirs are created under claude_dir
     assert (backend.claude_dir / "scratch").is_dir()
     assert (backend.claude_dir / "audit").is_dir()
+
+
+# -- callbacks passthrough --
+
+
+async def test_run_agentic_loop_passes_callbacks(backend: ClaudeCodeBackend):
+    messages = [{"role": "user", "content": "hello"}]
+    callbacks = AsyncMock()
+    with _patch_invoke(("reply", "sess-1", None)) as mock:
+        await backend.run_agentic_loop(
+            MODEL,
+            [],
+            messages,
+            [],
+            _mock_tool_context(),
+            Path("/tmp"),
+            Path("/tmp"),
+            callbacks,
+        )
+    assert mock.call_args[1]["callbacks"] is callbacks
+
+
+# -- usage recording --
+
+
+async def test_run_agentic_loop_records_model_usage(
+    backend: ClaudeCodeBackend, tmp_path: Path
+):
+    result_event = {
+        "type": "result",
+        "session_id": "sess-1",
+        "modelUsage": {
+            "claude-opus-4-6": {
+                "inputTokens": 4,
+                "outputTokens": 364,
+                "cacheReadInputTokens": 56747,
+                "cacheCreationInputTokens": 10788,
+                "costUSD": 0.105,
+            },
+        },
+        "total_cost_usd": 0.105,
+        "duration_ms": 12345,
+        "duration_api_ms": 10000,
+        "num_turns": 3,
+    }
+    messages = [{"role": "user", "content": "hello"}]
+    usage_path = tmp_path / "usage"
+    with _patch_invoke(("reply", "sess-1", result_event)):
+        await backend.run_agentic_loop(
+            MODEL,
+            [],
+            messages,
+            [],
+            _mock_tool_context(),
+            Path("/tmp"),
+            usage_path,
+            None,
+        )
+    files = list(usage_path.glob("*.jsonl"))
+    assert len(files) == 1
+    record = json.loads(files[0].read_text().strip())
+    assert record["model"] == "claude-opus-4-6"
+    assert record["input_tokens"] == 4
+    assert record["output_tokens"] == 364
+    assert record["cache_read_input_tokens"] == 56747
+    assert record["cache_creation_input_tokens"] == 10788
+
+
+async def test_run_agentic_loop_skips_usage_without_model_usage(
+    backend: ClaudeCodeBackend, tmp_path: Path
+):
+    result_event = {"type": "result", "session_id": "sess-1"}
+    messages = [{"role": "user", "content": "hello"}]
+    usage_path = tmp_path / "usage"
+    with _patch_invoke(("reply", "sess-1", result_event)):
+        await backend.run_agentic_loop(
+            MODEL,
+            [],
+            messages,
+            [],
+            _mock_tool_context(),
+            Path("/tmp"),
+            usage_path,
+            None,
+        )
+    assert not usage_path.exists()

@@ -65,7 +65,7 @@ async def agentic_loop(
             thinking=thinking,
         )
 
-        log_usage(response)
+        log_usage(model.model_id, response.usage)
         record_usage(usage_path, model.model_id, response.usage)
 
         tool_blocks = [b for b in response.content if isinstance(b, ToolUseBlock)]
@@ -113,7 +113,7 @@ async def agentic_loop(
             on_first_text=callbacks_on_first_text,
             thinking=thinking,
         )
-        log_usage(response)
+        log_usage(model.model_id, response.usage)
         record_usage(usage_path, model.model_id, response.usage)
 
     return build_reply(response, used_tools, rounds)

@@ -47,11 +47,11 @@ def record_usage(usage_dir: Path, model: str, usage: anthropic.types.Usage) -> N
         f.write(json.dumps(record) + "\n")
 
 
-def log_usage(response: anthropic.types.Message) -> None:
+def log_usage(model: str, usage: anthropic.types.Usage) -> None:
     """Log token usage including cache stats."""
-    u = response.usage
-    cr = getattr(u, "cache_read_input_tokens", 0) or 0
-    cw = getattr(u, "cache_creation_input_tokens", 0) or 0
+    u = usage
+    cr = u.cache_read_input_tokens or 0
+    cw = u.cache_creation_input_tokens or 0
     log.info(
         "Tokens: %d in (%d cache-read, %d cache-write, %d uncached), %d out",
         cr + cw + u.input_tokens,
