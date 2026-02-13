@@ -74,7 +74,7 @@ async def test_invoke_claude_success(tmp_path: Path):
     with (
         patch("asyncio.create_subprocess_exec", return_value=mock_proc),
         patch(
-            "docketeer.brain.claude_code_backend._build_bwrap_command",
+            "docketeer.brain.claude_code_backend.build_bwrap_command",
             return_value=["fake"],
         ),
     ):
@@ -100,7 +100,7 @@ async def test_invoke_claude_nonzero_exit(tmp_path: Path):
     with (
         patch("asyncio.create_subprocess_exec", return_value=mock_proc),
         patch(
-            "docketeer.brain.claude_code_backend._build_bwrap_command",
+            "docketeer.brain.claude_code_backend.build_bwrap_command",
             return_value=["fake"],
         ),
     ):
@@ -123,7 +123,7 @@ async def test_invoke_claude_auth_error(tmp_path: Path):
     with (
         patch("asyncio.create_subprocess_exec", return_value=mock_proc),
         patch(
-            "docketeer.brain.claude_code_backend._build_bwrap_command",
+            "docketeer.brain.claude_code_backend.build_bwrap_command",
             return_value=["fake"],
         ),
     ):
@@ -157,7 +157,7 @@ async def test_invoke_claude_dispatches_to_mcp_with_socket(tmp_path: Path):
             return_value=("mcp result", "s1", None),
         ) as mock_mcp,
         patch(
-            "docketeer.brain.claude_code_backend._build_bwrap_command",
+            "docketeer.brain.claude_code_backend.build_bwrap_command",
             return_value=["fake-cmd"],
         ),
     ):
@@ -258,7 +258,7 @@ async def test_invoke_claude_mcp_config_only_passed_with_tools(tmp_path: Path):
     with (
         patch("asyncio.create_subprocess_exec", return_value=mock_proc),
         patch(
-            "docketeer.brain.claude_code_backend._build_bwrap_command",
+            "docketeer.brain.claude_code_backend.build_bwrap_command",
             return_value=["fake"],
         ) as mock_bwrap,
     ):
@@ -278,3 +278,77 @@ async def test_invoke_claude_mcp_config_only_passed_with_tools(tmp_path: Path):
         )
 
     assert mock_bwrap.call_args[1]["mcp_config"] is None
+
+
+async def test_invoke_claude_forwards_session_id_to_bwrap(tmp_path: Path):
+    """session_id is forwarded to build_bwrap_command."""
+    stdout_lines = [
+        json.dumps(
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "text", "text": "hi"}]},
+            }
+        ),
+        json.dumps({"type": "result", "session_id": "s1"}),
+    ]
+    mock_proc = _make_mock_proc(stdout_lines)
+
+    with (
+        patch("asyncio.create_subprocess_exec", return_value=mock_proc),
+        patch(
+            "docketeer.brain.claude_code_backend.build_bwrap_command",
+            return_value=["fake"],
+        ) as mock_bwrap,
+    ):
+        await _invoke_claude(
+            "model",
+            "sys",
+            "prompt",
+            "token",
+            tmp_path,
+            tmp_path,
+            tmp_path / "audit",
+            FAKE_CLAUDE,
+            FAKE_INSTALL_ROOT,
+            session_id="my-uuid",
+        )
+
+    assert mock_bwrap.call_args[1]["session_id"] == "my-uuid"
+    assert mock_bwrap.call_args[1].get("resume_session_id") is None
+
+
+async def test_invoke_claude_forwards_resume_session_id_to_bwrap(tmp_path: Path):
+    """resume_session_id is forwarded to build_bwrap_command."""
+    stdout_lines = [
+        json.dumps(
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "text", "text": "hi"}]},
+            }
+        ),
+        json.dumps({"type": "result", "session_id": "s1"}),
+    ]
+    mock_proc = _make_mock_proc(stdout_lines)
+
+    with (
+        patch("asyncio.create_subprocess_exec", return_value=mock_proc),
+        patch(
+            "docketeer.brain.claude_code_backend.build_bwrap_command",
+            return_value=["fake"],
+        ) as mock_bwrap,
+    ):
+        await _invoke_claude(
+            "model",
+            "sys",
+            "prompt",
+            "token",
+            tmp_path,
+            tmp_path,
+            tmp_path / "audit",
+            FAKE_CLAUDE,
+            FAKE_INSTALL_ROOT,
+            resume_session_id="existing-sess",
+        )
+
+    assert mock_bwrap.call_args[1]["resume_session_id"] == "existing-sess"
+    assert mock_bwrap.call_args[1].get("session_id") is None

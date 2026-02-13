@@ -33,6 +33,32 @@ def extract_text(message: dict) -> str:
     return "\n".join(parts)
 
 
+def format_prompt(messages: list[dict], *, resume: bool = False) -> str:
+    """Build the prompt to send to claude -p.
+
+    For resumed sessions, only the latest message is needed since Claude Code
+    has the prior context internally.  For new sessions, include the full
+    conversation history so Claude Code can see what was said before it joined.
+    """
+    if not messages:
+        return ""
+
+    if resume or len(messages) <= 1:
+        return extract_text(messages[-1])
+
+    parts: list[str] = []
+    for msg in messages:
+        text = extract_text(msg)
+        if not text:
+            continue
+        if msg.get("role") == "assistant":
+            parts.append(f"[assistant] {text}")
+        else:
+            parts.append(text)
+
+    return "\n".join(parts)
+
+
 def check_process_exit(
     proc: asyncio.subprocess.Process,
     stderr_bytes: bytes,
@@ -110,6 +136,7 @@ async def stream_response(
     result_event: dict | None = None
     first_text_fired = False
     in_tool_round = False
+    stream_events_seen = False
     pending_final: str | None = None
 
     while True:
@@ -121,7 +148,7 @@ async def stream_response(
         if not line:
             continue
 
-        log.info("stream-json raw: %s", line)
+        log.debug("stream-json raw: %s", line)
 
         try:
             event = json.loads(line)
@@ -130,7 +157,32 @@ async def stream_response(
 
         etype = event.get("type")
 
-        if etype == "assistant":
+        if etype == "stream_event":
+            stream_events_seen = True
+            inner = event.get("event", {})
+            inner_type = inner.get("type")
+
+            if inner_type == "content_block_delta":
+                delta = inner.get("delta", {})
+                if delta.get("type") == "text_delta" and not first_text_fired:
+                    first_text_fired = True
+                    if callbacks and callbacks.on_first_text:
+                        await callbacks.on_first_text()
+
+            elif inner_type == "content_block_start":
+                block = inner.get("content_block", {})
+                if block.get("type") == "tool_use":
+                    if in_tool_round and callbacks and callbacks.on_tool_end:
+                        await callbacks.on_tool_end()
+                    if callbacks and callbacks.on_tool_start:
+                        await callbacks.on_tool_start()
+                    in_tool_round = True
+                elif block.get("type") == "text" and in_tool_round:
+                    if callbacks and callbacks.on_tool_end:
+                        await callbacks.on_tool_end()
+                    in_tool_round = False
+
+        elif etype == "assistant":
             msg = event.get("message", {})
             content = msg.get("content", [])
 
@@ -153,7 +205,7 @@ async def stream_response(
                     await callbacks.on_text(pending_final)
                 pending_final = None
 
-            if turn_text and not first_text_fired:
+            if not stream_events_seen and turn_text and not first_text_fired:
                 first_text_fired = True
                 if callbacks and callbacks.on_first_text:
                     await callbacks.on_first_text()
@@ -161,13 +213,19 @@ async def stream_response(
             if has_tool_use:
                 if turn_text and callbacks and callbacks.on_text:
                     await callbacks.on_text(turn_text)
-                if in_tool_round and callbacks and callbacks.on_tool_end:
-                    await callbacks.on_tool_end()
-                if callbacks and callbacks.on_tool_start:
-                    await callbacks.on_tool_start()
-                in_tool_round = True
+                if not stream_events_seen:
+                    if in_tool_round and callbacks and callbacks.on_tool_end:
+                        await callbacks.on_tool_end()
+                    if callbacks and callbacks.on_tool_start:
+                        await callbacks.on_tool_start()
+                    in_tool_round = True
             else:
-                if in_tool_round and callbacks and callbacks.on_tool_end:
+                if (
+                    not stream_events_seen
+                    and in_tool_round
+                    and callbacks
+                    and callbacks.on_tool_end
+                ):
                     await callbacks.on_tool_end()
                     in_tool_round = False
                 if turn_text is not None:  # pragma: no branch

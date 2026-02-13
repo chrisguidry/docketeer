@@ -18,9 +18,10 @@ from anthropic.types import Usage
 from docketeer import environment
 from docketeer.audit import log_usage, record_usage
 from docketeer.brain.backend import BackendError, InferenceBackend
+from docketeer.brain.claude_code_bwrap import build_bwrap_command
 from docketeer.brain.claude_code_output import (
     check_process_exit,
-    extract_text,
+    format_prompt,
     stream_response,
 )
 from docketeer.toolshed import _find_install_root
@@ -32,17 +33,6 @@ if TYPE_CHECKING:
     from docketeer.tools import ToolContext, ToolDefinition
 
 log = logging.getLogger(__name__)
-
-SYSTEM_RO_BINDS = [
-    "/usr",
-    "/bin",
-    "/lib",
-    "/lib64",
-    "/etc/ssl",
-    "/etc/resolv.conf",
-    "/etc/hosts",
-    "/etc/alternatives",
-]
 
 
 @dataclass
@@ -68,6 +58,7 @@ class ClaudeCodeBackend(InferenceBackend):
 
         self.claude_dir.mkdir(parents=True, exist_ok=True)
         self._sessions: dict[str, _Session] = {}
+        self._last_context_tokens: int = -1
         self._socket_name = f"mcp-{uuid4().hex[:8]}.sock"
         self._stack: AsyncExitStack | None = None
         self._mcp_socket: MCPSocketServer | None = None
@@ -131,19 +122,20 @@ class ClaudeCodeBackend(InferenceBackend):
             session.session_id if session else "(new)",
         )
 
+        session_id: str | None = None
+        resume_session_id: str | None = None
+
         if session and len(messages) >= session.message_count:
-            prompt = extract_text(messages[-1])
-            session_id = session.session_id
+            resume_session_id = session.session_id
             log.info(
                 "Resuming session %s for room %s (messages %d >= stored %d)",
-                session_id,
+                resume_session_id,
                 room_id,
                 len(messages),
                 session.message_count,
             )
         else:
-            prompt = extract_text(messages[-1])
-            session_id = None
+            session_id = str(uuid4())
             if session and room_id:
                 log.info(
                     "Compaction detected for room %s: messages %d < stored %d, "
@@ -155,11 +147,15 @@ class ClaudeCodeBackend(InferenceBackend):
                 )
                 del self._sessions[room_id]
             else:
-                log.info("New session for room %s", room_id or "(none)")
+                log.info("New session %s for room %s", session_id, room_id or "(none)")
 
+        prompt = format_prompt(messages, resume=resume_session_id is not None)
         log.info("Prompt (%d chars): %.200s", len(prompt), prompt)
 
-        text, new_session_id, result_event = await _invoke_claude(
+        if callbacks and callbacks.on_tool_start:
+            await callbacks.on_tool_start()
+
+        text, _, result_event = await _invoke_claude(
             model.model_id,
             system_text,
             prompt,
@@ -170,6 +166,7 @@ class ClaudeCodeBackend(InferenceBackend):
             self._claude_binary,
             self._claude_install_root,
             session_id=session_id,
+            resume_session_id=resume_session_id,
             tools=tools,
             tool_context=tool_context,
             mcp_socket=self._mcp_socket,
@@ -177,16 +174,28 @@ class ClaudeCodeBackend(InferenceBackend):
             callbacks=callbacks,
         )
 
+        if callbacks and callbacks.on_tool_end:
+            await callbacks.on_tool_end()
+
+        effective_session_id = resume_session_id or session_id
         log.info(
             "Response: %d chars, session_id=%s",
             len(text),
-            new_session_id or "(none)",
+            effective_session_id or "(none)",
         )
 
         if result_event:
             model_usage = result_event.get("modelUsage")
             if model_usage:
                 _record_model_usage(usage_path, model_usage)
+            usage = result_event.get("usage", {})
+            context_tokens = (
+                usage.get("input_tokens", 0)
+                + usage.get("cache_read_input_tokens", 0)
+                + usage.get("cache_creation_input_tokens", 0)
+            )
+            if context_tokens:
+                self._last_context_tokens = context_tokens
             cost = result_event.get("total_cost_usd")
             duration = result_event.get("duration_ms")
             api_duration = result_event.get("duration_api_ms")
@@ -199,19 +208,19 @@ class ClaudeCodeBackend(InferenceBackend):
                 num_turns,
             )
 
-        if new_session_id and room_id:
+        if effective_session_id and room_id:
             self._sessions[room_id] = _Session(
-                session_id=new_session_id,
+                session_id=effective_session_id,
                 message_count=len(messages) + 1,
             )
             log.info(
                 "Stored session %s for room %s (message_count=%d)",
-                new_session_id,
+                effective_session_id,
                 room_id,
                 len(messages) + 1,
             )
-        elif not new_session_id:  # pragma: no cover
-            log.warning("No session_id returned from claude for room %s", room_id)
+        elif not effective_session_id:  # pragma: no cover
+            log.warning("No session_id for room %s", room_id)
         elif not room_id:  # pragma: no cover
             log.info("Skipping session storage (no room_id)")
 
@@ -224,7 +233,7 @@ class ClaudeCodeBackend(InferenceBackend):
         tools: list[ToolDefinition],
         messages: list,
     ) -> int:
-        return -1
+        return self._last_context_tokens
 
     async def utility_complete(
         self,
@@ -268,79 +277,6 @@ def _record_model_usage(usage_path: Path, model_usage: dict) -> None:
         record_usage(usage_path, model_id, usage)
 
 
-def _build_bwrap_command(
-    model: str,
-    system_text: str,
-    prompt: str,
-    claude_dir: Path,
-    workspace: Path,
-    claude_binary: Path,
-    claude_install_root: Path,
-    *,
-    session_id: str | None = None,
-    mcp_config: str | None = None,
-) -> list[str]:
-    """Build the bwrap + claude -p command."""
-    uid = os.getuid()
-    gid = os.getgid()
-    home = Path.home()
-
-    args = ["bwrap", "--die-with-parent"]
-
-    for path in SYSTEM_RO_BINDS:
-        if Path(path).exists():  # pragma: no branch
-            args.extend(["--ro-bind", path, path])
-
-    args.extend(["--proc", "/proc"])
-    args.extend(["--dev", "/dev"])
-    args.extend(["--tmpfs", "/tmp"])
-
-    # Empty home — no host files leak into the sandbox
-    args.extend(["--tmpfs", str(home)])
-
-    args.extend(["--bind", str(claude_dir), str(home / ".claude")])
-
-    # Mount the claude binary's install root if not already under system paths
-    if not any(claude_install_root.is_relative_to(p) for p in SYSTEM_RO_BINDS):
-        args.extend(["--ro-bind", str(claude_install_root), str(claude_install_root)])
-
-    args.extend(["--ro-bind", str(workspace), str(workspace)])
-
-    args.extend(["--uid", str(uid), "--gid", str(gid)])
-    args.extend(["--chdir", str(workspace)])
-
-    args.extend(
-        [
-            str(claude_binary),
-            "-p",
-            "--output-format",
-            "stream-json",
-            "--verbose",
-            "--dangerously-skip-permissions",
-            "--disable-slash-commands",
-        ]
-    )
-
-    if mcp_config:
-        args.extend(["--mcp-config", mcp_config])
-    else:
-        args.extend(["--tools", ""])
-
-    if session_id:
-        args.extend(["--resume", session_id])
-    else:
-        args.extend(
-            [
-                "--system-prompt",
-                system_text,
-                "--model",
-                model,
-            ]
-        )
-
-    return args
-
-
 async def _invoke_claude(
     model: str,
     system_text: str,
@@ -353,6 +289,7 @@ async def _invoke_claude(
     claude_install_root: Path,
     *,
     session_id: str | None = None,
+    resume_session_id: str | None = None,
     tools: list[ToolDefinition] | None = None,
     tool_context: ToolContext | None = None,
     mcp_socket: MCPSocketServer | None = None,
@@ -365,7 +302,7 @@ async def _invoke_claude(
     connection on the pre-bound MCP socket so the sandboxed claude process
     can call host-side tools via socat.
     """
-    cmd = _build_bwrap_command(
+    cmd = build_bwrap_command(
         model,
         system_text,
         prompt,
@@ -374,6 +311,7 @@ async def _invoke_claude(
         claude_binary,
         claude_install_root,
         session_id=session_id,
+        resume_session_id=resume_session_id,
         mcp_config=mcp_config if tools and tool_context else None,
     )
 
@@ -381,7 +319,7 @@ async def _invoke_claude(
         "Invoking claude: model=%s, session=%s, mcp=%s, "
         "system_prompt=%d chars, prompt=%d chars",
         model,
-        session_id or "(new)",
+        resume_session_id or session_id or "(new)",
         "yes" if (tools and tool_context and mcp_socket) else "no",
         len(system_text),
         len(prompt),

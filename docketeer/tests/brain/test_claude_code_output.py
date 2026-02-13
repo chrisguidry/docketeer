@@ -1,6 +1,5 @@
-"""Tests for claude_code_output: parsing and error handling."""
+"""Tests for claude_code_output: parsing, error handling, and format_prompt."""
 
-import asyncio
 import json
 from unittest.mock import AsyncMock
 
@@ -11,10 +10,9 @@ from docketeer.brain.claude_code_output import (
     check_error,
     check_process_exit,
     extract_text,
+    format_prompt,
     parse_response,
-    stream_response,
 )
-from docketeer.brain.core import ProcessCallbacks
 
 # -- extract_text --
 
@@ -49,6 +47,53 @@ def test_extract_text_raw_strings_in_list():
 
 def test_extract_text_empty():
     assert extract_text({}) == ""
+
+
+# -- format_prompt --
+
+
+def test_format_prompt_single_message():
+    messages = [{"role": "user", "content": "[21:19] @peps: hello"}]
+    assert format_prompt(messages) == "[21:19] @peps: hello"
+
+
+def test_format_prompt_includes_history_for_new_session():
+    messages = [
+        {"role": "user", "content": "[21:10] @peps: first message"},
+        {"role": "assistant", "content": "Got it."},
+        {"role": "user", "content": "[21:15] @peps: second message"},
+        {"role": "assistant", "content": "Sure thing."},
+        {"role": "user", "content": "[21:19] @peps: latest question"},
+    ]
+    result = format_prompt(messages)
+    assert "[21:10] @peps: first message" in result
+    assert "[assistant] Got it." in result
+    assert "[21:15] @peps: second message" in result
+    assert "[assistant] Sure thing." in result
+    assert "[21:19] @peps: latest question" in result
+
+
+def test_format_prompt_resume_sends_only_latest():
+    messages = [
+        {"role": "user", "content": "[21:10] @peps: old message"},
+        {"role": "assistant", "content": "Old reply."},
+        {"role": "user", "content": "[21:19] @peps: new message"},
+    ]
+    result = format_prompt(messages, resume=True)
+    assert result == "[21:19] @peps: new message"
+
+
+def test_format_prompt_empty_messages():
+    assert format_prompt([]) == ""
+
+
+def test_format_prompt_skips_empty_content():
+    messages = [
+        {"role": "user", "content": ""},
+        {"role": "user", "content": "[21:19] @peps: hello"},
+    ]
+    result = format_prompt(messages)
+    assert result == "[21:19] @peps: hello"
 
 
 # -- parse_response --
@@ -163,248 +208,6 @@ def test_check_error_context():
 def test_check_error_generic():
     with pytest.raises(BackendError):
         check_error("something went wrong", 1)
-
-
-# -- stream_response helpers --
-
-
-def _make_stream(lines: list[str]) -> asyncio.StreamReader:
-    reader = asyncio.StreamReader()
-    for line in lines:
-        reader.feed_data((line + "\n").encode())
-    reader.feed_eof()
-    return reader
-
-
-def _assistant_event(
-    text: str | None = None,
-    tool_use: bool = False,
-) -> str:
-    content: list[dict] = []
-    if text is not None:
-        content.append({"type": "text", "text": text})
-    if tool_use:
-        content.append({"type": "tool_use", "name": "search", "input": {}})
-    return json.dumps({"type": "assistant", "message": {"content": content}})
-
-
-def _result_event(session_id: str | None = None) -> str:
-    event: dict = {"type": "result"}
-    if session_id:
-        event["session_id"] = session_id
-    return json.dumps(event)
-
-
-def _callbacks() -> tuple[ProcessCallbacks, dict[str, list]]:
-    calls: dict[str, list] = {
-        "on_first_text": [],
-        "on_text": [],
-        "on_tool_start": [],
-        "on_tool_end": [],
-    }
-
-    async def on_first_text() -> None:
-        calls["on_first_text"].append(True)
-
-    async def on_text(text: str) -> None:
-        calls["on_text"].append(text)
-
-    async def on_tool_start() -> None:
-        calls["on_tool_start"].append(True)
-
-    async def on_tool_end() -> None:
-        calls["on_tool_end"].append(True)
-
-    cb = ProcessCallbacks(
-        on_first_text=on_first_text,
-        on_text=on_text,
-        on_tool_start=on_tool_start,
-        on_tool_end=on_tool_end,
-    )
-    return cb, calls
-
-
-# -- stream_response --
-
-
-async def test_stream_response_single_text_turn():
-    """A single text-only turn is returned as the final text, no callbacks."""
-    cb, calls = _callbacks()
-    stream = _make_stream([_assistant_event("Hello!"), _result_event("sess-1")])
-    text, session_id, result_event = await stream_response(stream, cb)
-    assert text == "Hello!"
-    assert session_id == "sess-1"
-    assert result_event is not None
-    assert result_event["session_id"] == "sess-1"
-    assert calls["on_first_text"] == [True]
-    assert calls["on_text"] == []
-    assert calls["on_tool_start"] == []
-    assert calls["on_tool_end"] == []
-
-
-async def test_stream_response_multi_turn_with_tool_use():
-    """Intermediate text+tool_use turns fire on_text, final text is returned."""
-    cb, calls = _callbacks()
-    stream = _make_stream(
-        [
-            _assistant_event("Let me check.", tool_use=True),
-            _assistant_event("Here's what I found."),
-            _result_event("sess-2"),
-        ]
-    )
-    text, session_id, _ = await stream_response(stream, cb)
-    assert text == "Here's what I found."
-    assert session_id == "sess-2"
-    assert calls["on_first_text"] == [True]
-    assert calls["on_text"] == ["Let me check."]
-    assert calls["on_tool_start"] == [True]
-    assert calls["on_tool_end"] == [True]
-
-
-async def test_stream_response_tool_only_turn():
-    """A tool_use turn with no text doesn't fire on_text."""
-    cb, calls = _callbacks()
-    stream = _make_stream(
-        [
-            _assistant_event(tool_use=True),
-            _assistant_event("Result."),
-            _result_event("sess-3"),
-        ]
-    )
-    text, session_id, _ = await stream_response(stream, cb)
-    assert text == "Result."
-    assert calls["on_text"] == []
-    assert calls["on_tool_start"] == [True]
-    assert calls["on_tool_end"] == [True]
-
-
-async def test_stream_response_consecutive_tool_rounds():
-    """on_tool_end fires between consecutive tool rounds."""
-    cb, calls = _callbacks()
-    stream = _make_stream(
-        [
-            _assistant_event("First thought.", tool_use=True),
-            _assistant_event("Second thought.", tool_use=True),
-            _assistant_event("Done."),
-            _result_event("sess-4"),
-        ]
-    )
-    text, session_id, _ = await stream_response(stream, cb)
-    assert text == "Done."
-    assert calls["on_first_text"] == [True]
-    assert calls["on_text"] == ["First thought.", "Second thought."]
-    assert calls["on_tool_start"] == [True, True]
-    assert calls["on_tool_end"] == [True, True]
-
-
-async def test_stream_response_no_callbacks():
-    """Works fine without callbacks — just returns final text."""
-    stream = _make_stream(
-        [
-            _assistant_event("Let me check.", tool_use=True),
-            _assistant_event("Done."),
-            _result_event("sess-5"),
-        ]
-    )
-    text, session_id, _ = await stream_response(stream, None)
-    assert text == "Done."
-    assert session_id == "sess-5"
-
-
-async def test_stream_response_session_id_extraction():
-    """Session ID comes from the result event."""
-    stream = _make_stream(
-        [
-            _assistant_event("Hi."),
-            _result_event("my-session-id"),
-        ]
-    )
-    _, session_id, _ = await stream_response(stream)
-    assert session_id == "my-session-id"
-
-
-async def test_stream_response_no_session_id():
-    """No session_id in result event returns None."""
-    stream = _make_stream(
-        [
-            _assistant_event("Hi."),
-            _result_event(),
-        ]
-    )
-    _, session_id, _ = await stream_response(stream)
-    assert session_id is None
-
-
-async def test_stream_response_malformed_json():
-    """Malformed JSON lines are skipped."""
-    cb, calls = _callbacks()
-    stream = _make_stream(
-        [
-            "not json",
-            "",
-            _assistant_event("Hello."),
-            _result_event("sess-6"),
-        ]
-    )
-    text, session_id, _ = await stream_response(stream, cb)
-    assert text == "Hello."
-    assert session_id == "sess-6"
-
-
-async def test_stream_response_empty_stream():
-    """Empty stream returns empty text and no session ID."""
-    stream = _make_stream([])
-    text, session_id, result_event = await stream_response(stream)
-    assert text == ""
-    assert session_id is None
-    assert result_event is None
-
-
-async def test_stream_response_text_tool_text_tool_text():
-    """Complex multi-turn: text+tool, text+tool, text — intermediate texts dispatched."""
-    cb, calls = _callbacks()
-    stream = _make_stream(
-        [
-            _assistant_event("Step 1.", tool_use=True),
-            _assistant_event("Step 2.", tool_use=True),
-            _assistant_event("Final answer."),
-            _result_event("sess-7"),
-        ]
-    )
-    text, session_id, _ = await stream_response(stream, cb)
-    assert text == "Final answer."
-    assert calls["on_text"] == ["Step 1.", "Step 2."]
-    assert calls["on_tool_start"] == [True, True]
-    assert calls["on_tool_end"] == [True, True]
-
-
-async def test_stream_response_consecutive_text_only_turns():
-    """When two text-only turns appear, first is dispatched as intermediate."""
-    cb, calls = _callbacks()
-    stream = _make_stream(
-        [
-            _assistant_event("First thought."),
-            _assistant_event("Second thought."),
-            _result_event("sess-8"),
-        ]
-    )
-    text, session_id, _ = await stream_response(stream, cb)
-    assert text == "Second thought."
-    assert calls["on_first_text"] == [True]
-    assert calls["on_text"] == ["First thought."]
-
-
-async def test_stream_response_consecutive_text_only_turns_no_callbacks():
-    """Consecutive text-only turns without callbacks still returns final text."""
-    stream = _make_stream(
-        [
-            _assistant_event("First thought."),
-            _assistant_event("Second thought."),
-            _result_event("sess-9"),
-        ]
-    )
-    text, session_id, _ = await stream_response(stream, None)
-    assert text == "Second thought."
 
 
 # -- check_process_exit --
