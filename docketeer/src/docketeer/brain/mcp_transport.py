@@ -110,12 +110,15 @@ async def accept_mcp_connection(
 
     async def socket_writer() -> None:
         async with write_recv:
-            async for session_message in write_recv:
-                data = session_message.message.model_dump_json(
-                    by_alias=True, exclude_none=True
-                )
-                writer.write((data + "\n").encode())
-                await writer.drain()
+            try:
+                async for session_message in write_recv:
+                    data = session_message.message.model_dump_json(
+                        by_alias=True, exclude_none=True
+                    )
+                    writer.write((data + "\n").encode())
+                    await writer.drain()
+            except ConnectionError:
+                pass
 
     async with anyio.create_task_group() as tg:
         tg.start_soon(socket_reader)

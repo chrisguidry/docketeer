@@ -29,6 +29,7 @@ from docketeer.brain.backend import (
 from docketeer.brain.compaction import compact_history
 from docketeer.brain.helpers import classify_response, summarize_webpage
 from docketeer.chat import RoomInfo, RoomMessage
+from docketeer.executor import CommandExecutor
 from docketeer.people import build_person_map, load_person_context
 from docketeer.prompt import (
     BrainResponse,
@@ -86,7 +87,9 @@ APOLOGY = (
 )
 
 
-def _create_backend() -> InferenceBackend:
+def _create_backend(
+    executor: CommandExecutor | None = None,
+) -> InferenceBackend:
     """Create the inference backend based on DOCKETEER_INFERENCE env var."""
     mode = environment.get_str("INFERENCE", "api")
     if mode == "api":
@@ -97,8 +100,10 @@ def _create_backend() -> InferenceBackend:
     if mode == "claude-code":
         from docketeer.brain.claude_code_backend import ClaudeCodeBackend
 
+        if executor is None:
+            raise ValueError("claude-code backend requires an executor plugin")
         oauth_token = environment.get_str("CLAUDE_CODE_OAUTH_TOKEN")
-        return ClaudeCodeBackend(oauth_token)
+        return ClaudeCodeBackend(executor=executor, oauth_token=oauth_token)
     raise ValueError(f"Unknown inference backend: {mode!r}")
 
 
@@ -115,7 +120,7 @@ class ProcessCallbacks:
 
 class Brain:
     def __init__(self, tool_context: ToolContext) -> None:
-        self._backend = _create_backend()
+        self._backend = _create_backend(executor=tool_context.executor)
         self.tool_context = tool_context
         self._workspace = tool_context.workspace
         self._audit_path = tool_context.workspace.parent / "audit"

@@ -147,6 +147,25 @@ async def test_blank_lines_are_skipped(socket_path: Path):
             await task
 
 
+async def test_writer_handles_connection_reset(socket_path: Path):
+    """socket_writer exits gracefully when the client disconnects mid-write."""
+    async with await bind_mcp_socket(socket_path) as mcp_server:
+        msg = {"jsonrpc": "2.0", "result": {"status": "ok"}, "id": 1}
+
+        async def connect_and_close_immediately() -> None:
+            _, writer = await asyncio.open_unix_connection(str(socket_path))
+            writer.close()
+            await writer.wait_closed()
+
+        task = asyncio.create_task(connect_and_close_immediately())
+        async with accept_mcp_connection(mcp_server) as (read_stream, write_stream):
+            await task
+            await asyncio.sleep(0.02)
+            session_msg = SessionMessage(JSONRPCMessage.model_validate(msg))
+            await write_stream.send(session_msg)
+            await asyncio.sleep(0.02)
+
+
 async def test_sequential_connections(socket_path: Path):
     """The same MCPSocketServer can accept multiple sequential connections."""
     async with await bind_mcp_socket(socket_path) as mcp_server:

@@ -2,119 +2,62 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from docketeer.brain.backend import BackendError
 from docketeer.brain.claude_code_backend import ClaudeCodeBackend
 from docketeer.brain.core import InferenceModel
 
 MODEL = InferenceModel(model_id="claude-opus-4-6", max_output_tokens=128_000)
 
-FAKE_CLAUDE = Path("/opt/claude/versions/2.0.0")
-FAKE_INSTALL_ROOT = Path("/opt/claude/versions")
+
+def _mock_executor() -> AsyncMock:
+    return AsyncMock()
 
 
 # -- init --
 
 
-@pytest.mark.parametrize("missing", ["bwrap", "claude", "socat"])
-def test_init_missing_binary(missing: str):
-    def which(cmd: str) -> str | None:
-        return None if cmd == missing else "/usr/bin/fake"
-
-    with (
-        patch("shutil.which", side_effect=which),
-        pytest.raises(BackendError, match=missing),
-    ):
-        ClaudeCodeBackend(oauth_token="tok", claude_dir=Path("/tmp/test-claude"))
-
-
 def test_init_creates_claude_dir(tmp_path: Path):
     claude_dir = tmp_path / "claude"
-
-    def which(cmd: str) -> str | None:
-        return "/usr/bin/fake"
-
-    with (
-        patch("shutil.which", side_effect=which),
-        patch(
-            "docketeer.brain.claude_code_backend._find_install_root",
-            return_value=FAKE_INSTALL_ROOT,
-        ),
-    ):
-        backend = ClaudeCodeBackend(oauth_token="tok", claude_dir=claude_dir)
+    backend = ClaudeCodeBackend(
+        executor=_mock_executor(), oauth_token="tok", claude_dir=claude_dir
+    )
     assert claude_dir.is_dir()
     assert backend.oauth_token == "tok"
 
 
-def test_init_resolves_claude_binary(tmp_path: Path):
-    def which(cmd: str) -> str | None:
-        return "/usr/bin/fake"
-
-    with (
-        patch("shutil.which", side_effect=which),
-        patch(
-            "docketeer.brain.claude_code_backend._find_install_root",
-            return_value=FAKE_INSTALL_ROOT,
-        ),
-    ):
-        backend = ClaudeCodeBackend(oauth_token="tok", claude_dir=tmp_path / "claude")
-    assert backend._claude_binary == Path("/usr/bin/fake").resolve()
-    assert backend._claude_install_root == FAKE_INSTALL_ROOT
-
-
 def test_init_sets_mcp_fields_to_none(tmp_path: Path):
-    with (
-        patch("shutil.which", return_value="/usr/bin/fake"),
-        patch(
-            "docketeer.brain.claude_code_backend._find_install_root",
-            return_value=FAKE_INSTALL_ROOT,
-        ),
-    ):
-        backend = ClaudeCodeBackend(oauth_token="tok", claude_dir=tmp_path / "claude")
+    backend = ClaudeCodeBackend(
+        executor=_mock_executor(), oauth_token="tok", claude_dir=tmp_path / "claude"
+    )
     assert backend._mcp_socket is None
-    assert backend._mcp_config is None
+    assert backend._mcp_socket_path is None
 
 
 # -- __aenter__ / __aexit__ --
 
 
 async def test_aenter_binds_mcp_socket(tmp_path: Path):
-    with (
-        patch("shutil.which", return_value="/usr/bin/fake"),
-        patch(
-            "docketeer.brain.claude_code_backend._find_install_root",
-            return_value=FAKE_INSTALL_ROOT,
-        ),
-    ):
-        backend = ClaudeCodeBackend(oauth_token="tok", claude_dir=tmp_path / "claude")
-
+    backend = ClaudeCodeBackend(
+        executor=_mock_executor(), oauth_token="tok", claude_dir=tmp_path / "claude"
+    )
     async with backend:
         assert backend._mcp_socket is not None
         assert backend._mcp_socket.is_serving
-        assert backend._mcp_config is not None
-        config = json.loads(backend._mcp_config)
-        assert "docketeer" in config["mcpServers"]
+        assert backend._mcp_socket_path is not None
         assert (tmp_path / "claude" / backend._socket_name).exists()
 
     assert backend._mcp_socket is None
-    assert backend._mcp_config is None
+    assert backend._mcp_socket_path is None
 
 
 async def test_aexit_cleans_up_socket_file(tmp_path: Path):
-    with (
-        patch("shutil.which", return_value="/usr/bin/fake"),
-        patch(
-            "docketeer.brain.claude_code_backend._find_install_root",
-            return_value=FAKE_INSTALL_ROOT,
-        ),
-    ):
-        backend = ClaudeCodeBackend(oauth_token="tok", claude_dir=tmp_path / "claude")
-
+    backend = ClaudeCodeBackend(
+        executor=_mock_executor(), oauth_token="tok", claude_dir=tmp_path / "claude"
+    )
     async with backend:
         assert (tmp_path / "claude" / backend._socket_name).exists()
 
@@ -122,15 +65,9 @@ async def test_aexit_cleans_up_socket_file(tmp_path: Path):
 
 
 async def test_aexit_is_safe_without_aenter(tmp_path: Path):
-    with (
-        patch("shutil.which", return_value="/usr/bin/fake"),
-        patch(
-            "docketeer.brain.claude_code_backend._find_install_root",
-            return_value=FAKE_INSTALL_ROOT,
-        ),
-    ):
-        backend = ClaudeCodeBackend(oauth_token="tok", claude_dir=tmp_path / "claude")
-
+    backend = ClaudeCodeBackend(
+        executor=_mock_executor(), oauth_token="tok", claude_dir=tmp_path / "claude"
+    )
     await backend.__aexit__(None, None, None)
 
 
@@ -139,14 +76,9 @@ async def test_aexit_is_safe_without_aenter(tmp_path: Path):
 
 @pytest.fixture()
 def backend(tmp_path: Path) -> ClaudeCodeBackend:
-    with (
-        patch("shutil.which", return_value="/usr/bin/fake"),
-        patch(
-            "docketeer.brain.claude_code_backend._find_install_root",
-            return_value=FAKE_INSTALL_ROOT,
-        ),
-    ):
-        return ClaudeCodeBackend(oauth_token="tok", claude_dir=tmp_path / "claude")
+    return ClaudeCodeBackend(
+        executor=_mock_executor(), oauth_token="tok", claude_dir=tmp_path / "claude"
+    )
 
 
 def _mock_tool_context(
@@ -210,7 +142,8 @@ async def test_utility_complete(backend: ClaudeCodeBackend):
     with _patch_invoke(("summary text", None, None)) as mock:
         result = await backend.utility_complete("summarize this")
     assert result == "summary text"
-    assert mock.call_args[0][2] == "summarize this"
+    # The prompt is now the 4th positional arg (after executor, model, system_text)
+    assert mock.call_args[0][3] == "summarize this"
     # scratch and audit dirs are created under claude_dir
     assert (backend.claude_dir / "scratch").is_dir()
     assert (backend.claude_dir / "audit").is_dir()

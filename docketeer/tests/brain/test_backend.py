@@ -28,18 +28,31 @@ def test_create_backend_explicit_api():
 
 
 def test_create_backend_claude_code():
+    from unittest.mock import AsyncMock
+
+    executor = AsyncMock()
     with (
         patch(
             "docketeer.brain.core.environment.get_str",
             side_effect=["claude-code", "fake-oauth-token"],
         ),
-        patch("shutil.which", return_value="/usr/bin/fake"),
         patch("pathlib.Path.mkdir"),
     ):
-        backend = _create_backend()
+        backend = _create_backend(executor=executor)
     from docketeer.brain.claude_code_backend import ClaudeCodeBackend
 
     assert isinstance(backend, ClaudeCodeBackend)
+
+
+def test_create_backend_claude_code_requires_executor():
+    with (
+        patch(
+            "docketeer.brain.core.environment.get_str",
+            side_effect=["claude-code", "fake-oauth-token"],
+        ),
+        pytest.raises(ValueError, match="requires an executor"),
+    ):
+        _create_backend()
 
 
 def test_create_backend_unknown_raises():

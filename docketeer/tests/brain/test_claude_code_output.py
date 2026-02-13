@@ -1,7 +1,6 @@
 """Tests for claude_code_output: parsing, error handling, and format_prompt."""
 
 import json
-from unittest.mock import AsyncMock
 
 import pytest
 
@@ -215,29 +214,21 @@ def test_check_error_generic():
 
 def test_check_process_exit_success():
     """Successful exit (code 0) doesn't raise."""
-    proc = AsyncMock()
-    proc.returncode = 0
-    check_process_exit(proc, b"")
+    check_process_exit(0, b"")
 
 
 def test_check_process_exit_success_with_stderr():
     """Successful exit with stderr doesn't raise (just logs)."""
-    proc = AsyncMock()
-    proc.returncode = 0
-    check_process_exit(proc, b"some warning")
+    check_process_exit(0, b"some warning")
 
 
 def test_check_process_exit_failure():
     """Non-zero exit raises BackendError."""
-    proc = AsyncMock()
-    proc.returncode = 1
     with pytest.raises(BackendError):
-        check_process_exit(proc, b"something went wrong")
+        check_process_exit(1, b"something went wrong")
 
 
 def test_check_process_exit_auth_error():
     """Auth-related stderr raises BackendAuthError."""
-    proc = AsyncMock()
-    proc.returncode = 1
     with pytest.raises(BackendAuthError):
-        check_process_exit(proc, b"unauthorized")
+        check_process_exit(1, b"unauthorized")

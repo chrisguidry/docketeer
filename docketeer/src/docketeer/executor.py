@@ -3,7 +3,7 @@
 import asyncio
 import logging
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from docketeer.plugins import discover_one
@@ -18,6 +18,16 @@ class Mount:
     source: Path
     target: Path
     writable: bool = False
+
+
+@dataclass
+class ClaudeInvocation:
+    """Everything the executor needs to launch claude -p in a sandbox."""
+
+    claude_args: list[str] = field(default_factory=list)
+    claude_dir: Path = Path()
+    workspace: Path = Path()
+    mcp_socket_path: Path | None = None
 
 
 @dataclass
@@ -63,6 +73,14 @@ class RunningProcess:
             stderr=stderr or b"",
         )
 
+    async def wait_for_exit(self) -> int:
+        """Wait for the process to exit without consuming stdout/stderr.
+
+        Use this when stdout has already been consumed (e.g. by stream_response).
+        """
+        await self._process.wait()
+        return self._process.returncode or 0
+
     def terminate(self) -> None:
         self._process.terminate()
 
@@ -83,6 +101,16 @@ class CommandExecutor(ABC):
         network_access: bool = False,
         username: str | None = None,
     ) -> RunningProcess: ...
+
+    async def start_claude(
+        self,
+        invocation: ClaudeInvocation,
+        *,
+        env: dict[str, str] | None = None,
+    ) -> RunningProcess:
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support running Claude Code"
+        )
 
 
 def discover_executor() -> CommandExecutor | None:

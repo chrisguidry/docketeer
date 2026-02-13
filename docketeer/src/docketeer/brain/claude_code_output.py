@@ -60,22 +60,22 @@ def format_prompt(messages: list[dict], *, resume: bool = False) -> str:
 
 
 def check_process_exit(
-    proc: asyncio.subprocess.Process,
+    returncode: int | None,
     stderr_bytes: bytes,
 ) -> None:
     """Log process exit and raise on errors."""
     log.info(
         "claude subprocess exited: code=%s, stderr=%d bytes",
-        proc.returncode,
+        returncode,
         len(stderr_bytes),
     )
 
     if stderr_bytes:
         log.info("claude stderr: %s", stderr_bytes.decode(errors="replace").strip())
 
-    if proc.returncode != 0:
+    if returncode != 0:
         stderr_text = stderr_bytes.decode(errors="replace")
-        check_error(stderr_text, proc.returncode or 1)
+        check_error(stderr_text, returncode or 1)
 
 
 def parse_response(lines: list[str]) -> tuple[str, str | None, dict | None]:

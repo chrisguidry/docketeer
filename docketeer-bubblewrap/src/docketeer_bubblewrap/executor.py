@@ -1,13 +1,20 @@
 """Bubblewrap-based sandboxed command executor."""
 
 import asyncio
+import json
 import os
 import shutil
 import tempfile
 from pathlib import Path
 
-from docketeer.executor import CommandExecutor, CompletedProcess, Mount, RunningProcess
-from docketeer.toolshed import Toolshed
+from docketeer.executor import (
+    ClaudeInvocation,
+    CommandExecutor,
+    CompletedProcess,
+    Mount,
+    RunningProcess,
+)
+from docketeer.toolshed import Toolshed, _find_install_root
 
 SYSTEM_RO_BINDS = [
     "/usr",
@@ -45,6 +52,29 @@ class BubblewrapExecutor(CommandExecutor):
         if not shutil.which("bwrap"):
             raise RuntimeError("bwrap not found on PATH")
         self._toolshed = toolshed
+
+    async def start_claude(  # pragma: no cover — integration path
+        self,
+        invocation: ClaudeInvocation,
+        *,
+        env: dict[str, str] | None = None,
+    ) -> RunningProcess:
+        claude_path = shutil.which("claude")
+        if not claude_path:
+            raise RuntimeError("claude not found on PATH")
+        claude_binary = Path(claude_path).resolve()
+        claude_install_root = _find_install_root(claude_binary)
+
+        args = _build_claude_args(invocation, claude_binary, claude_install_root)
+
+        process = await asyncio.create_subprocess_exec(
+            *args,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=env,
+        )
+        return RunningProcess(process)
 
     async def start(
         self,
@@ -139,5 +169,75 @@ def _build_args(
     for mount in mounts:
         flag = "--bind" if mount.writable else "--ro-bind"
         args.extend([flag, str(mount.source), str(mount.target)])
+
+    return args
+
+
+_MCP_BRIDGE_PATH = Path(__file__).resolve().parent / "mcp_bridge.py"
+_SANDBOX_BRIDGE_PATH = "/opt/docketeer/mcp_bridge.py"
+
+
+def _build_claude_args(
+    invocation: ClaudeInvocation,
+    claude_binary: Path,
+    claude_install_root: Path,
+) -> list[str]:
+    """Build bwrap args for running claude -p in a sandbox."""
+    uid = os.getuid()
+    gid = os.getgid()
+    home = Path.home()
+
+    args = ["bwrap", "--die-with-parent"]
+
+    for path in SYSTEM_RO_BINDS:
+        if Path(path).exists():  # pragma: no branch
+            args.extend(["--ro-bind", path, path])
+
+    args.extend(["--proc", "/proc"])
+    args.extend(["--dev", "/dev"])
+    args.extend(["--tmpfs", "/tmp"])
+    args.extend(["--tmpfs", str(home)])
+
+    args.extend(["--bind", str(invocation.claude_dir), str(home / ".claude")])
+
+    if not any(claude_install_root.is_relative_to(p) for p in SYSTEM_RO_BINDS):
+        args.extend(["--ro-bind", str(claude_install_root), str(claude_install_root)])
+
+    args.extend(["--ro-bind", str(invocation.workspace), str(invocation.workspace)])
+
+    if invocation.mcp_socket_path:
+        args.extend(
+            [
+                "--ro-bind",
+                str(_MCP_BRIDGE_PATH),
+                _SANDBOX_BRIDGE_PATH,
+            ]
+        )
+
+    args.extend(["--uid", str(uid), "--gid", str(gid)])
+    args.extend(["--chdir", str(invocation.workspace)])
+
+    args.append(str(claude_binary))
+
+    if invocation.mcp_socket_path:
+        sandbox_socket = str(home / ".claude" / invocation.mcp_socket_path.name)
+        mcp_config = json.dumps(
+            {
+                "mcpServers": {
+                    "docketeer": {
+                        "command": "python3",
+                        "args": [
+                            _SANDBOX_BRIDGE_PATH,
+                            sandbox_socket,
+                        ],
+                    }
+                }
+            }
+        )
+        args.extend(["--mcp-config", mcp_config])
+    else:
+        args.extend(["--tools", ""])
+
+    args.extend(invocation.claude_args)
 
     return args

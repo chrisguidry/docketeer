@@ -13,7 +13,9 @@ from docketeer.brain.core import InferenceModel
 
 MODEL = InferenceModel(model_id="claude-opus-4-6", max_output_tokens=128_000)
 
-FAKE_INSTALL_ROOT = Path("/opt/claude/versions")
+
+def _mock_executor() -> AsyncMock:
+    return AsyncMock()
 
 
 def _mock_tool_context(
@@ -37,14 +39,9 @@ def _patch_invoke(
 
 @pytest.fixture()
 def backend(tmp_path: Path) -> ClaudeCodeBackend:
-    with (
-        patch("shutil.which", return_value="/usr/bin/fake"),
-        patch(
-            "docketeer.brain.claude_code_backend._find_install_root",
-            return_value=FAKE_INSTALL_ROOT,
-        ),
-    ):
-        return ClaudeCodeBackend(oauth_token="tok", claude_dir=tmp_path / "claude")
+    return ClaudeCodeBackend(
+        executor=_mock_executor(), oauth_token="tok", claude_dir=tmp_path / "claude"
+    )
 
 
 # -- session tracking --
@@ -64,7 +61,7 @@ async def test_first_call_sends_latest_message(backend: ClaudeCodeBackend):
             None,
         )
     assert result == "Hi Chris!"
-    assert mock.call_args[0][2] == "@chris: hello"
+    assert mock.call_args[0][3] == "@chris: hello"
     assert mock.call_args[1].get("resume_session_id") is None
 
 
@@ -86,35 +83,35 @@ async def test_first_call_includes_history_in_prompt(backend: ClaudeCodeBackend)
             Path("/tmp"),
             None,
         )
-    prompt = mock.call_args[0][2]
+    prompt = mock.call_args[0][3]
     assert "[21:10] @peps: earlier question" in prompt
     assert "[assistant] Earlier reply." in prompt
     assert "[21:19] @peps: latest message" in prompt
 
 
-async def test_first_call_passes_tools_and_context(backend: ClaudeCodeBackend):
+async def test_first_call_passes_workspace_from_tool_context(
+    backend: ClaudeCodeBackend,
+):
     messages = [{"role": "user", "content": "hello"}]
-    tool_context = _mock_tool_context()
-    fake_tools = [AsyncMock(name="tool1")]
+    workspace = Path("/my/workspace")
+    tool_context = _mock_tool_context(workspace=workspace)
     with _patch_invoke(("reply", "sess-1", None)) as mock:
         await backend.run_agentic_loop(
             MODEL,
             [],
             messages,
-            fake_tools,
+            [],
             tool_context,
             Path("/tmp"),
             Path("/tmp"),
             None,
         )
-    assert mock.call_args[1]["tools"] is fake_tools
-    assert mock.call_args[1]["tool_context"] is tool_context
+    # workspace is positional arg [6]
+    assert mock.call_args[0][6] == workspace
 
 
-async def test_first_call_passes_workspace_and_audit_path(backend: ClaudeCodeBackend):
+async def test_first_call_passes_audit_path(backend: ClaudeCodeBackend):
     messages = [{"role": "user", "content": "hello"}]
-    workspace = Path("/my/workspace")
-    tool_context = _mock_tool_context(workspace=workspace)
     audit_path = Path("/audit/dir")
     with _patch_invoke(("reply", "sess-1", None)) as mock:
         await backend.run_agentic_loop(
@@ -122,17 +119,17 @@ async def test_first_call_passes_workspace_and_audit_path(backend: ClaudeCodeBac
             [],
             messages,
             [],
-            tool_context,
+            _mock_tool_context(),
             audit_path,
             Path("/tmp"),
             None,
         )
-    # workspace and audit_path are positional args [5] and [6]
-    assert mock.call_args[0][5] == workspace
-    assert mock.call_args[0][6] == audit_path
+    # audit_path is positional arg [7]
+    assert mock.call_args[0][7] == audit_path
 
 
-async def test_first_call_passes_mcp_socket_and_config(backend: ClaudeCodeBackend):
+async def test_first_call_no_mcp_without_tools(backend: ClaudeCodeBackend):
+    """Without tools, MCP fields are not passed to _invoke_claude."""
     messages = [{"role": "user", "content": "hello"}]
     with _patch_invoke(("reply", "sess-1", None)) as mock:
         await backend.run_agentic_loop(
@@ -145,8 +142,8 @@ async def test_first_call_passes_mcp_socket_and_config(backend: ClaudeCodeBacken
             Path("/tmp"),
             None,
         )
-    assert mock.call_args[1]["mcp_socket"] is backend._mcp_socket
-    assert mock.call_args[1]["mcp_config"] is backend._mcp_config
+    assert mock.call_args[1]["mcp_socket"] is None
+    assert mock.call_args[1]["mcp_socket_path"] is None
 
 
 async def test_subsequent_call_uses_resume(backend: ClaudeCodeBackend):
@@ -178,7 +175,7 @@ async def test_subsequent_call_uses_resume(backend: ClaudeCodeBackend):
             Path("/tmp"),
             None,
         )
-    assert mock.call_args[0][2] == "@chris: how are you?"
+    assert mock.call_args[0][3] == "@chris: how are you?"
     assert mock.call_args[1]["resume_session_id"] == assigned_id
 
 
@@ -223,7 +220,7 @@ async def test_compaction_resets_session(backend: ClaudeCodeBackend):
             Path("/tmp"),
             None,
         )
-    assert mock.call_args[0][2] == "compacted summary"
+    assert mock.call_args[0][3] == "compacted summary"
     assert mock.call_args[1].get("resume_session_id") is None
 
 
