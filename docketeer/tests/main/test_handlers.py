@@ -111,8 +111,8 @@ async def test_handle_message_eyes_reaction(
         kind=RoomKind.direct,
     )
     await handle_message(chat, brain, msg)
-    assert chat.reactions[0] == Reaction("m1", ":eyes:", "react")
-    assert chat.reactions[1] == Reaction("m1", ":eyes:", "unreact")
+    assert chat.reactions[0] == Reaction("m1", ":brain:", "react")
+    assert chat.reactions[1] == Reaction("m1", ":brain:", "unreact")
 
 
 async def test_build_content_text_only(chat: MemoryChat):
@@ -303,12 +303,12 @@ async def test_handle_message_tool_emoji_reactions(
         kind=RoomKind.direct,
     )
     await handle_message(chat, brain, msg)
-    # Should have :eyes: react, :open_file_folder: react, then unreacts for both
+    # Should have :brain: react, :open_file_folder: react, then unreacts for both
     reacted = [r for r in chat.reactions if r.action == "react"]
     unreacted = [r for r in chat.reactions if r.action == "unreact"]
-    assert Reaction("m1", ":eyes:", "react") in reacted
+    assert Reaction("m1", ":brain:", "react") in reacted
     assert Reaction("m1", ":open_file_folder:", "react") in reacted
-    assert Reaction("m1", ":eyes:", "unreact") in unreacted
+    assert Reaction("m1", ":brain:", "unreact") in unreacted
     assert Reaction("m1", ":open_file_folder:", "unreact") in unreacted
 
 

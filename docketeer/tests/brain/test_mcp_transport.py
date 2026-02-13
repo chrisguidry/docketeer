@@ -166,6 +166,31 @@ async def test_writer_handles_connection_reset(socket_path: Path):
             await asyncio.sleep(0.02)
 
 
+async def test_large_message_exceeding_default_limit(socket_path: Path):
+    """Messages larger than asyncio's default 64KB limit are handled."""
+    async with await bind_mcp_socket(socket_path) as mcp_server:
+        large_data = "x" * 100_000
+        msg = {
+            "jsonrpc": "2.0",
+            "method": "big",
+            "id": 1,
+            "params": {"data": large_data},
+        }
+
+        async def connect_and_send() -> None:
+            reader, writer = await asyncio.open_unix_connection(str(socket_path))
+            writer.write((json.dumps(msg) + "\n").encode())
+            await writer.drain()
+            writer.close()
+            await writer.wait_closed()
+
+        task = asyncio.create_task(connect_and_send())
+        async with accept_mcp_connection(mcp_server) as (read_stream, write_stream):
+            received = await read_stream.receive()
+            assert isinstance(received, SessionMessage)
+            await task
+
+
 async def test_sequential_connections(socket_path: Path):
     """The same MCPSocketServer can accept multiple sequential connections."""
     async with await bind_mcp_socket(socket_path) as mcp_server:

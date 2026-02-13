@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from emoji import emojize
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.patch_stdout import patch_stdout
@@ -252,8 +253,14 @@ class TUIClient(ChatClient):
     async def send_typing(self, room_id: str, typing: bool) -> None:
         pass
 
+    _EMOJI_ALIASES: dict[str, str] = {
+        ":lock:": ":locked:",
+        ":mag:": ":magnifying_glass_tilted_left:",
+    }
+
     async def react(self, message_id: str, emoji: str) -> None:
-        self._console.print(Text(f"  {emoji}", style="dim"))
+        emoji = self._EMOJI_ALIASES.get(emoji, emoji)
+        self._console.print(Text(f"  {emojize(emoji)}", style="dim"))
 
     async def unreact(self, message_id: str, emoji: str) -> None:
         pass

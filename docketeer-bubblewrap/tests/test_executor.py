@@ -439,7 +439,8 @@ def test_build_claude_args_with_mcp_socket(tmp_path: Path):
         mcp_socket_path=socket_path,
     )
     args = _build_claude_args(invocation, FAKE_CLAUDE, FAKE_INSTALL_ROOT)
-    assert "--tools" not in args
+    assert "--tools" in args
+    assert args[args.index("--tools") + 1] == ""
     assert "--mcp-config" in args
     config = json.loads(args[args.index("--mcp-config") + 1])
     assert "docketeer" in config["mcpServers"]

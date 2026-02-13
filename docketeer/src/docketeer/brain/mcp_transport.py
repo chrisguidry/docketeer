@@ -61,7 +61,9 @@ async def bind_mcp_socket(socket_path: Path) -> MCPSocketServer:
     def on_connect(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         connections.put_nowait((reader, writer))
 
-    server = await asyncio.start_unix_server(on_connect, path=str(socket_path))
+    server = await asyncio.start_unix_server(
+        on_connect, path=str(socket_path), limit=10 * 1024 * 1024
+    )
     mcp_server = MCPSocketServer(
         socket_path=socket_path, _server=server, _connections=connections
     )

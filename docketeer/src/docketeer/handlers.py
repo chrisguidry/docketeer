@@ -102,7 +102,7 @@ async def handle_message(
         interrupted=interrupted,
     )
 
-    await client.react(msg.message_id, ":eyes:")
+    await client.react(msg.message_id, ":brain:")
     try:
         response = await brain.process(
             msg.room_id, content, callbacks=callbacks, model=CHAT_MODEL
@@ -115,7 +115,7 @@ async def handle_message(
         )
         response = BrainResponse(text=APOLOGY)
     finally:
-        await client.unreact(msg.message_id, ":eyes:")
+        await client.unreact(msg.message_id, ":brain:")
         for emoji in tool_emojis:
             await client.unreact(msg.message_id, emoji)
         await client.send_typing(msg.room_id, False)

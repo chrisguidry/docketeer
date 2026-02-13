@@ -73,6 +73,7 @@ class BubblewrapExecutor(CommandExecutor):
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=env,
+            limit=10 * 1024 * 1024,
         )
         return RunningProcess(process)
 
@@ -219,6 +220,8 @@ def _build_claude_args(
 
     args.append(str(claude_binary))
 
+    args.extend(["--tools", ""])
+
     if invocation.mcp_socket_path:
         sandbox_socket = str(home / ".claude" / invocation.mcp_socket_path.name)
         mcp_config = json.dumps(
@@ -235,8 +238,6 @@ def _build_claude_args(
             }
         )
         args.extend(["--mcp-config", mcp_config])
-    else:
-        args.extend(["--tools", ""])
 
     args.extend(invocation.claude_args)
 
