@@ -1,11 +1,13 @@
 """Tests for docket task handlers."""
 
 from datetime import timedelta
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
+from zoneinfo import ZoneInfo
 
 import pytest
 from anthropic import AuthenticationError
 
+from docketeer import environment
 from docketeer.brain import APOLOGY
 from docketeer.prompt import BrainResponse, MessageContent
 from docketeer.tasks import docketeer_tasks, nudge, nudge_every, parse_every
@@ -366,3 +368,52 @@ async def test_nudge_every_with_thread():
     client.send_message.assert_called_once_with(
         "room123", "thread reply", thread_id="parent_1"
     )
+
+
+# --- timezone default tests ---
+
+
+async def test_nudge_every_cron_defaults_to_local_timezone():
+    brain = AsyncMock()
+    brain.process.return_value = BrainResponse(text="ok")
+    client = AsyncMock()
+    perpetual = MagicMock()
+
+    local_tz = environment.local_timezone()
+
+    with patch(
+        "docketeer.tasks.environment.local_timezone", return_value=local_tz
+    ) as mock_tz:
+        await nudge_every(
+            prompt="morning check",
+            every="0 9 * * *",
+            timezone="",
+            room_id="room123",
+            brain=brain,
+            client=client,
+            perpetual=perpetual,
+        )
+        mock_tz.assert_called_once()
+
+    perpetual.at.assert_called_once()
+
+
+async def test_nudge_every_cron_explicit_timezone_honored():
+    brain = AsyncMock()
+    brain.process.return_value = BrainResponse(text="ok")
+    client = AsyncMock()
+    perpetual = MagicMock()
+
+    await nudge_every(
+        prompt="morning check",
+        every="0 9 * * *",
+        timezone="America/New_York",
+        room_id="room123",
+        brain=brain,
+        client=client,
+        perpetual=perpetual,
+    )
+
+    perpetual.at.assert_called_once()
+    next_time = perpetual.at.call_args[0][0]
+    assert next_time.tzinfo == ZoneInfo("America/New_York")

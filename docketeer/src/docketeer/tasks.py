@@ -9,6 +9,7 @@ from anthropic import AuthenticationError, PermissionDeniedError
 from croniter import croniter
 from docket.dependencies import Perpetual
 
+from docketeer import environment
 from docketeer.brain import APOLOGY, CHAT_MODEL, Brain
 from docketeer.chat import ChatClient
 from docketeer.cycles import consolidation, reverie
@@ -84,7 +85,7 @@ async def nudge(
 async def nudge_every(
     prompt: str,
     every: str,
-    timezone: str = "UTC",
+    timezone: str = "",
     room_id: str = "",
     thread_id: str = "",
     model: str = "",
@@ -127,7 +128,7 @@ async def nudge_every(
     if duration:
         perpetual.after(duration)
     else:
-        tz = ZoneInfo(timezone)
+        tz = ZoneInfo(timezone) if timezone else environment.local_timezone()
         now_in_tz = datetime.now(tz)
         next_time = croniter(every, now_in_tz).get_next(datetime)
         perpetual.at(next_time)

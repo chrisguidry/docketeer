@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock
 import pytest
 from docket.dependencies import Cron, Perpetual
 
-from docketeer import cycles
+from docketeer import cycles, environment
 from docketeer.cycles import _read_cycle_guidance
 
 
@@ -25,6 +25,14 @@ def test_consolidation_default_uses_module_cron():
     assert defaults is not None
     assert isinstance(defaults[0], Cron)
     assert defaults[0].expression == cycles.CONSOLIDATION_CRON
+
+
+def test_consolidation_cron_uses_local_timezone():
+    defaults = cycles.consolidation.__defaults__
+    assert defaults is not None
+    cron = defaults[0]
+    assert isinstance(cron, Cron)
+    assert cron.tz == environment.local_timezone()
 
 
 def test_reverie_interval_is_timedelta():

@@ -253,7 +253,7 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
         prompt: str,
         every: str,
         key: str,
-        timezone: str = "UTC",
+        timezone: str = "",
         silent: bool = False,
         model: str = "",
     ) -> str:
@@ -262,17 +262,20 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
         prompt: what to do each time (be specific — future-you needs context)
         every: ISO 8601 duration (PT30M, PT2H, P1D) or cron expression (0 9 * * 1-5, @daily)
         key: required — stable identifier for cancellation (e.g. "daily-standup")
-        timezone: timezone for cron expressions (default: UTC, ignored for durations)
+        timezone: timezone for cron expressions (default: system timezone, ignored for durations)
         silent: if true, work silently without sending a message (default: false)
         model: intelligence tier — "opus", "sonnet", or "haiku" (default: chat model)
         """
         duration = parse_every(every)
 
         if duration is None:
-            try:
-                tz = ZoneInfo(timezone)
-            except (KeyError, ValueError):
-                return f"Error: invalid timezone: {timezone}"
+            if timezone:
+                try:
+                    tz = ZoneInfo(timezone)
+                except (KeyError, ValueError):
+                    return f"Error: invalid timezone: {timezone}"
+            else:
+                tz = environment.local_timezone()
 
             try:
                 now = datetime.now(tz)

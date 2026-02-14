@@ -2,7 +2,7 @@
 
 import os
 import re
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta, tzinfo
 from pathlib import Path
 from typing import overload
 
@@ -79,6 +79,11 @@ def _parse_iso8601_duration(value: str) -> timedelta:
     minutes = int(m.group(3) or 0)
     seconds = int(m.group(4) or 0)
     return timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds)
+
+
+def local_timezone() -> tzinfo:
+    """Return the system/process timezone."""
+    return datetime.now(UTC).astimezone().tzinfo  # type: ignore[return-value]
 
 
 DATA_DIR = get_path("DATA_DIR", "~/.docketeer")

@@ -96,7 +96,9 @@ async def reverie(
 
 
 async def consolidation(
-    cron: Cron = Cron(CONSOLIDATION_CRON, automatic=True),
+    cron: Cron = Cron(
+        CONSOLIDATION_CRON, automatic=True, tz=environment.local_timezone()
+    ),
     brain: Brain = CurrentBrain(),
     workspace: Path = WorkspacePath(),
 ) -> None:
