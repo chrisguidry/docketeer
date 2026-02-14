@@ -51,7 +51,7 @@ async def nudge(
     client: ChatClient = CurrentChatClient(),
 ) -> None:
     """Nudge the brain with a prompt, optionally sending the response to a room."""
-    now = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M")
+    now = datetime.now().astimezone()
     content = MessageContent(
         username="system", timestamp=now, text=prompt, thread_id=thread_id
     )
@@ -96,7 +96,7 @@ async def nudge_every(
     """Recurring nudge — fires on a fixed interval or cron schedule."""
     duration = parse_every(every)
 
-    now = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M")
+    now = datetime.now().astimezone()
     content = MessageContent(
         username="system", timestamp=now, text=prompt, thread_id=thread_id
     )

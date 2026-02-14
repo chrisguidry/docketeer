@@ -133,14 +133,10 @@ async def build_content(client: ChatClient, msg: IncomingMessage) -> MessageCont
             except Exception as e:
                 log.warning("Failed to fetch attachment %s: %s", att.url, e)
 
-    timestamp = ""
-    if msg.timestamp:
-        timestamp = msg.timestamp.astimezone().strftime("%Y-%m-%d %H:%M")
-
     return MessageContent(
         username=msg.username,
         message_id=msg.message_id,
-        timestamp=timestamp,
+        timestamp=msg.timestamp,
         text=msg.text,
         thread_id=msg.thread_id,
         images=images,

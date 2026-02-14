@@ -72,7 +72,7 @@ async def reverie(
 ) -> None:
     """Periodic receptive internal processing cycle."""
     prompt = _build_cycle_prompt(REVERIE_PROMPT, workspace, "Reverie")
-    now = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M")
+    now = datetime.now().astimezone()
     content = MessageContent(username="system", timestamp=now, text=prompt)
     try:
         response = await brain.process("__tasks__", content, model=REVERIE_MODEL)
@@ -104,7 +104,7 @@ async def consolidation(
 ) -> None:
     """Daily memory integration and reflection cycle."""
     prompt = _build_cycle_prompt(CONSOLIDATION_PROMPT, workspace, "Consolidation")
-    now = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M")
+    now = datetime.now().astimezone()
     content = MessageContent(username="system", timestamp=now, text=prompt)
     try:
         response = await brain.process("__tasks__", content, model=CONSOLIDATION_MODEL)

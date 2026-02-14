@@ -4,6 +4,7 @@ import importlib.resources
 import logging
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
@@ -53,10 +54,41 @@ class MessageContent:
 
     username: str
     message_id: str = ""
-    timestamp: str = ""
+    timestamp: datetime | None = None
     text: str = ""
     thread_id: str = ""
     images: list[tuple[str, bytes]] = field(default_factory=list)
+
+
+def format_message_time(timestamp: datetime, previous: datetime | None = None) -> str:
+    """Format a message timestamp as absolute time or delta from previous.
+
+    No previous → absolute: 2026-02-06 10:00
+    With previous → delta: +30s, +5m, +2h 15m, +1d 3h
+    Two units max, trailing zero components dropped, negative deltas clamped to +0s.
+    """
+    if previous is None:
+        return timestamp.astimezone().strftime("%Y-%m-%d %H:%M")
+
+    total_seconds = int((timestamp - previous).total_seconds())
+    if total_seconds < 0:
+        total_seconds = 0
+
+    days, remainder = divmod(total_seconds, 86_400)
+    hours, remainder = divmod(remainder, 3_600)
+    minutes, seconds = divmod(remainder, 60)
+
+    parts: list[str] = []
+    if days:
+        parts.append(f"{days}d")
+    if hours:
+        parts.append(f"{hours}h")
+    if minutes:
+        parts.append(f"{minutes}m")
+    if seconds or not parts:
+        parts.append(f"{seconds}s")
+
+    return "+" + " ".join(parts[:2])
 
 
 @dataclass

@@ -307,7 +307,7 @@ async def test_brain_sets_thread_id_on_tool_context(
     content = MessageContent(
         username="alice",
         message_id="m1",
-        timestamp="2026-02-08 12:00",
+        timestamp=datetime(2026, 2, 8, 12, 0, tzinfo=UTC),
         text="hello",
         thread_id="parent_1",
     )
@@ -337,7 +337,7 @@ async def test_brain_clears_thread_id_for_channel_messages(
     content = MessageContent(
         username="alice",
         message_id="m1",
-        timestamp="2026-02-08 12:00",
+        timestamp=datetime(2026, 2, 8, 12, 0, tzinfo=UTC),
         text="hello",
     )
     await brain.process("room1", content)

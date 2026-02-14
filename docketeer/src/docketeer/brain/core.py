@@ -38,6 +38,7 @@ from docketeer.prompt import (
     build_dynamic_context,
     build_system_blocks,
     ensure_template,
+    format_message_time,
 )
 from docketeer.tools import ToolContext, ToolDefinition, registry
 
@@ -129,6 +130,7 @@ class Brain:
             asyncio.Lock
         )
         self._room_token_counts: dict[str, int] = {}
+        self._last_user_timestamp: dict[str, datetime] = {}
 
         soul_path = self._workspace / "SOUL.md"
         first_run = not soul_path.exists()
@@ -152,16 +154,20 @@ class Brain:
     def load_history(self, room_id: str, messages: list[RoomMessage]) -> int:
         """Load conversation history for a room. Returns count loaded."""
         agent = self.tool_context.agent_username
+        previous: datetime | None = self._last_user_timestamp.get(room_id)
         for msg in messages:
             role = "assistant" if msg.username == agent else "user"
             if role == "user":
-                ts = msg.timestamp.astimezone().strftime("%Y-%m-%d %H:%M")
+                ts = format_message_time(msg.timestamp, previous)
                 content = f"[{ts}] @{msg.username}: {msg.text}"
+                previous = msg.timestamp
             else:
                 content = msg.text
             self._conversations[room_id].append(
                 MessageParam(role=role, content=content)
             )
+        if previous is not None:
+            self._last_user_timestamp[room_id] = previous
         return len(messages)
 
     def has_history(self, room_id: str) -> bool:
@@ -203,7 +209,7 @@ class Brain:
             if self._room_token_counts.get(room_id, 0) > COMPACT_THRESHOLD:
                 await self._compact_history(room_id, system, tools, resolved.model_id)
 
-            user_content = self._build_content(content, dynamic_context)
+            user_content = self._build_content(content, dynamic_context, room_id)
             self._conversations[room_id].append(
                 MessageParam(role="user", content=user_content)
             )
@@ -314,7 +320,10 @@ class Brain:
         return await classify_response(self._backend, url, status_code, headers)
 
     def _build_content(
-        self, content: MessageContent, dynamic_context: str = ""
+        self,
+        content: MessageContent,
+        dynamic_context: str = "",
+        room_id: str = "",
     ) -> list[ContentBlockParam] | str:
         """Build content blocks for Claude."""
         blocks: list[ContentBlockParam] = []
@@ -323,7 +332,11 @@ class Brain:
             blocks.append(TextBlockParam(type="text", text=dynamic_context))
 
         id_tag = f"[{content.message_id}] " if content.message_id else ""
-        ts_tag = f"[{content.timestamp}] " if content.timestamp else ""
+        ts_tag = ""
+        if content.timestamp:
+            previous = self._last_user_timestamp.get(room_id)
+            ts_tag = f"[{format_message_time(content.timestamp, previous)}] "
+            self._last_user_timestamp[room_id] = content.timestamp
         thread_tag = f"[thread:{content.thread_id}] " if content.thread_id else ""
         prefix = f"{id_tag}{ts_tag}{thread_tag}"
         empty = f"{prefix}@{content.username}: (empty message)"

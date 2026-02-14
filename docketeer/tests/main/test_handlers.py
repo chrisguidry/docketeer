@@ -173,7 +173,7 @@ async def test_build_content_with_timestamp(chat: MemoryChat):
         timestamp=datetime(2026, 2, 6, 10, 0, tzinfo=UTC),
     )
     content = await build_content(chat, msg)
-    assert content.timestamp != ""
+    assert content.timestamp is not None
 
 
 async def test_send_response(chat: MemoryChat):

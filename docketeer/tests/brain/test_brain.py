@@ -112,11 +112,13 @@ def test_has_history(brain: Brain):
 
 def test_build_content_text_only(brain: Brain):
     content = MessageContent(
-        username="chris", text="hello", timestamp="2026-02-06 10:00"
+        username="chris",
+        text="hello",
+        timestamp=datetime(2026, 2, 6, 10, 0, tzinfo=UTC),
     )
     result = brain._build_content(content)
     assert isinstance(result, str)
-    assert "[2026-02-06 10:00] @chris: hello" in result
+    assert "@chris: hello" in result
 
 
 def test_build_content_with_images(brain: Brain):

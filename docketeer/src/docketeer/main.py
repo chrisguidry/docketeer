@@ -81,9 +81,13 @@ def _load_task_collections() -> list[str]:
     return collections
 
 
-def _format_room_message(msg: RoomMessage) -> str:
+def _format_room_message(
+    msg: RoomMessage, previous_timestamp: datetime | None = None
+) -> str:
     """Format a single RoomMessage for display."""
-    ts = msg.timestamp.astimezone().strftime("%Y-%m-%d %H:%M")
+    from docketeer.prompt import format_message_time
+
+    ts = format_message_time(msg.timestamp, previous_timestamp)
     thread_tag = f" [thread:{msg.thread_id}]" if msg.thread_id else ""
     lines = [f"[{msg.message_id}] {ts}{thread_tag} @{msg.username}: {msg.text}"]
     if msg.attachments:
@@ -156,7 +160,12 @@ def _register_core_chat_tools(client: ChatClient) -> None:
         if not messages:
             return "No messages found."
 
-        return "\n".join(_format_room_message(m) for m in messages)
+        lines: list[str] = []
+        previous: datetime | None = None
+        for m in messages:
+            lines.append(_format_room_message(m, previous))
+            previous = m.timestamp
+        return "\n".join(lines)
 
     @registry.tool(emoji=":speech_balloon:")
     async def send_message(

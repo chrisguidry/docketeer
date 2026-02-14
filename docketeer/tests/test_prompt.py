@@ -1,7 +1,10 @@
 """Tests for system prompt construction and extension point."""
 
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 from docketeer.prompt import (
     CacheControl,
@@ -9,6 +12,7 @@ from docketeer.prompt import (
     _load_prompt_providers,
     build_dynamic_context,
     build_system_blocks,
+    format_message_time,
 )
 
 
@@ -128,3 +132,78 @@ def test_load_prompt_providers_delegates_to_discover_all():
         providers = _load_prompt_providers()
     mock.assert_called_once_with("docketeer.prompt")
     assert providers == [fake_provider]
+
+
+# --- format_message_time ---
+
+
+def test_format_message_time_absolute_without_previous():
+    ts = datetime(2026, 2, 6, 10, 0, tzinfo=UTC)
+    result = format_message_time(ts)
+    assert "2026-02-06" in result
+    assert "10:00" in result or "05:00" in result  # depends on local tz
+
+
+def test_format_message_time_seconds():
+    t1 = datetime(2026, 2, 6, 10, 0, 0, tzinfo=UTC)
+    t2 = datetime(2026, 2, 6, 10, 0, 30, tzinfo=UTC)
+    assert format_message_time(t2, t1) == "+30s"
+
+
+def test_format_message_time_minutes():
+    t1 = datetime(2026, 2, 6, 10, 0, tzinfo=UTC)
+    t2 = datetime(2026, 2, 6, 10, 5, tzinfo=UTC)
+    assert format_message_time(t2, t1) == "+5m"
+
+
+def test_format_message_time_hours_and_minutes():
+    t1 = datetime(2026, 2, 6, 10, 0, tzinfo=UTC)
+    t2 = datetime(2026, 2, 6, 12, 15, tzinfo=UTC)
+    assert format_message_time(t2, t1) == "+2h 15m"
+
+
+def test_format_message_time_days_and_hours():
+    t1 = datetime(2026, 2, 6, 10, 0, tzinfo=UTC)
+    t2 = datetime(2026, 2, 7, 13, 0, tzinfo=UTC)
+    assert format_message_time(t2, t1) == "+1d 3h"
+
+
+def test_format_message_time_days_only():
+    t1 = datetime(2026, 2, 6, 10, 0, tzinfo=UTC)
+    t2 = datetime(2026, 2, 9, 10, 0, tzinfo=UTC)
+    assert format_message_time(t2, t1) == "+3d"
+
+
+@pytest.mark.parametrize(
+    ("delta_seconds", "expected"),
+    [
+        (0, "+0s"),
+        (1, "+1s"),
+        (59, "+59s"),
+        (60, "+1m"),
+        (90, "+1m 30s"),
+        (3_600, "+1h"),
+        (3_661, "+1h 1m"),
+        (86_400, "+1d"),
+        (90_061, "+1d 1h"),
+    ],
+)
+def test_format_message_time_parametrized(delta_seconds: int, expected: str):
+    from datetime import timedelta
+
+    t1 = datetime(2026, 2, 6, 10, 0, tzinfo=UTC)
+    t2 = t1 + timedelta(seconds=delta_seconds)
+    assert format_message_time(t2, t1) == expected
+
+
+def test_format_message_time_negative_clamped():
+    t1 = datetime(2026, 2, 6, 10, 5, tzinfo=UTC)
+    t2 = datetime(2026, 2, 6, 10, 0, tzinfo=UTC)
+    assert format_message_time(t2, t1) == "+0s"
+
+
+def test_format_message_time_two_unit_max():
+    t1 = datetime(2026, 2, 6, 10, 0, 0, tzinfo=UTC)
+    t2 = datetime(2026, 2, 7, 11, 15, 30, tzinfo=UTC)
+    result = format_message_time(t2, t1)
+    assert result == "+1d 1h"
