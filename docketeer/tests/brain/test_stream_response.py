@@ -84,7 +84,7 @@ async def test_stream_response_single_text_turn():
 
 
 async def test_stream_response_multi_turn_with_tool_use():
-    """Intermediate text+tool_use turns are suppressed, final text is returned."""
+    """Text from tool_use turns is dispatched via on_text, final text is returned."""
     cb, calls = _callbacks()
     stream = _make_stream(
         [
@@ -97,7 +97,7 @@ async def test_stream_response_multi_turn_with_tool_use():
     assert text == "Here's what I found."
     assert session_id == "sess-2"
     assert calls["on_first_text"] == [True]
-    assert calls["on_text"] == []
+    assert calls["on_text"] == ["Let me check."]
     assert calls["on_tool_start"] == ["search"]
     assert calls["on_tool_end"] == [True]
 
@@ -120,7 +120,7 @@ async def test_stream_response_tool_only_turn():
 
 
 async def test_stream_response_consecutive_tool_rounds():
-    """on_tool_end fires between consecutive tool rounds."""
+    """on_tool_end fires between consecutive tool rounds, text is dispatched."""
     cb, calls = _callbacks()
     stream = _make_stream(
         [
@@ -133,7 +133,7 @@ async def test_stream_response_consecutive_tool_rounds():
     text, session_id, _ = await stream_response(stream, cb)
     assert text == "Done."
     assert calls["on_first_text"] == [True]
-    assert calls["on_text"] == []
+    assert calls["on_text"] == ["First thought.", "Second thought."]
     assert calls["on_tool_start"] == ["search", "search"]
     assert calls["on_tool_end"] == [True, True]
 
@@ -202,7 +202,7 @@ async def test_stream_response_empty_stream():
 
 
 async def test_stream_response_text_tool_text_tool_text():
-    """Complex multi-turn: text+tool, text+tool, text — narration suppressed."""
+    """Complex multi-turn: text+tool, text+tool, text — all text dispatched."""
     cb, calls = _callbacks()
     stream = _make_stream(
         [
@@ -214,7 +214,7 @@ async def test_stream_response_text_tool_text_tool_text():
     )
     text, session_id, _ = await stream_response(stream, cb)
     assert text == "Final answer."
-    assert calls["on_text"] == []
+    assert calls["on_text"] == ["Step 1.", "Step 2."]
     assert calls["on_tool_start"] == ["search", "search"]
     assert calls["on_tool_end"] == [True, True]
 
@@ -235,8 +235,8 @@ async def test_stream_response_consecutive_text_only_turns():
     assert calls["on_text"] == ["First thought."]
 
 
-async def test_stream_response_text_turn_before_tool_turn_suppressed():
-    """A text-only turn immediately before a tool turn is suppressed."""
+async def test_stream_response_text_turn_before_tool_turn_dispatched():
+    """A text-only turn before a tool turn is dispatched via on_text."""
     cb, calls = _callbacks()
     stream = _make_stream(
         [
@@ -249,7 +249,7 @@ async def test_stream_response_text_turn_before_tool_turn_suppressed():
     text, session_id, _ = await stream_response(stream, cb)
     assert text == "Here's what I found."
     assert calls["on_first_text"] == [True]
-    assert calls["on_text"] == []
+    assert calls["on_text"] == ["Let me search for that."]
     assert calls["on_tool_start"] == ["search"]
     assert calls["on_tool_end"] == [True]
 

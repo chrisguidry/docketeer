@@ -79,9 +79,6 @@ async def test_handle_message_new_room(
     await handle_message(chat, brain, msg)
     assert brain.has_history("new_room")
     assert len(chat.sent_messages) == 1
-    info = brain._room_info["new_room"]
-    assert info.kind is RoomKind.direct
-    assert info.members == ["alice"]
 
 
 async def test_handle_message_eyes_reaction(

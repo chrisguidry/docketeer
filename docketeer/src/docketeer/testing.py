@@ -65,6 +65,7 @@ class MemoryChat(ChatClient):
         self._rooms: list[RoomInfo] = []
         self._attachments: dict[str, bytes] = {}
         self._messages: dict[str, dict[str, Any]] = {}
+        self._room_context: dict[str, str] = {}
 
     async def __aenter__(self) -> MemoryChat:
         self.connected = True
@@ -143,6 +144,11 @@ class MemoryChat(ChatClient):
 
     async def unreact(self, message_id: str, emoji: str) -> None:
         self.reactions.append(Reaction(message_id, emoji, "unreact"))
+
+    async def room_context(self, room_id: str, username: str) -> str:
+        if room_id in self._room_context:
+            return self._room_context[room_id]
+        return await super().room_context(room_id, username)
 
 
 class MemoryVault(Vault):

@@ -1,6 +1,6 @@
-"""Tests for file operation tools (list, read, write, delete, search)."""
+"""Tests for file operation tools (list, read, write, delete, search, links)."""
 
-from unittest.mock import MagicMock
+import os
 
 from docketeer.tools import ToolContext, registry
 
@@ -28,6 +28,14 @@ async def test_list_files_not_a_dir(tool_context: ToolContext):
     (tool_context.workspace / "file.txt").write_text("hi")
     result = await registry.execute("list_files", {"path": "file.txt"}, tool_context)
     assert "Not a directory" in result
+
+
+async def test_list_files_shows_symlinks(tool_context: ToolContext):
+    target = tool_context.workspace / "real"
+    target.mkdir()
+    (tool_context.workspace / "link").symlink_to("real")
+    result = await registry.execute("list_files", {"path": ""}, tool_context)
+    assert "link -> real" in result
 
 
 async def test_read_file(tool_context: ToolContext):
@@ -61,27 +69,6 @@ async def test_write_file(tool_context: ToolContext):
     assert (tool_context.workspace / "sub" / "new.txt").read_text() == "data"
 
 
-async def test_write_file_people_callback(tool_context: ToolContext):
-    callback = MagicMock()
-    tool_context.on_people_write = callback
-    await registry.execute(
-        "write_file",
-        {"path": "people/chris/profile.md", "content": "# Chris"},
-        tool_context,
-    )
-    callback.assert_called_once()
-
-
-async def test_write_file_no_callback(tool_context: ToolContext):
-    tool_context.on_people_write = None
-    result = await registry.execute(
-        "write_file",
-        {"path": "people/chris/profile.md", "content": "# Chris"},
-        tool_context,
-    )
-    assert "Wrote" in result
-
-
 async def test_delete_file(tool_context: ToolContext):
     (tool_context.workspace / "bye.txt").write_text("gone")
     result = await registry.execute("delete_file", {"path": "bye.txt"}, tool_context)
@@ -98,6 +85,59 @@ async def test_delete_file_is_dir(tool_context: ToolContext):
     (tool_context.workspace / "dir").mkdir()
     result = await registry.execute("delete_file", {"path": "dir"}, tool_context)
     assert "Cannot delete directories" in result
+
+
+async def test_create_link(tool_context: ToolContext):
+    (tool_context.workspace / "real").mkdir()
+    result = await registry.execute(
+        "create_link", {"path": "alias", "target": "real"}, tool_context
+    )
+    assert "Created link" in result
+    link = tool_context.workspace / "alias"
+    assert link.is_symlink()
+    assert os.readlink(link) == "real"
+
+
+async def test_create_link_nested(tool_context: ToolContext):
+    (tool_context.workspace / "people" / "chris").mkdir(parents=True)
+    result = await registry.execute(
+        "create_link",
+        {"path": "people/peps", "target": "people/chris"},
+        tool_context,
+    )
+    assert "Created link" in result
+    link = tool_context.workspace / "people" / "peps"
+    assert link.is_symlink()
+    assert os.readlink(link) == "chris"
+
+
+async def test_create_link_target_missing(tool_context: ToolContext):
+    result = await registry.execute(
+        "create_link", {"path": "alias", "target": "nonexistent"}, tool_context
+    )
+    assert "Target does not exist" in result
+
+
+async def test_create_link_already_exists(tool_context: ToolContext):
+    (tool_context.workspace / "existing").mkdir()
+    (tool_context.workspace / "target").mkdir()
+    result = await registry.execute(
+        "create_link", {"path": "existing", "target": "target"}, tool_context
+    )
+    assert "Path already exists" in result
+
+
+async def test_read_link(tool_context: ToolContext):
+    (tool_context.workspace / "real").mkdir()
+    (tool_context.workspace / "alias").symlink_to("real")
+    result = await registry.execute("read_link", {"path": "alias"}, tool_context)
+    assert result == "real"
+
+
+async def test_read_link_not_a_symlink(tool_context: ToolContext):
+    (tool_context.workspace / "regular").mkdir()
+    result = await registry.execute("read_link", {"path": "regular"}, tool_context)
+    assert "Not a symlink" in result
 
 
 async def test_search_files(tool_context: ToolContext):

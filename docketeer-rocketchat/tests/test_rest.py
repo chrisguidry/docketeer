@@ -10,30 +10,31 @@ import pytest
 import respx
 
 from docketeer.chat import RoomKind, RoomMessage
-from docketeer_rocketchat.client import RocketChatClient, _parse_rc_timestamp
+from docketeer_rocketchat.client import RocketChatClient
+from docketeer_rocketchat.parsing import parse_rc_timestamp
 
 
-def test_parse_rc_timestamp_dict():
+def testparse_rc_timestamp_dict():
     ts = {"$date": 1_707_235_200_000}
-    dt = _parse_rc_timestamp(ts)
+    dt = parse_rc_timestamp(ts)
     assert dt is not None
     assert dt.tzinfo == UTC
     assert dt.year == 2024
 
 
-def test_parse_rc_timestamp_iso_string():
-    dt = _parse_rc_timestamp("2026-02-06T10:00:00+00:00")
+def testparse_rc_timestamp_iso_string():
+    dt = parse_rc_timestamp("2026-02-06T10:00:00+00:00")
     assert dt is not None
     assert dt.year == 2026
 
 
-def test_parse_rc_timestamp_invalid_string():
-    assert _parse_rc_timestamp("not-a-date") is None
+def testparse_rc_timestamp_invalid_string():
+    assert parse_rc_timestamp("not-a-date") is None
 
 
 @pytest.mark.parametrize("value", [12345, None])
-def test_parse_rc_timestamp_other_type(value: Any):
-    assert _parse_rc_timestamp(value) is None
+def testparse_rc_timestamp_other_type(value: Any):
+    assert parse_rc_timestamp(value) is None
 
 
 @pytest.mark.parametrize(

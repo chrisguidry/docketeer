@@ -61,23 +61,6 @@ async def test_brain_async_context_manager(
         assert isinstance(brain, Brain)
 
 
-def test_brain_init_builds_person_map(brain: Brain):
-    people = brain._workspace / "people" / "chris"
-    people.mkdir(parents=True)
-    (people / "profile.md").write_text("**Username:** @cguidry")
-    brain.rebuild_person_map()
-    assert "cguidry" in brain._person_map
-
-
-def test_rebuild_person_map(brain: Brain):
-    assert brain._person_map == {}
-    people = brain._workspace / "people" / "alex"
-    people.mkdir(parents=True)
-    (people / "profile.md").write_text("**Username:** @alex")
-    brain.rebuild_person_map()
-    assert "alex" in brain._person_map
-
-
 def test_load_history_user_messages(brain: Brain):
     msgs = [
         RoomMessage(

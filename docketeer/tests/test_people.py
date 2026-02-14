@@ -1,61 +1,64 @@
-"""Tests for person profile loading and matching."""
+"""Tests for person profile loading."""
 
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from docketeer.people import build_person_map, load_person_context
-
-
-def test_build_person_map_no_dir(tmp_path: Path):
-    assert build_person_map(tmp_path) == {}
-
-
-def test_build_person_map_empty_dir(tmp_path: Path):
-    (tmp_path / "people").mkdir()
-    assert build_person_map(tmp_path) == {}
-
-
-def test_build_person_map_finds_usernames(tmp_path: Path):
-    people = tmp_path / "people"
-    chris = people / "chris"
-    chris.mkdir(parents=True)
-    (chris / "profile.md").write_text("# Chris\n**Username:** @cguidry\nLikes coffee")
-
-    alex = people / "alex"
-    alex.mkdir()
-    (alex / "profile.md").write_text("**Username:** @alex123\n")
-
-    result = build_person_map(tmp_path)
-    assert result == {"cguidry": "people/chris", "alex123": "people/alex"}
-
-
-def test_build_person_map_skips_missing_username(tmp_path: Path):
-    people = tmp_path / "people"
-    noname = people / "noname"
-    noname.mkdir(parents=True)
-    (noname / "profile.md").write_text("# No username here\nJust a profile")
-
-    assert build_person_map(tmp_path) == {}
+from docketeer.people import load_person_context
 
 
 def test_load_person_context_unknown_user(tmp_path: Path):
-    assert load_person_context(tmp_path, "nobody", {}) == ""
+    assert load_person_context(tmp_path, "nobody") == ""
+
+
+def test_load_person_context_no_people_dir(tmp_path: Path):
+    assert load_person_context(tmp_path, "chris") == ""
 
 
 def test_load_person_context_profile_only(tmp_path: Path):
     people = tmp_path / "people" / "chris"
     people.mkdir(parents=True)
-    (people / "profile.md").write_text("# Chris\n**Username:** @cguidry")
+    (people / "profile.md").write_text("# Chris\nLikes coffee")
 
-    result = load_person_context(tmp_path, "cguidry", {"cguidry": "people/chris"})
+    result = load_person_context(tmp_path, "chris")
     assert "# Chris" in result
-    assert "**Username:** @cguidry" in result
+    assert "Likes coffee" in result
+
+
+def test_load_person_context_symlink_resolves(tmp_path: Path):
+    people = tmp_path / "people"
+    chris = people / "chris"
+    chris.mkdir(parents=True)
+    (chris / "profile.md").write_text("# Chris")
+
+    (people / "peps").symlink_to("chris")
+
+    result = load_person_context(tmp_path, "peps")
+    assert "# Chris" in result
+
+
+def test_load_person_context_symlink_uses_canonical_name_for_journal(tmp_path: Path):
+    people = tmp_path / "people"
+    chris = people / "chris"
+    chris.mkdir(parents=True)
+    (chris / "profile.md").write_text("# Chris")
+    (people / "peps").symlink_to("chris")
+
+    journal = tmp_path / "journal"
+    journal.mkdir()
+    today = datetime.now().astimezone().strftime("%Y-%m-%d")
+    (journal / f"{today}.md").write_text(
+        f"# {today}\n\n- 10:00 | talked to [[people/chris]] about testing\n"
+    )
+
+    result = load_person_context(tmp_path, "peps")
+    assert "[[people/chris]]" in result
+    assert "Recent journal mentions" in result
 
 
 def test_load_person_context_with_journal_mentions(tmp_path: Path):
     people = tmp_path / "people" / "chris"
     people.mkdir(parents=True)
-    (people / "profile.md").write_text("**Username:** @cguidry")
+    (people / "profile.md").write_text("# Chris")
 
     journal = tmp_path / "journal"
     journal.mkdir()
@@ -66,7 +69,7 @@ def test_load_person_context_with_journal_mentions(tmp_path: Path):
         "- 11:00 | did some cleanup\n"
     )
 
-    result = load_person_context(tmp_path, "cguidry", {"cguidry": "people/chris"})
+    result = load_person_context(tmp_path, "chris")
     assert "[[people/chris]]" in result
     assert "Recent journal mentions" in result
     assert "did some cleanup" not in result
@@ -75,7 +78,7 @@ def test_load_person_context_with_journal_mentions(tmp_path: Path):
 def test_load_person_context_journal_date_cutoff(tmp_path: Path):
     people = tmp_path / "people" / "chris"
     people.mkdir(parents=True)
-    (people / "profile.md").write_text("**Username:** @cguidry")
+    (people / "profile.md").write_text("# Chris")
 
     journal = tmp_path / "journal"
     journal.mkdir()
@@ -85,21 +88,20 @@ def test_load_person_context_journal_date_cutoff(tmp_path: Path):
         f"# {old_date}\n\n- 10:00 | talked to [[people/chris]] long ago\n"
     )
 
-    result = load_person_context(tmp_path, "cguidry", {"cguidry": "people/chris"})
+    result = load_person_context(tmp_path, "chris")
     assert "long ago" not in result
 
 
 def test_load_person_context_no_profile_file(tmp_path: Path):
-    """Person is in the map but profile.md doesn't exist."""
     (tmp_path / "people" / "ghost").mkdir(parents=True)
-    result = load_person_context(tmp_path, "ghost", {"ghost": "people/ghost"})
+    result = load_person_context(tmp_path, "ghost")
     assert result == ""
 
 
 def test_load_person_context_case_insensitive_wikilink(tmp_path: Path):
     people = tmp_path / "people" / "Chris"
     people.mkdir(parents=True)
-    (people / "profile.md").write_text("**Username:** @cguidry")
+    (people / "profile.md").write_text("# Chris")
 
     journal = tmp_path / "journal"
     journal.mkdir()
@@ -108,5 +110,5 @@ def test_load_person_context_case_insensitive_wikilink(tmp_path: Path):
         f"# {today}\n\n- 10:00 | talked to [[People/Chris]] about things\n"
     )
 
-    result = load_person_context(tmp_path, "cguidry", {"cguidry": "people/Chris"})
+    result = load_person_context(tmp_path, "Chris")
     assert "about things" in result

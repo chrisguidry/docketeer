@@ -140,6 +140,12 @@ async def test_list_rooms():
     assert rooms[0].kind is RoomKind.direct
 
 
+async def test_room_context():
+    client = TUIClient()
+    ctx = await client.room_context(ROOM_ID, "chris")
+    assert ctx == "Room: DM with @chris"
+
+
 async def test_set_status_away():
     client = TUIClient()
     await client.set_status("away")

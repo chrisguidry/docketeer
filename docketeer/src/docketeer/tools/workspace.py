@@ -1,5 +1,7 @@
 """Workspace file and directory tools."""
 
+import os
+
 from . import ToolContext, _safe_path, registry
 
 
@@ -17,7 +19,16 @@ async def list_files(ctx: ToolContext, path: str = "") -> str:
     entries = sorted(target.iterdir())
     if not entries:
         return "(empty directory)"
-    return "\n".join(f"{e.name}/" if e.is_dir() else e.name for e in entries)
+    lines: list[str] = []
+    for e in entries:
+        if e.is_symlink():
+            link_target = os.readlink(e)
+            lines.append(f"{e.name} -> {link_target}")
+        elif e.is_dir():
+            lines.append(f"{e.name}/")
+        else:
+            lines.append(e.name)
+    return "\n".join(lines)
 
 
 @registry.tool(emoji=":open_file_folder:")
@@ -47,8 +58,6 @@ async def write_file(ctx: ToolContext, path: str, content: str) -> str:
     target = _safe_path(ctx.workspace, path)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(content)
-    if path.startswith("people/") and ctx.on_people_write:
-        ctx.on_people_write()
     return f"Wrote {len(content)} bytes to {path}"
 
 
@@ -65,6 +74,41 @@ async def delete_file(ctx: ToolContext, path: str) -> str:
         return f"Cannot delete directories, only files: {path}"
     target.unlink()
     return f"Deleted {path}"
+
+
+@registry.tool(emoji=":link:")
+async def create_link(ctx: ToolContext, path: str, target: str) -> str:
+    """Create a symbolic link in the workspace.
+
+    path: relative path for the new symlink
+    target: relative path the symlink should point to (must exist)
+    """
+    link_path = _safe_path(ctx.workspace, path)
+    target_path = _safe_path(ctx.workspace, target)
+    if not target_path.exists():
+        return f"Target does not exist: {target}"
+    # Check the unresolved path for existing symlinks
+    unresolved = ctx.workspace / path
+    if link_path.exists() or unresolved.is_symlink():
+        return f"Path already exists: {path}"
+    link_path.parent.mkdir(parents=True, exist_ok=True)
+    rel_target = os.path.relpath(target_path, link_path.parent)
+    unresolved.symlink_to(rel_target)
+    return f"Created link {path} -> {rel_target}"
+
+
+@registry.tool(emoji=":link:")
+async def read_link(ctx: ToolContext, path: str) -> str:
+    """Read the target of a symbolic link in the workspace.
+
+    path: relative path to the symlink
+    """
+    # Validate path is within workspace, but check the unresolved path for symlink status
+    _safe_path(ctx.workspace, path)
+    unresolved = ctx.workspace / path
+    if not unresolved.is_symlink():
+        return f"Not a symlink: {path}"
+    return str(os.readlink(unresolved))
 
 
 @registry.tool(emoji=":open_file_folder:")

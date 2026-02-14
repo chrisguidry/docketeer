@@ -363,7 +363,6 @@ async def main() -> None:  # pragma: no cover
         )
 
         brain = await stack.enter_async_context(Brain(tool_context))
-        tool_context.on_people_write = brain.rebuild_person_map
 
         # Make brain/client/executor/vault available to docket task handlers
         set_brain(brain)

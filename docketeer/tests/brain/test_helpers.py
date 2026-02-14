@@ -10,7 +10,6 @@ import pytest
 
 from docketeer.audit import audit_log, log_usage
 from docketeer.brain import Brain
-from docketeer.chat import RoomInfo, RoomKind
 from docketeer.prompt import (
     CacheControl,
     MessageContent,
@@ -46,70 +45,19 @@ def test_build_system_blocks_stable_only(workspace: Path):
     assert blocks[-1].cache_control == CacheControl()
 
 
-def test_build_dynamic_context_basic():
-    ctx = build_dynamic_context("2026-02-06 10:00 EST", "chris")
+def test_build_dynamic_context_basic(workspace: Path):
+    ctx = build_dynamic_context("2026-02-06 10:00 EST", "chris", workspace)
     assert "Current time:" in ctx
     assert "@chris" in ctx
 
 
-def test_build_dynamic_context_with_person_context():
-    ctx = build_dynamic_context(
-        "2026-02-06 10:00", "chris", person_context="Chris likes coffee"
-    )
+def test_build_dynamic_context_with_person_profile(workspace: Path):
+    people = workspace / "people" / "chris"
+    people.mkdir(parents=True)
+    (people / "profile.md").write_text("Chris likes coffee")
+    ctx = build_dynamic_context("2026-02-06 10:00", "chris", workspace)
     assert "What I know about @chris" in ctx
     assert "Chris likes coffee" in ctx
-
-
-def test_build_dynamic_context_dm_room():
-    info = RoomInfo(room_id="r1", kind=RoomKind.direct, members=["nix", "alice"])
-    ctx = build_dynamic_context("2026-02-06 10:00", "alice", room_info=info)
-    assert "Room: DM with @nix" in ctx
-
-
-def test_build_dynamic_context_dm_room_no_others():
-    info = RoomInfo(room_id="r1", kind=RoomKind.direct, members=["alice"])
-    ctx = build_dynamic_context("2026-02-06 10:00", "alice", room_info=info)
-    assert "Room: DM" in ctx
-
-
-def test_build_dynamic_context_group_dm_room():
-    info = RoomInfo(
-        room_id="r1", kind=RoomKind.group, members=["alice", "bob", "chris"]
-    )
-    ctx = build_dynamic_context("2026-02-06 10:00", "chris", room_info=info)
-    assert "Room: group DM with @alice, @bob" in ctx
-
-
-def test_build_dynamic_context_public_channel_with_name():
-    info = RoomInfo(
-        room_id="r1",
-        kind=RoomKind.public,
-        members=["alice", "bob", "chris"],
-        name="general",
-    )
-    ctx = build_dynamic_context("2026-02-06 10:00", "chris", room_info=info)
-    assert "Room: #general (with @alice, @bob)" in ctx
-
-
-def test_build_dynamic_context_private_channel():
-    info = RoomInfo(
-        room_id="r1", kind=RoomKind.private, members=["alice", "bob"], name="secret"
-    )
-    ctx = build_dynamic_context("2026-02-06 10:00", "bob", room_info=info)
-    assert "Room: #secret (private, with @alice)" in ctx
-
-
-def test_build_dynamic_context_public_channel_no_name():
-    info = RoomInfo(room_id="r1", kind=RoomKind.public, members=["alice", "bob"])
-    ctx = build_dynamic_context("2026-02-06 10:00", "bob", room_info=info)
-    assert "Room: channel (with @alice)" in ctx
-
-
-def test_build_dynamic_context_channel_no_others():
-    info = RoomInfo(room_id="r1", kind=RoomKind.public, members=["chris"], name="solo")
-    ctx = build_dynamic_context("2026-02-06 10:00", "chris", room_info=info)
-    assert "Room: #solo" in ctx
-    assert "(with" not in ctx
 
 
 def test_build_system_blocks_with_bootstrap(workspace: Path):

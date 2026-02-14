@@ -45,9 +45,6 @@ async def test_history_primed_via_callback(
 
     assert brain.has_history("r1")
     assert brain.has_history("r2")
-    assert brain._room_info["r1"].kind is RoomKind.direct
-    assert brain._room_info["r1"].members == ["testbot", "alice"]
-    assert brain._room_info["r2"].members == ["testbot", "bob"]
 
 
 def test_filter_rooms_drops_self_dms():

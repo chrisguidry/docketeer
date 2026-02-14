@@ -199,12 +199,9 @@ async def stream_response(
 
             turn_text = "".join(text_parts) if text_parts else None
 
-            # If we had a buffered text-only turn and now see another assistant
-            # event, the buffered one was intermediate.  Dispatch it only if
-            # this new turn is also text-only; discard it if the new turn
-            # contains tool_use so narration before tools stays quiet.
+            # Dispatch any buffered text from a previous turn.
             if pending_final is not None:
-                if not has_tool_use and callbacks and callbacks.on_text:
+                if callbacks and callbacks.on_text:
                     await callbacks.on_text(pending_final)
                 pending_final = None
 
@@ -231,8 +228,9 @@ async def stream_response(
                 ):
                     await callbacks.on_tool_end()
                     in_tool_round = False
-                if turn_text is not None:  # pragma: no branch
-                    pending_final = turn_text
+
+            if turn_text is not None:  # pragma: no branch
+                pending_final = turn_text
 
         elif etype == "result":  # pragma: no branch
             result_event = event

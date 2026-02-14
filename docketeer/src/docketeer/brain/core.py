@@ -28,9 +28,8 @@ from docketeer.brain.backend import (
 )
 from docketeer.brain.compaction import compact_history
 from docketeer.brain.helpers import classify_response, summarize_webpage
-from docketeer.chat import RoomInfo, RoomMessage
+from docketeer.chat import RoomMessage
 from docketeer.executor import CommandExecutor
-from docketeer.people import build_person_map, load_person_context
 from docketeer.prompt import (
     BrainResponse,
     CacheControl,
@@ -130,8 +129,6 @@ class Brain:
             asyncio.Lock
         )
         self._room_token_counts: dict[str, int] = {}
-        self._room_info: dict[str, RoomInfo] = {}
-        self._person_map: dict[str, str] = {}
 
         soul_path = self._workspace / "SOUL.md"
         first_run = not soul_path.exists()
@@ -144,9 +141,6 @@ class Brain:
         self.tool_context.summarize = self._summarize_webpage
         self.tool_context.classify_response = self._classify_response
 
-        self._person_map = build_person_map(self._workspace)
-        log.info("Person map: %s", self._person_map)
-
     async def __aenter__(self) -> Brain:
         self._stack = AsyncExitStack()
         await self._stack.enter_async_context(self._backend)
@@ -154,15 +148,6 @@ class Brain:
 
     async def __aexit__(self, *exc: object) -> None:
         await self._stack.aclose()
-
-    def set_room_info(self, room_id: str, info: RoomInfo) -> None:
-        """Store metadata about a room for use in the system prompt."""
-        self._room_info[room_id] = info
-
-    def rebuild_person_map(self) -> None:
-        """Rebuild the username->person-file mapping after a people/ write."""
-        self._person_map = build_person_map(self._workspace)
-        log.info("Rebuilt person map: %s", self._person_map)
 
     def load_history(self, room_id: str, messages: list[RoomMessage]) -> int:
         """Load conversation history for a room. Returns count loaded."""
@@ -190,24 +175,19 @@ class Brain:
         callbacks: ProcessCallbacks | None = None,
         model: str = "",
         thinking: bool = False,
+        room_context: str = "",
     ) -> BrainResponse:
         """Process a message and return a response with tool call info."""
         model = model or CHAT_MODEL
         resolved = resolve_model(model)
 
         current_time = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M %Z")
-        person_context = load_person_context(
-            self._workspace,
-            content.username,
-            self._person_map,
-        )
-        room_info = self._room_info.get(room_id)
         system = build_system_blocks(self._workspace)
         dynamic_context = build_dynamic_context(
             current_time,
             content.username,
-            person_context=person_context,
-            room_info=room_info,
+            workspace=self._workspace,
+            room_context=room_context,
         )
 
         tools = registry.definitions()

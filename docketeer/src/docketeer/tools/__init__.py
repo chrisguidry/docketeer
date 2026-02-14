@@ -49,7 +49,6 @@ class ToolContext:
     agent_username: str = ""
     room_id: str = ""
     thread_id: str = ""
-    on_people_write: Callable[[], None] | None = None
     summarize: Callable[[str, str], Awaitable[str]] | None = None
     classify_response: Callable[[str, int, str], Awaitable[bool]] | None = None
     executor: CommandExecutor | None = None

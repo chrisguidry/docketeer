@@ -17,7 +17,6 @@ async def process_messages(client: ChatClient, brain: Brain) -> None:
     """Process incoming messages, interrupting long-running tool loops on new arrivals."""
 
     async def _on_history(room: RoomInfo, messages: list[RoomMessage]) -> None:
-        brain.set_room_info(room.room_id, room)
         brain.load_history(room.room_id, messages)
 
     msg_iter = client.incoming_messages(on_history=_on_history).__aiter__()
@@ -71,16 +70,8 @@ async def handle_message(
         count = brain.load_history(msg.room_id, history)
         log.info("    Loaded %d messages", count)
 
-        brain.set_room_info(
-            msg.room_id,
-            RoomInfo(
-                room_id=msg.room_id,
-                kind=msg.kind,
-                members=[msg.username],
-            ),
-        )
-
     content = await build_content(client, msg)
+    room_ctx = await client.room_context(msg.room_id, msg.username)
 
     thread_id = msg.thread_id
     tool_emojis: set[str] = set()
@@ -105,7 +96,11 @@ async def handle_message(
     await client.react(msg.message_id, ":brain:")
     try:
         response = await brain.process(
-            msg.room_id, content, callbacks=callbacks, model=CHAT_MODEL
+            msg.room_id,
+            content,
+            callbacks=callbacks,
+            model=CHAT_MODEL,
+            room_context=room_ctx,
         )
     except (AuthenticationError, PermissionDeniedError):
         raise

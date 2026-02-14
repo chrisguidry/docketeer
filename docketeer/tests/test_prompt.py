@@ -26,10 +26,44 @@ def test_build_system_blocks_includes_bootstrap(workspace: Path):
     assert "Bootstrap stuff." in blocks[0].text
 
 
-def test_build_dynamic_context_includes_time_and_username():
-    ctx = build_dynamic_context("2026-01-01T00:00:00", "chris")
+def test_build_dynamic_context_includes_time_and_username(workspace: Path):
+    ctx = build_dynamic_context("2026-01-01T00:00:00", "chris", workspace)
     assert "Current time: 2026-01-01T00:00:00" in ctx
     assert "Talking to: @chris" in ctx
+
+
+def test_build_dynamic_context_missing_profile_instruction(workspace: Path):
+    ctx = build_dynamic_context("2026-01-01T00:00:00", "chris", workspace)
+    assert "don't have a profile for @chris" in ctx
+    assert "people/chris/profile.md" in ctx
+    assert "create_link" in ctx
+
+
+def test_build_dynamic_context_with_person_profile(workspace: Path):
+    people = workspace / "people" / "chris"
+    people.mkdir(parents=True)
+    (people / "profile.md").write_text("# Chris\nLikes coffee")
+    ctx = build_dynamic_context("2026-01-01T00:00:00", "chris", workspace)
+    assert "## What I know about @chris" in ctx
+    assert "Likes coffee" in ctx
+    assert "don't have a profile" not in ctx
+
+
+def test_build_dynamic_context_includes_room_context(workspace: Path):
+    ctx = build_dynamic_context(
+        "2026-01-01T00:00:00",
+        "chris",
+        workspace,
+        room_context="Room: DM with @alice",
+    )
+    assert "Room: DM with @alice" in ctx
+
+
+def test_build_dynamic_context_skips_empty_room_context(workspace: Path):
+    ctx = build_dynamic_context(
+        "2026-01-01T00:00:00", "chris", workspace, room_context=""
+    )
+    assert "Room:" not in ctx
 
 
 def test_build_system_blocks_calls_prompt_providers(workspace: Path):

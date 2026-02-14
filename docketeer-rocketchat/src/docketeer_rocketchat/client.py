@@ -8,14 +8,13 @@ import logging
 import mimetypes
 from collections.abc import AsyncGenerator
 from contextlib import AsyncExitStack
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import httpx
 
 from docketeer.chat import (
-    Attachment,
     ChatClient,
     IncomingMessage,
     OnHistoryCallback,
@@ -24,33 +23,10 @@ from docketeer.chat import (
     RoomMessage,
 )
 from docketeer_rocketchat.ddp import DDPClient
+from docketeer_rocketchat.parsing import parse_attachments, parse_rc_timestamp
+from docketeer_rocketchat.room_context import build_room_context
 
 log = logging.getLogger(__name__)
-
-
-def _parse_rc_timestamp(ts: Any) -> datetime | None:
-    """Parse a Rocket Chat timestamp into a datetime."""
-    if isinstance(ts, dict) and "$date" in ts:
-        return datetime.fromtimestamp(ts["$date"] / 1000, tz=UTC)
-    if isinstance(ts, str):
-        try:
-            return datetime.fromisoformat(ts)
-        except ValueError:
-            return None
-    return None
-
-
-def _parse_attachments(raw: list[dict[str, Any]]) -> list[Attachment]:
-    """Extract image attachments from a Rocket Chat attachment list."""
-    return [
-        Attachment(
-            url=image_url,
-            media_type=att.get("image_type", "image/png"),
-            title=att.get("title", ""),
-        )
-        for att in raw
-        if (image_url := att.get("image_url"))
-    ]
 
 
 class RocketChatClient(ChatClient):
@@ -229,12 +205,12 @@ class RocketChatClient(ChatClient):
                 continue
             text = msg.get("msg", "")
             user = msg.get("u", {})
-            dt = _parse_rc_timestamp(msg.get("ts"))
+            dt = parse_rc_timestamp(msg.get("ts"))
             if not dt:
                 continue
 
             raw_att = msg.get("attachments")
-            attachments = _parse_attachments(raw_att) if raw_att else None
+            attachments = parse_attachments(raw_att) if raw_att else None
 
             messages.append(
                 RoomMessage(
@@ -343,6 +319,13 @@ class RocketChatClient(ChatClient):
             )
         except Exception:
             log.warning("Failed to send typing indicator to %s", room_id)
+
+    async def room_context(self, room_id: str, username: str) -> str:
+        """Return rich room context from the RC API."""
+        kind = self._room_kinds.get(room_id)
+        return await build_room_context(
+            self._get, self.username, room_id, username, kind
+        )
 
     async def incoming_messages(
         self,
@@ -482,7 +465,7 @@ class RocketChatClient(ChatClient):
         text = msg_data.get("msg", "")
 
         raw_att = msg_data.get("attachments")
-        attachments = _parse_attachments(raw_att) if raw_att else None
+        attachments = parse_attachments(raw_att) if raw_att else None
 
         kind = self._room_kinds.get(room_id, RoomKind.direct)
 
@@ -494,7 +477,7 @@ class RocketChatClient(ChatClient):
             text=text,
             room_id=room_id,
             kind=kind,
-            timestamp=_parse_rc_timestamp(msg_data.get("ts")),
+            timestamp=parse_rc_timestamp(msg_data.get("ts")),
             attachments=attachments,
             thread_id=msg_data.get("tmid", ""),
         )

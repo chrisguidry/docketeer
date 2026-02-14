@@ -9,7 +9,7 @@ from typing import Literal
 
 from anthropic.types import CacheControlEphemeralParam, TextBlockParam
 
-from docketeer.chat import RoomInfo, RoomKind  # noqa: F401
+from docketeer.people import load_person_context
 from docketeer.plugins import discover_all
 
 log = logging.getLogger(__name__)
@@ -113,8 +113,8 @@ def build_system_blocks(workspace: Path) -> list[SystemBlock]:
 def build_dynamic_context(
     current_time: str,
     username: str,
-    person_context: str = "",
-    room_info: RoomInfo | None = None,
+    workspace: Path,
+    room_context: str = "",
 ) -> str:
     """Build per-request dynamic context to prepend to the user message.
 
@@ -122,29 +122,22 @@ def build_dynamic_context(
     cacheable prefix.
     """
     parts = [f"Current time: {current_time}"]
-    if room_info:
-        others = [m for m in room_info.members if m != username]
-        match room_info.kind:
-            case RoomKind.direct:
-                label = f"DM with @{others[0]}" if others else "DM"
-            case RoomKind.group:
-                label = f"group DM with @{', @'.join(others)}" if others else "group DM"
-            case RoomKind.private:
-                name = f"#{room_info.name}" if room_info.name else "private channel"
-                label = (
-                    f"{name} (private, with @{', @'.join(others)})" if others else name
-                )
-            case RoomKind.public:
-                name = f"#{room_info.name}" if room_info.name else "channel"
-                label = f"{name} (with @{', @'.join(others)})" if others else name
-            case _:  # pragma: no cover
-                label = room_info.name or room_info.room_id
-        parts.append(f"Room: {label}")
+
+    if room_context:
+        parts.append(room_context)
 
     parts.append(f"Talking to: @{username}")
 
+    person_context = load_person_context(workspace, username)
     if person_context:
         parts.append(f"\n## What I know about @{username}\n\n{person_context}")
+    else:
+        parts.append(
+            f"\nI don't have a profile for @{username} yet. "
+            f"I can create people/{username}/profile.md to start one, "
+            f"or if I know this person under another name, "
+            f"I can create a symlink with the create_link tool."
+        )
 
     return "\n".join(parts)
 
