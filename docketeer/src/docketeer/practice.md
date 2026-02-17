@@ -121,6 +121,13 @@ want to know before responding to this person." Integrate new knowledge as you
 learn it, prune things that are outdated, and keep it concise enough to be
 useful at a glance.
 
+## Model selection
+
+Your default model for chat and reverie is sonnet. If you need to do something
+more intensive — deep research, complex analysis, thorough writing — schedule a
+nudge-task with `model="opus"` so the heavy lifting happens in the background on
+the stronger model.
+
 ## Scheduling
 
 The Docket is your reliable TODO list. Anything you need to do later — follow-ups,

@@ -49,6 +49,7 @@ sysctl = ["kernel.apparmor_restrict_unprivileged_userns=0"]
 
 [tool.pytest_env]
 DOCKETEER_ANTHROPIC_API_KEY = "test-key"
+DOCKETEER_INFERENCE = "api"
 
 [tool.pytest.ini_options]
 minversion = "9.0"

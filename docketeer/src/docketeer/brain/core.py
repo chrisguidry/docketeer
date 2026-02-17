@@ -58,7 +58,7 @@ MODELS: dict[str, InferenceModel] = {
         max_output_tokens=128_000,
     ),
     "sonnet": InferenceModel(
-        model_id=environment.get_str("MODEL_SONNET", "claude-sonnet-4-5-20250929"),
+        model_id=environment.get_str("MODEL_SONNET", "claude-sonnet-4-6"),
         max_output_tokens=64_000,
         thinking_budget=10_000,
     ),
@@ -68,8 +68,8 @@ MODELS: dict[str, InferenceModel] = {
     ),
 }
 
-CHAT_MODEL = environment.get_str("CHAT_MODEL", "opus")
-REVERIE_MODEL = environment.get_str("REVERIE_MODEL", "opus")
+CHAT_MODEL = environment.get_str("CHAT_MODEL", "sonnet")
+REVERIE_MODEL = environment.get_str("REVERIE_MODEL", "sonnet")
 CONSOLIDATION_MODEL = environment.get_str("CONSOLIDATION_MODEL", "opus")
 
 

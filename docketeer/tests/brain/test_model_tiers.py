@@ -44,12 +44,12 @@ def test_resolve_model_unknown_raises():
         resolve_model("gpt-4")
 
 
-def test_default_chat_model_is_opus():
-    assert CHAT_MODEL == "opus"
+def test_default_chat_model_is_sonnet():
+    assert CHAT_MODEL == "sonnet"
 
 
-def test_default_reverie_model_is_opus():
-    assert REVERIE_MODEL == "opus"
+def test_default_reverie_model_is_sonnet():
+    assert REVERIE_MODEL == "sonnet"
 
 
 def test_default_consolidation_model_is_opus():
