@@ -69,11 +69,11 @@ def _mock_client(
 
 def test_build_transport_stdio_with_executor():
     config = MCPServerConfig(
-        name="t", command="uvx", args=["server"], env={"K": "V"}, network_access=True
+        name="t", command="uvx", args=["server"], network_access=True
     )
     executor = FakeExecutor()
     workspace = Path("/ws")
-    transport = _build_transport(config, executor, workspace)
+    transport = _build_transport(config, executor, workspace, resolved_env={"K": "V"})
     assert isinstance(transport, ExecutorTransport)
     assert transport._command == ["uvx", "server"]
     assert transport._env == {"K": "V"}

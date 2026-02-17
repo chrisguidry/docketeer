@@ -13,10 +13,10 @@ async def _capture(texts: list[str], text: str) -> None:
     texts.append(text)
 
 
-async def test_on_text_fires_on_intermediate_tool_round(
+async def test_on_text_suppressed_on_intermediate_tool_round(
     brain: Brain, fake_messages: Any
 ):
-    """When a response has both text and tool blocks, on_text fires with the text."""
+    """When a response has both text and tool blocks, the text is suppressed."""
     fake_messages.responses = [
         FakeMessage(
             content=[
@@ -30,7 +30,7 @@ async def test_on_text_fires_on_intermediate_tool_round(
     callbacks = ProcessCallbacks(on_text=lambda text: _capture(texts, text))
     content = MessageContent(username="chris", text="list files")
     response = await brain.process("room1", content, callbacks=callbacks)
-    assert texts == ["Let me check that..."]
+    assert texts == []
     assert response.text == "Here's what I found."
 
 
@@ -65,10 +65,10 @@ async def test_on_text_not_fired_when_tool_round_has_no_text(
     assert texts == []
 
 
-async def test_on_text_fires_multiple_intermediate_rounds(
+async def test_on_text_suppressed_on_multiple_intermediate_rounds(
     brain: Brain, fake_messages: Any
 ):
-    """on_text fires on each intermediate round that has text + tools."""
+    """Text from intermediate tool rounds is suppressed, not dispatched."""
     fake_messages.responses = [
         FakeMessage(
             content=[
@@ -88,7 +88,7 @@ async def test_on_text_fires_multiple_intermediate_rounds(
     callbacks = ProcessCallbacks(on_text=lambda text: _capture(texts, text))
     content = MessageContent(username="chris", text="do things")
     response = await brain.process("room1", content, callbacks=callbacks)
-    assert texts == ["Checking first...", "Now the second..."]
+    assert texts == []
     assert response.text == "All done."
 
 
@@ -112,7 +112,7 @@ async def test_interrupted_after_first_tool_round(brain: Brain, fake_messages: A
     """When interrupted is set during a tool round, the loop exits after that round."""
     interrupted = asyncio.Event()
 
-    async def set_interrupted(text: str) -> None:
+    async def set_interrupted() -> None:
         interrupted.set()
 
     fake_messages.responses = [
@@ -129,7 +129,7 @@ async def test_interrupted_after_first_tool_round(brain: Brain, fake_messages: A
         ),
         FakeMessage(content=[make_text_block(text="Should not reach this.")]),
     ]
-    callbacks = ProcessCallbacks(on_text=set_interrupted, interrupted=interrupted)
+    callbacks = ProcessCallbacks(on_tool_end=set_interrupted, interrupted=interrupted)
     content = MessageContent(username="chris", text="do stuff")
     response = await brain.process("room1", content, callbacks=callbacks)
     assert response.text == ""

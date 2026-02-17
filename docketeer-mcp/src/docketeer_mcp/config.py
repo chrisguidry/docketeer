@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from docketeer import environment
+from docketeer.vault import SecretEnvRef
 
 _NAME_PATTERN = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_-]*$")
 
@@ -22,7 +23,7 @@ class MCPServerConfig:
 
     command: str = ""
     args: list[str] = field(default_factory=list)
-    env: dict[str, str] = field(default_factory=dict)
+    env: dict[str, str | SecretEnvRef] = field(default_factory=dict)
 
     url: str = ""
     headers: dict[str, str] = field(default_factory=dict)
@@ -47,6 +48,28 @@ def _validate_name(name: str) -> None:
         )
 
 
+def _parse_env(raw: dict) -> dict[str, str | SecretEnvRef]:
+    """Parse an env dict from JSON, converting secret objects to SecretEnvRef."""
+    env: dict[str, str | SecretEnvRef] = {}
+    for key, value in raw.items():
+        if isinstance(value, dict) and "secret" in value:
+            env[key] = SecretEnvRef(secret=value["secret"])
+        else:
+            env[key] = str(value)
+    return env
+
+
+def _serialize_env(env: dict[str, str | SecretEnvRef]) -> dict[str, str | dict]:
+    """Serialize an env dict for JSON, converting SecretEnvRef back to dicts."""
+    out: dict[str, str | dict] = {}
+    for key, value in env.items():
+        if isinstance(value, SecretEnvRef):
+            out[key] = {"secret": value.secret}
+        else:
+            out[key] = value
+    return out
+
+
 def load_servers() -> dict[str, MCPServerConfig]:
     """Load all server configs from the data directory."""
     mcp_dir = _mcp_dir()
@@ -65,7 +88,7 @@ def load_servers() -> dict[str, MCPServerConfig]:
             name=name,
             command=data.get("command", ""),
             args=data.get("args", []),
-            env=data.get("env", {}),
+            env=_parse_env(data.get("env", {})),
             url=data.get("url", ""),
             headers=data.get("headers", {}),
             network_access=data.get("networkAccess", False),
@@ -87,7 +110,7 @@ def save_server(config: MCPServerConfig) -> None:
         if config.args:
             data["args"] = config.args
         if config.env:
-            data["env"] = config.env
+            data["env"] = _serialize_env(config.env)
         data["networkAccess"] = config.network_access
     elif config.url:
         data["url"] = config.url

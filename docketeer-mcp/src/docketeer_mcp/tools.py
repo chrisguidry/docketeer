@@ -9,6 +9,7 @@ import httpx
 from docket import Docket
 
 from docketeer.tools import ToolContext, registry
+from docketeer.vault import SecretEnvRef, SecretResolutionError, resolve_env
 
 from . import config
 from .manager import manager
@@ -86,6 +87,20 @@ async def connect_mcp_server(
     if not cfg:
         return f"No server configured with name {name!r}."
 
+    # Resolve any secret env refs before connecting
+    resolved_env: dict[str, str] | None = None
+    has_secrets = any(isinstance(v, SecretEnvRef) for v in cfg.env.values())
+    if cfg.env:
+        if has_secrets and not ctx.vault:
+            return f"Server {name!r} has secret env vars but no vault is configured."
+        if has_secrets:
+            try:
+                resolved_env = await resolve_env(cfg.env, ctx.vault)  # type: ignore[arg-type]
+            except SecretResolutionError as e:
+                return str(e)
+        else:
+            resolved_env = {k: str(v) for k, v in cfg.env.items()}
+
     # If config has an auth secret, resolve from vault and connect with bearer
     if cfg.auth:
         if not ctx.vault:
@@ -97,7 +112,12 @@ async def connect_mcp_server(
 
         try:
             tools = await manager.connect(
-                name, cfg, ctx.executor, ctx.workspace, auth=token
+                name,
+                cfg,
+                ctx.executor,
+                ctx.workspace,
+                auth=token,
+                resolved_env=resolved_env,
             )
         except Exception as e:
             log.warning("Failed to connect to MCP server %r", name, exc_info=True)
@@ -118,7 +138,13 @@ async def connect_mcp_server(
 
     # No auth needed — connect normally
     try:
-        tools = await manager.connect(name, cfg, ctx.executor, ctx.workspace)
+        tools = await manager.connect(
+            name,
+            cfg,
+            ctx.executor,
+            ctx.workspace,
+            resolved_env=resolved_env,
+        )
     except Exception as e:
         log.warning("Failed to connect to MCP server %r", name, exc_info=True)
         return f"Failed to connect to {name!r}: {e}"
@@ -362,7 +388,9 @@ async def add_mcp_server(
     name: identifier for the server
     command: executable to run (for stdio servers)
     args: JSON array of command arguments
-    env: JSON object of environment variables
+    env: JSON object of environment variables — values are either plain strings
+        or {"secret": "vault/path"} objects for vault-backed secrets. Example:
+        {"TZ": "UTC", "API_KEY": {"secret": "mcp/my-server/api-key"}}
     url: server URL (for HTTP servers)
     headers: JSON object of HTTP headers
     network_access: whether the server needs network access (stdio only)
@@ -373,7 +401,7 @@ async def add_mcp_server(
         return f"Invalid args JSON: {e}"
 
     try:
-        env_dict = json.loads(env)
+        env_raw = json.loads(env)
     except json.JSONDecodeError as e:
         return f"Invalid env JSON: {e}"
 
@@ -384,6 +412,8 @@ async def add_mcp_server(
 
     if not command and not url:
         return "Must provide either command (stdio) or url (HTTP)."
+
+    env_dict = config._parse_env(env_raw)
 
     cfg = config.MCPServerConfig(
         name=name,

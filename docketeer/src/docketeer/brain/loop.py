@@ -70,11 +70,6 @@ async def agentic_loop(
 
         tool_blocks = [b for b in response.content if isinstance(b, ToolUseBlock)]
         if tool_blocks:
-            text = "\n".join(
-                b.text for b in response.content if isinstance(b, TextBlock)
-            ).strip()
-            if text and callbacks_on_text:
-                await callbacks_on_text(text)
             used_tools = True
             if callbacks_on_tool_start:
                 for block in tool_blocks:

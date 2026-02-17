@@ -199,9 +199,11 @@ async def stream_response(
 
             turn_text = "".join(text_parts) if text_parts else None
 
-            # Dispatch any buffered text from a previous turn.
+            # Dispatch any buffered text from a previous turn, unless
+            # this turn is a tool round (the buffered text is narration
+            # like "Let me check..." that preceded the tool call).
             if pending_final is not None:
-                if callbacks and callbacks.on_text:
+                if not has_tool_use and callbacks and callbacks.on_text:
                     await callbacks.on_text(pending_final)
                 pending_final = None
 
@@ -229,7 +231,7 @@ async def stream_response(
                     await callbacks.on_tool_end()
                     in_tool_round = False
 
-            if turn_text is not None:  # pragma: no branch
+            if turn_text is not None and not has_tool_use:
                 pending_final = turn_text
 
         elif etype == "result":  # pragma: no branch

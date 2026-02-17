@@ -33,10 +33,12 @@ def _build_transport(
     executor: CommandExecutor | None = None,
     workspace: Path | None = None,
     auth: str | None = None,
+    resolved_env: dict[str, str] | None = None,
 ) -> ClientTransport:
     """Build the appropriate transport for a server config."""
     if config.is_stdio:
         command = [config.command, *config.args]
+        env = resolved_env or None
         if executor:
             mounts: list[Mount] = []
             if workspace:
@@ -44,7 +46,7 @@ def _build_transport(
             return ExecutorTransport(
                 executor=executor,
                 command=command,
-                env=config.env or None,
+                env=env,
                 mounts=mounts or None,
                 network_access=config.network_access,
             )
@@ -55,7 +57,7 @@ def _build_transport(
         return StdioTransport(
             command=config.command,
             args=config.args,
-            env=config.env or None,
+            env=env,
         )
 
     if config.is_http:
@@ -84,12 +86,15 @@ class MCPClientManager:
         executor: CommandExecutor | None = None,
         workspace: Path | None = None,
         auth: str | None = None,
+        resolved_env: dict[str, str] | None = None,
     ) -> list[MCPToolInfo]:
         """Connect to a server and discover its tools."""
         if name in self._clients:
             raise ValueError(f"Already connected to {name!r}")
 
-        transport = _build_transport(config, executor, workspace, auth=auth)
+        transport = _build_transport(
+            config, executor, workspace, auth=auth, resolved_env=resolved_env
+        )
         client = Client(transport)
         stack = AsyncExitStack()
         await stack.enter_async_context(client)

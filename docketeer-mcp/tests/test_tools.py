@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from docketeer.testing import MemoryVault
 from docketeer.tools import ToolContext, registry
 from docketeer_mcp.manager import MCPClientManager, MCPToolInfo
 
@@ -344,3 +345,94 @@ async def test_remove_server_cancel_refresh_ignores_errors(
         )
 
     assert "Removed" in result
+
+
+# --- secret env resolution ---
+
+
+async def test_connect_resolves_secret_env(
+    tool_context: ToolContext, mcp_dir: Path, fresh_manager: MCPClientManager
+):
+    _write_server(
+        mcp_dir,
+        "gw",
+        {
+            "command": "uvx",
+            "env": {
+                "TZ": "UTC",
+                "CLIENT_ID": {"secret": "mcp/gw/client-id"},
+            },
+        },
+    )
+    vault = MemoryVault({"mcp/gw/client-id": "my-client-id"})
+    tool_context.vault = vault
+
+    tools = [MCPToolInfo(server="gw", name="t", description="", input_schema={})]
+    fresh_manager.connect = AsyncMock(return_value=tools)  # type: ignore[method-assign]
+
+    result = await registry.execute("connect_mcp_server", {"name": "gw"}, tool_context)
+    assert "1 tools" in result
+
+    call_kwargs = fresh_manager.connect.call_args.kwargs  # type: ignore[union-attr]
+    assert call_kwargs["resolved_env"] == {"TZ": "UTC", "CLIENT_ID": "my-client-id"}
+
+
+async def test_connect_secret_env_missing_secret(
+    tool_context: ToolContext, mcp_dir: Path
+):
+    _write_server(
+        mcp_dir,
+        "gw",
+        {"command": "uvx", "env": {"KEY": {"secret": "nonexistent"}}},
+    )
+    vault = MemoryVault()
+    tool_context.vault = vault
+
+    result = await registry.execute("connect_mcp_server", {"name": "gw"}, tool_context)
+    assert "Could not resolve secret 'nonexistent'" in result
+
+
+async def test_connect_secret_env_no_vault(tool_context: ToolContext, mcp_dir: Path):
+    _write_server(
+        mcp_dir,
+        "gw",
+        {"command": "uvx", "env": {"KEY": {"secret": "vault/path"}}},
+    )
+
+    result = await registry.execute("connect_mcp_server", {"name": "gw"}, tool_context)
+    assert "no vault" in result
+
+
+async def test_connect_plain_env_no_vault(
+    tool_context: ToolContext, mcp_dir: Path, fresh_manager: MCPClientManager
+):
+    _write_server(
+        mcp_dir,
+        "time",
+        {"command": "uvx", "env": {"TZ": "UTC"}},
+    )
+    tools = [MCPToolInfo(server="time", name="t", description="", input_schema={})]
+    fresh_manager.connect = AsyncMock(return_value=tools)  # type: ignore[method-assign]
+
+    result = await registry.execute(
+        "connect_mcp_server", {"name": "time"}, tool_context
+    )
+    assert "1 tools" in result
+    call_kwargs = fresh_manager.connect.call_args.kwargs  # type: ignore[union-attr]
+    assert call_kwargs["resolved_env"] == {"TZ": "UTC"}
+
+
+async def test_add_server_with_secret_env(tool_context: ToolContext, mcp_dir: Path):
+    result = await registry.execute(
+        "add_mcp_server",
+        {
+            "name": "gw",
+            "command": "uvx",
+            "env": '{"TZ": "UTC", "KEY": {"secret": "vault/path"}}',
+        },
+        tool_context,
+    )
+    assert "Saved server 'gw'" in result
+    data = json.loads((mcp_dir / "gw.json").read_text())
+    assert data["env"]["TZ"] == "UTC"
+    assert data["env"]["KEY"] == {"secret": "vault/path"}

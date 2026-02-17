@@ -2,7 +2,6 @@
 
 import asyncio
 from datetime import UTC, datetime
-from unittest.mock import patch
 
 from docketeer.brain import Brain
 from docketeer.chat import IncomingMessage, RoomKind, RoomMessage
@@ -44,10 +43,10 @@ def _make_incoming(room_id: str = "room1") -> IncomingMessage:
     )
 
 
-async def test_handle_message_intermediate_text_sent(
+async def test_handle_message_intermediate_text_suppressed(
     chat: MemoryChat, brain: Brain, fake_messages: FakeMessages
 ):
-    """Intermediate text from tool rounds appears as separate chat messages."""
+    """Text from tool rounds is suppressed — only the final response is sent."""
     _preload_room(brain)
     fake_messages.responses = [
         FakeMessage(
@@ -61,7 +60,7 @@ async def test_handle_message_intermediate_text_sent(
 
     await handle_message(chat, brain, _make_incoming())
     texts = [m.text for m in chat.sent_messages]
-    assert texts == ["Let me check...", "Here's what I found."]
+    assert texts == ["Here's what I found."]
 
 
 async def test_handle_message_no_intermediate_text_on_text_only(
@@ -81,7 +80,7 @@ async def test_handle_message_no_intermediate_text_on_text_only(
 async def test_handle_message_interrupted_skips_final_response(
     chat: MemoryChat, brain: Brain, fake_messages: FakeMessages
 ):
-    """When interrupted, intermediate text is sent but no final response."""
+    """When interrupted during a tool round, the loop exits and no final response is sent."""
     _preload_room(brain)
     fake_messages.responses = [
         FakeMessage(
@@ -99,16 +98,9 @@ async def test_handle_message_interrupted_skips_final_response(
     ]
 
     interrupted = asyncio.Event()
+    interrupted.set()
 
-    original_send = chat.send_message
-
-    async def send_and_interrupt(room_id: str, text: str, **kwargs: object) -> None:
-        await original_send(room_id, text)
-        if text == "Let me check...":
-            interrupted.set()
-
-    with patch.object(chat, "send_message", side_effect=send_and_interrupt):
-        await handle_message(chat, brain, _make_incoming(), interrupted=interrupted)
+    await handle_message(chat, brain, _make_incoming(), interrupted=interrupted)
 
     texts = [m.text for m in chat.sent_messages]
-    assert texts == ["Let me check..."]
+    assert texts == []

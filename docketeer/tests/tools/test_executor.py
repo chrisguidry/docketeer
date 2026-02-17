@@ -147,7 +147,7 @@ async def test_shell_passes_agent_username(
     assert mock_executor.start.call_args.kwargs["username"] == "nix"
 
 
-# --- secret_env ---
+# --- env ---
 
 
 @pytest.fixture()
@@ -159,21 +159,35 @@ def vault_executor_context(
     return tool_context, vault
 
 
-async def test_run_secret_env_resolves(
+async def test_run_env_resolves_secrets(
     vault_executor_context: tuple[ToolContext, MemoryVault],
     mock_executor: AsyncMock,
 ):
     ctx, _ = vault_executor_context
     await registry.execute(
         "run",
-        {"args": ["curl"], "secret_env": {"API_KEY": "api-key"}},
+        {"args": ["curl"], "env": {"API_KEY": {"secret": "api-key"}}},
         ctx,
     )
     env = mock_executor.start.call_args.kwargs["env"]
     assert env == {"API_KEY": "sk-123"}
 
 
-async def test_run_secret_env_multiple(
+async def test_run_env_plain_strings(
+    vault_executor_context: tuple[ToolContext, MemoryVault],
+    mock_executor: AsyncMock,
+):
+    ctx, _ = vault_executor_context
+    await registry.execute(
+        "run",
+        {"args": ["app"], "env": {"TZ": "UTC"}},
+        ctx,
+    )
+    env = mock_executor.start.call_args.kwargs["env"]
+    assert env == {"TZ": "UTC"}
+
+
+async def test_run_env_mixed(
     vault_executor_context: tuple[ToolContext, MemoryVault],
     mock_executor: AsyncMock,
 ):
@@ -182,82 +196,82 @@ async def test_run_secret_env_multiple(
         "run",
         {
             "args": ["app"],
-            "secret_env": {"API_KEY": "api-key", "DB_PASS": "db/pass"},
+            "env": {"TZ": "UTC", "API_KEY": {"secret": "api-key"}},
         },
         ctx,
     )
     env = mock_executor.start.call_args.kwargs["env"]
-    assert env == {"API_KEY": "sk-123", "DB_PASS": "hunter2"}
+    assert env == {"TZ": "UTC", "API_KEY": "sk-123"}
 
 
-async def test_run_secret_env_missing_secret(
+async def test_run_env_missing_secret(
     vault_executor_context: tuple[ToolContext, MemoryVault],
 ):
     ctx, _ = vault_executor_context
     result = await registry.execute(
         "run",
-        {"args": ["app"], "secret_env": {"KEY": "nonexistent"}},
+        {"args": ["app"], "env": {"KEY": {"secret": "nonexistent"}}},
         ctx,
     )
     assert "Could not resolve secret 'nonexistent'" in result
 
 
-async def test_run_secret_env_no_vault(
+async def test_run_env_secrets_no_vault(
     tool_context: ToolContext, mock_executor: AsyncMock
 ):
     result = await registry.execute(
         "run",
-        {"args": ["app"], "secret_env": {"KEY": "val"}},
+        {"args": ["app"], "env": {"KEY": {"secret": "val"}}},
         tool_context,
     )
     assert "No vault" in result
 
 
-async def test_run_without_secret_env_passes_no_env(
+async def test_run_without_env_passes_none(
     tool_context: ToolContext, mock_executor: AsyncMock
 ):
     await registry.execute("run", {"args": ["true"]}, tool_context)
     assert mock_executor.start.call_args.kwargs.get("env") is None
 
 
-async def test_shell_secret_env_resolves(
+async def test_shell_env_resolves_secrets(
     vault_executor_context: tuple[ToolContext, MemoryVault],
     mock_executor: AsyncMock,
 ):
     ctx, _ = vault_executor_context
     await registry.execute(
         "shell",
-        {"command": "echo $API_KEY", "secret_env": {"API_KEY": "api-key"}},
+        {"command": "echo $API_KEY", "env": {"API_KEY": {"secret": "api-key"}}},
         ctx,
     )
     env = mock_executor.start.call_args.kwargs["env"]
     assert env == {"API_KEY": "sk-123"}
 
 
-async def test_shell_secret_env_missing_secret(
+async def test_shell_env_missing_secret(
     vault_executor_context: tuple[ToolContext, MemoryVault],
 ):
     ctx, _ = vault_executor_context
     result = await registry.execute(
         "shell",
-        {"command": "echo", "secret_env": {"KEY": "nonexistent"}},
+        {"command": "echo", "env": {"KEY": {"secret": "nonexistent"}}},
         ctx,
     )
     assert "Could not resolve secret 'nonexistent'" in result
 
 
-async def test_shell_secret_env_no_vault(
+async def test_shell_env_secrets_no_vault(
     tool_context: ToolContext, mock_executor: AsyncMock
 ):
     result = await registry.execute(
         "shell",
-        {"command": "echo", "secret_env": {"KEY": "val"}},
+        {"command": "echo", "env": {"KEY": {"secret": "val"}}},
         tool_context,
     )
     assert "No vault" in result
 
 
-async def test_shell_without_secret_env_passes_no_env(
+async def test_shell_without_env_passes_none(
     tool_context: ToolContext, mock_executor: AsyncMock
 ):
     await registry.execute("shell", {"command": "true"}, tool_context)

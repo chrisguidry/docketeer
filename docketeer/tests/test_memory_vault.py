@@ -1,9 +1,14 @@
-"""Tests for the MemoryVault test helper."""
+"""Tests for the MemoryVault test helper and resolve_env."""
 
 import pytest
 
 from docketeer.testing import MemoryVault
-from docketeer.vault import SecretReference
+from docketeer.vault import (
+    SecretEnvRef,
+    SecretReference,
+    SecretResolutionError,
+    resolve_env,
+)
 
 
 async def test_empty_vault_lists_nothing():
@@ -70,3 +75,51 @@ async def test_preloaded_secrets():
     names = {r.name for r in refs}
     assert names == {"api-key", "token"}
     assert await vault.resolve("api-key") == "sk-123"
+
+
+# --- resolve_env ---
+
+
+async def test_resolve_env_plain_strings():
+    vault = MemoryVault()
+    result = await resolve_env({"TZ": "UTC", "HOME": "/tmp"}, vault)
+    assert result == {"TZ": "UTC", "HOME": "/tmp"}
+
+
+async def test_resolve_env_secret_refs():
+    vault = MemoryVault({"api-key": "sk-123", "db/pass": "hunter2"})
+    result = await resolve_env(
+        {
+            "API_KEY": SecretEnvRef(secret="api-key"),
+            "DB_PASS": SecretEnvRef(secret="db/pass"),
+        },
+        vault,
+    )
+    assert result == {"API_KEY": "sk-123", "DB_PASS": "hunter2"}
+
+
+async def test_resolve_env_mixed():
+    vault = MemoryVault({"api-key": "sk-123"})
+    result = await resolve_env(
+        {"TZ": "UTC", "API_KEY": SecretEnvRef(secret="api-key")},
+        vault,
+    )
+    assert result == {"TZ": "UTC", "API_KEY": "sk-123"}
+
+
+async def test_resolve_env_missing_secret_raises():
+    vault = MemoryVault()
+    with pytest.raises(SecretResolutionError, match="nonexistent"):
+        await resolve_env({"KEY": SecretEnvRef(secret="nonexistent")}, vault)
+
+
+async def test_resolve_env_error_names_variable():
+    vault = MemoryVault()
+    with pytest.raises(SecretResolutionError, match=r"\$MY_VAR"):
+        await resolve_env({"MY_VAR": SecretEnvRef(secret="missing")}, vault)
+
+
+async def test_resolve_env_empty():
+    vault = MemoryVault()
+    result = await resolve_env({}, vault)
+    assert result == {}

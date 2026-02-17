@@ -16,6 +16,17 @@ class SecretReference:
     name: str
 
 
+@dataclass
+class SecretEnvRef:
+    """A vault secret reference for use as an environment variable value."""
+
+    secret: str
+
+
+class SecretResolutionError(Exception):
+    """Raised when a vault secret cannot be resolved for an env var."""
+
+
 class Vault(ABC):
     """Abstract base for secrets management."""
 
@@ -33,6 +44,29 @@ class Vault(ABC):
 
     @abstractmethod
     async def delete(self, name: str) -> None: ...
+
+
+async def resolve_env(
+    env: dict[str, str | SecretEnvRef], vault: Vault
+) -> dict[str, str]:
+    """Resolve an env dict containing a mix of plain strings and vault refs.
+
+    Plain string values pass through unchanged; SecretEnvRef values are
+    resolved via the vault.  Raises SecretResolutionError if any secret
+    lookup fails.
+    """
+    resolved: dict[str, str] = {}
+    for key, value in env.items():
+        if isinstance(value, SecretEnvRef):
+            try:
+                resolved[key] = await vault.resolve(value.secret)
+            except Exception:
+                raise SecretResolutionError(
+                    f"Could not resolve secret '{value.secret}' for ${key}"
+                )
+        else:
+            resolved[key] = value
+    return resolved
 
 
 def discover_vault() -> Vault | None:

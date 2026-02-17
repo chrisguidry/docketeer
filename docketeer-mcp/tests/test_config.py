@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
+from docketeer.vault import SecretEnvRef
 from docketeer_mcp.config import (
     MCPServerConfig,
     _validate_name,
@@ -233,3 +234,56 @@ def test_save_server_http_without_auth(mcp_dir: Path):
     save_server(config)
     data = json.loads((mcp_dir / "api.json").read_text())
     assert "auth" not in data
+
+
+# --- secret env refs ---
+
+
+def test_load_servers_with_secret_env(mcp_dir: Path):
+    (mcp_dir / "gw.json").write_text(
+        json.dumps(
+            {
+                "command": "uvx",
+                "args": ["google-workspace-mcp"],
+                "env": {
+                    "TZ": "UTC",
+                    "CLIENT_ID": {"secret": "mcp/gw/client-id"},
+                    "CLIENT_SECRET": {"secret": "mcp/gw/client-secret"},
+                },
+            }
+        )
+    )
+    servers = load_servers()
+    env = servers["gw"].env
+    assert env["TZ"] == "UTC"
+    assert env["CLIENT_ID"] == SecretEnvRef(secret="mcp/gw/client-id")
+    assert env["CLIENT_SECRET"] == SecretEnvRef(secret="mcp/gw/client-secret")
+
+
+def test_save_server_with_secret_env(mcp_dir: Path):
+    cfg = MCPServerConfig(
+        name="gw",
+        command="uvx",
+        env={
+            "TZ": "UTC",
+            "CLIENT_ID": SecretEnvRef(secret="mcp/gw/client-id"),
+        },
+    )
+    save_server(cfg)
+    data = json.loads((mcp_dir / "gw.json").read_text())
+    assert data["env"]["TZ"] == "UTC"
+    assert data["env"]["CLIENT_ID"] == {"secret": "mcp/gw/client-id"}
+
+
+def test_load_save_roundtrip_secret_env(mcp_dir: Path):
+    original_env = {
+        "PLAIN": "value",
+        "SECRET": {"secret": "vault/path"},
+    }
+    (mcp_dir / "rt.json").write_text(
+        json.dumps({"command": "echo", "env": original_env})
+    )
+    servers = load_servers()
+    save_server(servers["rt"])
+    data = json.loads((mcp_dir / "rt.json").read_text())
+    assert data["env"] == original_env
