@@ -19,7 +19,7 @@ dependencies = [
     "anthropic",
     "croniter",
     "mcp",
-    "pydocket>=0.17.7",
+    "pydocket>=0.17.8",
     "pyyaml",
     "watchfiles",
 ]
