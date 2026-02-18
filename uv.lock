@@ -547,7 +547,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "docketeer", editable = "docketeer" },
-    { name = "fastmcp", specifier = ">=3.0.0b2" },
+    { name = "fastmcp", specifier = ">=3.0.0rc2" },
 ]
 
 [[package]]
@@ -693,7 +693,7 @@ lua = [
 
 [[package]]
 name = "fastmcp"
-version = "3.0.0b2"
+version = "3.0.0rc2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "authlib" },
@@ -717,9 +717,9 @@ dependencies = [
     { name = "watchfiles" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/5b/35/9dc54929999e9576ff8ed965fdd3b1c8d387caad1059f2a810ddf11da171/fastmcp-3.0.0b2.tar.gz", hash = "sha256:3b955a9af95e0a08f2c66e49a9a896a67335fc0181e72079b3c759f4769e4e56", size = 14201333, upload-time = "2026-02-07T01:39:42.62Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/8b/3a/afa90e3646b754d52cd8a436490ffed38bc9fd0d605f479d04de38af1dee/fastmcp-3.0.0rc2.tar.gz", hash = "sha256:81cc408b13a0ab2e7701abaa04c8a64597e13bb2fec2a7fc92fd324e08855ef2", size = 14258553, upload-time = "2026-02-14T03:57:09.199Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/bc/1e/f3fcf00484f67119ea3eb4cb08448c802228dd7d902e19444867a0208945/fastmcp-3.0.0b2-py3-none-any.whl", hash = "sha256:a0713150bd899c82ca6393d3e7a23432b8fd28448f7b43ec86c97be09eb033cc", size = 586046, upload-time = "2026-02-07T01:39:40.377Z" },
+    { url = "https://files.pythonhosted.org/packages/56/7b/556317e567956fb6108f981d63a48be69e5e0014ae745f4feb3f50a1da4e/fastmcp-3.0.0rc2-py3-none-any.whl", hash = "sha256:0596b372c4b6b193f02619a874dca3550b153b085827e82133ccfef2bb687a3d", size = 601390, upload-time = "2026-02-14T03:57:07.277Z" },
 ]
 
 [[package]]
@@ -1215,15 +1215,15 @@ wheels = [
 
 [[package]]
 name = "py-key-value-aio"
-version = "0.3.0"
+version = "0.4.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "beartype" },
-    { name = "py-key-value-shared" },
+    { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/93/ce/3136b771dddf5ac905cc193b461eb67967cf3979688c6696e1f2cdcde7ea/py_key_value_aio-0.3.0.tar.gz", hash = "sha256:858e852fcf6d696d231266da66042d3355a7f9871650415feef9fca7a6cd4155", size = 50801, upload-time = "2025-11-17T16:50:04.711Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/04/3c/0397c072a38d4bc580994b42e0c90c5f44f679303489e4376289534735e5/py_key_value_aio-0.4.4.tar.gz", hash = "sha256:e3012e6243ed7cc09bb05457bd4d03b1ba5c2b1ca8700096b3927db79ffbbe55", size = 92300, upload-time = "2026-02-16T21:21:43.245Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/99/10/72f6f213b8f0bce36eff21fda0a13271834e9eeff7f9609b01afdc253c79/py_key_value_aio-0.3.0-py3-none-any.whl", hash = "sha256:1c781915766078bfd608daa769fefb97e65d1d73746a3dfb640460e322071b64", size = 96342, upload-time = "2025-11-17T16:50:03.801Z" },
+    { url = "https://files.pythonhosted.org/packages/32/69/f1b537ee70b7def42d63124a539ed3026a11a3ffc3086947a1ca6e861868/py_key_value_aio-0.4.4-py3-none-any.whl", hash = "sha256:18e17564ecae61b987f909fc2cd41ee2012c84b4b1dcb8c055cf8b4bc1bf3f5d", size = 152291, upload-time = "2026-02-16T21:21:44.241Z" },
 ]
 
 [package.optional-dependencies]
@@ -1239,19 +1239,6 @@ memory = [
 ]
 redis = [
     { name = "redis" },
-]
-
-[[package]]
-name = "py-key-value-shared"
-version = "0.3.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "beartype" },
-    { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/7b/e4/1971dfc4620a3a15b4579fe99e024f5edd6e0967a71154771a059daff4db/py_key_value_shared-0.3.0.tar.gz", hash = "sha256:8fdd786cf96c3e900102945f92aa1473138ebe960ef49da1c833790160c28a4b", size = 11666, upload-time = "2025-11-17T16:50:06.849Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/51/e4/b8b0a03ece72f47dce2307d36e1c34725b7223d209fc679315ffe6a4e2c3/py_key_value_shared-0.3.0-py3-none-any.whl", hash = "sha256:5b0efba7ebca08bb158b1e93afc2f07d30b8f40c2fc12ce24a4c0d84f42f9298", size = 19560, upload-time = "2025-11-17T16:50:05.954Z" },
 ]
 
 [[package]]

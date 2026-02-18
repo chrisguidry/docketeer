@@ -16,7 +16,7 @@ classifiers = [
 ]
 dependencies = [
     "docketeer",
-    "fastmcp>=3.0.0b2",
+    "fastmcp>=3.0.0rc2",
 ]
 
 [project.urls]
