@@ -1,6 +1,7 @@
 """CommandExecutor ABC and supporting types for sandboxed process execution."""
 
 import asyncio
+import contextlib
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -82,10 +83,12 @@ class RunningProcess:
         return self._process.returncode or 0
 
     def terminate(self) -> None:
-        self._process.terminate()
+        with contextlib.suppress(ProcessLookupError):
+            self._process.terminate()
 
     def kill(self) -> None:
-        self._process.kill()
+        with contextlib.suppress(ProcessLookupError):
+            self._process.kill()
 
 
 class CommandExecutor(ABC):

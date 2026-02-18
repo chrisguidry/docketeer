@@ -67,34 +67,55 @@ def _mock_client(
 # --- _build_transport tests ---
 
 
-def test_build_transport_stdio_with_executor():
+def test_build_transport_stdio_with_executor(tmp_path: Path):
     config = MCPServerConfig(
         name="t", command="uvx", args=["server"], network_access=True
     )
     executor = FakeExecutor()
     workspace = Path("/ws")
-    transport = _build_transport(config, executor, workspace, resolved_env={"K": "V"})
+    with patch("docketeer_mcp.manager._mcp_dir", return_value=tmp_path):
+        transport = _build_transport(
+            config, executor, workspace, resolved_env={"K": "V"}
+        )
     assert isinstance(transport, ExecutorTransport)
     assert transport._command == ["uvx", "server"]
     assert transport._env == {"K": "V"}
     assert transport._network_access is True
-    assert transport._mounts == [Mount(source=Path("/ws"), target=Path("/workspace"))]
+    persistent_home = tmp_path / "t" / "home"
+    assert transport._mounts == [
+        Mount(source=Path("/ws"), target=Path("/workspace")),
+        Mount(source=persistent_home, target=Path("/home/sandbox"), writable=True),
+    ]
 
 
-def test_build_transport_stdio_with_executor_no_workspace():
+def test_build_transport_stdio_with_executor_no_workspace(tmp_path: Path):
     config = MCPServerConfig(name="t", command="echo")
     executor = FakeExecutor()
-    transport = _build_transport(config, executor)
+    with patch("docketeer_mcp.manager._mcp_dir", return_value=tmp_path):
+        transport = _build_transport(config, executor)
     assert isinstance(transport, ExecutorTransport)
-    assert transport._mounts is None
+    persistent_home = tmp_path / "t" / "home"
+    assert transport._mounts == [
+        Mount(source=persistent_home, target=Path("/home/sandbox"), writable=True),
+    ]
 
 
-def test_build_transport_stdio_with_executor_empty_env():
+def test_build_transport_stdio_with_executor_empty_env(tmp_path: Path):
     config = MCPServerConfig(name="t", command="echo")
     executor = FakeExecutor()
-    transport = _build_transport(config, executor)
+    with patch("docketeer_mcp.manager._mcp_dir", return_value=tmp_path):
+        transport = _build_transport(config, executor)
     assert isinstance(transport, ExecutorTransport)
     assert transport._env is None
+
+
+def test_build_transport_creates_persistent_home(tmp_path: Path):
+    config = MCPServerConfig(name="my-server", command="echo")
+    executor = FakeExecutor()
+    with patch("docketeer_mcp.manager._mcp_dir", return_value=tmp_path):
+        _build_transport(config, executor)
+    persistent_home = tmp_path / "my-server" / "home"
+    assert persistent_home.is_dir()
 
 
 def test_build_transport_stdio_without_executor(caplog: pytest.LogCaptureFixture):

@@ -88,11 +88,25 @@ def test_running_process_terminate():
     proc.terminate.assert_called_once()
 
 
+def test_running_process_terminate_already_exited():
+    proc = MagicMock()
+    proc.terminate.side_effect = ProcessLookupError
+    rp = RunningProcess(proc)
+    rp.terminate()
+
+
 def test_running_process_kill():
     proc = MagicMock()
     rp = RunningProcess(proc)
     rp.kill()
     proc.kill.assert_called_once()
+
+
+def test_running_process_kill_already_exited():
+    proc = MagicMock()
+    proc.kill.side_effect = ProcessLookupError
+    rp = RunningProcess(proc)
+    rp.kill()
 
 
 def test_command_executor_cannot_be_instantiated():

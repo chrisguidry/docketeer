@@ -11,7 +11,7 @@ from fastmcp.client.transports.stdio import StdioTransport
 
 from docketeer.executor import CommandExecutor, Mount
 
-from .config import MCPServerConfig
+from .config import MCPServerConfig, _mcp_dir
 from .oauth import PendingOAuth
 from .transport import ExecutorTransport
 
@@ -43,6 +43,13 @@ def _build_transport(
             mounts: list[Mount] = []
             if workspace:
                 mounts.append(Mount(source=workspace, target=Path("/workspace")))
+            persistent_home = _mcp_dir() / config.name / "home"
+            persistent_home.mkdir(parents=True, exist_ok=True)
+            mounts.append(
+                Mount(
+                    source=persistent_home, target=Path("/home/sandbox"), writable=True
+                )
+            )
             return ExecutorTransport(
                 executor=executor,
                 command=command,
