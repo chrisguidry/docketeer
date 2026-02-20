@@ -4,7 +4,7 @@ dynamic = ["version"]
 description = "Terminal chat backend for Docketeer"
 readme = "README.md"
 authors = [
-    { name = "Nate Wilkins" }
+    { name = "Nate Nowack" }
 ]
 license = "MIT"
 requires-python = ">=3.12"
