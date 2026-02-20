@@ -11,8 +11,6 @@ from pathlib import Path
 from types import FunctionType
 from typing import Any, get_args, get_origin, get_type_hints
 
-from anthropic.types import ToolParam
-
 from docketeer.executor import CommandExecutor
 from docketeer.plugins import discover_all
 from docketeer.prompt import CacheControl
@@ -31,14 +29,14 @@ class ToolDefinition:
     emoji: str = ""
     cache_control: CacheControl | None = None
 
-    def to_api_dict(self) -> ToolParam:
-        d = ToolParam(
-            name=self.name,
-            description=self.description,
-            input_schema=self.input_schema,
-        )
+    def to_dict(self) -> dict:
+        d = {
+            "name": self.name,
+            "description": self.description,
+            "input_schema": self.input_schema,
+        }
         if self.cache_control:
-            d["cache_control"] = self.cache_control.to_api_dict()
+            d["cache_control"] = self.cache_control.to_dict()
         return d
 
 

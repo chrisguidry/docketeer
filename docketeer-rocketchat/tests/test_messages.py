@@ -41,8 +41,10 @@ async def test_incoming_messages_filters():
         _make_event("m3", "hello"),
     ]
 
-    async def fake_events() -> AsyncGenerator[dict[str, Any], None]:
-        for e in events:
+    async def fake_events() -> AsyncGenerator[
+        dict[str, Any], None
+    ]:  # pragma: no branch
+        for e in events:  # pragma: no branch
             yield e
 
     ddp.events = fake_events
@@ -50,7 +52,7 @@ async def test_incoming_messages_filters():
 
     results = []
     with patch.object(client, "_after_connect", new_callable=AsyncMock):
-        async for msg in client.incoming_messages():
+        async for msg in client.incoming_messages():  # pragma: no branch
             results.append(msg)
             break
     assert len(results) == 1
@@ -69,8 +71,10 @@ async def test_incoming_messages_dedup():
         _make_event("m2", "world"),
     ]
 
-    async def fake_events() -> AsyncGenerator[dict[str, Any], None]:
-        for e in events:
+    async def fake_events() -> AsyncGenerator[
+        dict[str, Any], None
+    ]:  # pragma: no branch
+        for e in events:  # pragma: no branch
             yield e
 
     ddp.events = fake_events
@@ -78,7 +82,7 @@ async def test_incoming_messages_dedup():
 
     results = []
     with patch.object(client, "_after_connect", new_callable=AsyncMock):
-        async for msg in client.incoming_messages():
+        async for msg in client.incoming_messages():  # pragma: no branch
             results.append(msg)
             if len(results) == 2:
                 break
@@ -92,8 +96,8 @@ async def test_incoming_messages_no_ddp():
     client = RocketChatClient()
     client._ddp = None
     results = []
-    async for msg in client.incoming_messages():
-        results.append(msg)
+    async for msg in client.incoming_messages():  # pragma: no branch - never iterates
+        results.append(msg)  # pragma: no cover - no messages
     assert results == []
 
 

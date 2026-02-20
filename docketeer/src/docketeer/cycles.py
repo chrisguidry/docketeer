@@ -5,11 +5,11 @@ import re
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from anthropic import AuthenticationError, PermissionDeniedError
 from docket.dependencies import Cron, Perpetual
 
 from docketeer import environment
 from docketeer.brain import CONSOLIDATION_MODEL, REVERIE_MODEL, Brain
+from docketeer.brain.backend import BackendAuthError
 from docketeer.dependencies import CurrentBrain, WorkspacePath
 from docketeer.prompt import MessageContent
 
@@ -76,7 +76,7 @@ async def reverie(
     content = MessageContent(username="system", timestamp=now, text=prompt)
     try:
         response = await brain.process("__tasks__", content, model=REVERIE_MODEL)
-    except (AuthenticationError, PermissionDeniedError):
+    except BackendAuthError:
         raise
     except Exception:
         _consecutive_failures["reverie"] = _consecutive_failures.get("reverie", 0) + 1
@@ -108,7 +108,7 @@ async def consolidation(
     content = MessageContent(username="system", timestamp=now, text=prompt)
     try:
         response = await brain.process("__tasks__", content, model=CONSOLIDATION_MODEL)
-    except (AuthenticationError, PermissionDeniedError):
+    except BackendAuthError:
         raise
     except Exception:
         _consecutive_failures["consolidation"] = (

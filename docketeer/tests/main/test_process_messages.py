@@ -5,9 +5,9 @@ from datetime import UTC, datetime
 from unittest.mock import patch
 
 import pytest
-from anthropic import AuthenticationError
 
 from docketeer.brain import Brain
+from docketeer.brain.backend import BackendAuthError
 from docketeer.chat import IncomingMessage, RoomKind, RoomMessage
 from docketeer.handlers import _check_handle_result, process_messages
 from docketeer.testing import MemoryChat
@@ -16,7 +16,7 @@ from docketeer.tools import ToolContext, registry
 from ..conftest import (
     FakeMessage,
     FakeMessages,
-    make_auth_error,
+    make_backend_auth_error,
     make_text_block,
     make_tool_use_block,
 )
@@ -173,13 +173,13 @@ async def test_process_messages_waits_when_no_next(
 async def test_process_messages_auth_error_propagates(
     chat: MemoryChat, brain: Brain, fake_messages: FakeMessages
 ):
-    """AuthenticationError from handle_message propagates through process_messages."""
+    """BackendAuthError from handle_message propagates through process_messages."""
     _preload_room(brain)
 
     await chat._incoming.put(_make_incoming())
     await chat._incoming.put(None)
-    with patch.object(brain, "process", side_effect=make_auth_error()):
-        with pytest.raises(AuthenticationError):
+    with patch.object(brain, "process", side_effect=make_backend_auth_error()):
+        with pytest.raises(BackendAuthError):
             await process_messages(chat, brain)
 
 

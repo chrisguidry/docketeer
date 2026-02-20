@@ -5,9 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from anthropic.types import MessageParam
-
-from docketeer.prompt import extract_text
+from docketeer.prompt import MessageParam, extract_text
 
 if TYPE_CHECKING:
     from docketeer.brain.backend import InferenceBackend
@@ -31,9 +29,13 @@ async def compact_history(
     recent_messages = messages[-MIN_RECENT_MESSAGES:]
 
     transcript = "\n".join(
-        f"{msg['role']}: {text}"
+        f"{msg.role if hasattr(msg, 'role') else msg.get('role')}: {text}"
         for msg in old_messages
-        if (text := extract_text(msg["content"]))
+        if (
+            text := extract_text(
+                msg.content if hasattr(msg, "content") else msg.get("content")
+            )
+        )
     )
 
     if not transcript.strip():

@@ -52,6 +52,7 @@ timeout = 1
 addopts = [
     "--import-mode=importlib",
     "--cov=docketeer_web",
+    "--cov=tests",
     "--cov-branch",
     "--cov-report=term-missing",
     "--cov-fail-under=100",

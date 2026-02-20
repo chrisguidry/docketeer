@@ -3,7 +3,8 @@
 import asyncio
 import json
 
-from docketeer.brain.claude_code_output import stream_response
+from docketeer_anthropic.claude_code_output import stream_response
+
 from docketeer.brain.core import ProcessCallbacks
 
 # -- helpers --

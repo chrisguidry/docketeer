@@ -14,6 +14,7 @@ from anthropic.types import TextBlock, ToolUseBlock
 
 from docketeer import environment
 from docketeer.brain import Brain
+from docketeer.brain.backend import BackendAuthError
 from docketeer.tools import ToolContext
 
 _FAKE_REQUEST = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
@@ -22,6 +23,10 @@ _FAKE_REQUEST = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
 def make_auth_error() -> AuthenticationError:
     response = httpx.Response(401, request=_FAKE_REQUEST)
     return AuthenticationError(message="invalid api key", response=response, body=None)
+
+
+def make_backend_auth_error() -> BackendAuthError:
+    return BackendAuthError("invalid api key")
 
 
 def make_request_too_large_error() -> RequestTooLargeError:
@@ -156,7 +161,7 @@ def fake_messages() -> FakeMessages:
 def mock_anthropic(fake_messages: FakeMessages) -> Iterator[MagicMock]:
     mock_client = MagicMock()
     mock_client.messages = fake_messages
-    from docketeer.brain.anthropic_backend import AnthropicAPIBackend
+    from docketeer_anthropic.api_backend import AnthropicAPIBackend
 
     backend = AnthropicAPIBackend.__new__(AnthropicAPIBackend)
     backend._client = mock_client

@@ -2,15 +2,12 @@
 
 import asyncio
 from typing import Any
+from unittest.mock import AsyncMock
 
 from docketeer.brain import Brain, ProcessCallbacks
 from docketeer.prompt import MessageContent
 
 from ..conftest import FakeMessage, make_text_block, make_tool_use_block
-
-
-async def _capture(texts: list[str], text: str) -> None:
-    texts.append(text)
 
 
 async def test_on_text_suppressed_on_intermediate_tool_round(
@@ -26,11 +23,11 @@ async def test_on_text_suppressed_on_intermediate_tool_round(
         ),
         FakeMessage(content=[make_text_block(text="Here's what I found.")]),
     ]
-    texts: list[str] = []
-    callbacks = ProcessCallbacks(on_text=lambda text: _capture(texts, text))
+    on_text = AsyncMock()
+    callbacks = ProcessCallbacks(on_text=on_text)
     content = MessageContent(username="chris", text="list files")
     response = await brain.process("room1", content, callbacks=callbacks)
-    assert texts == []
+    on_text.assert_not_awaited()
     assert response.text == "Here's what I found."
 
 
@@ -41,11 +38,11 @@ async def test_on_text_not_fired_on_text_only_response(
     fake_messages.responses = [
         FakeMessage(content=[make_text_block(text="Just a reply.")]),
     ]
-    texts: list[str] = []
-    callbacks = ProcessCallbacks(on_text=lambda text: _capture(texts, text))
+    on_text = AsyncMock()
+    callbacks = ProcessCallbacks(on_text=on_text)
     content = MessageContent(username="chris", text="hello")
     await brain.process("room1", content, callbacks=callbacks)
-    assert texts == []
+    on_text.assert_not_awaited()
 
 
 async def test_on_text_not_fired_when_tool_round_has_no_text(
@@ -58,11 +55,11 @@ async def test_on_text_not_fired_when_tool_round_has_no_text(
         ),
         FakeMessage(content=[make_text_block(text="Done!")]),
     ]
-    texts: list[str] = []
-    callbacks = ProcessCallbacks(on_text=lambda text: _capture(texts, text))
+    on_text = AsyncMock()
+    callbacks = ProcessCallbacks(on_text=on_text)
     content = MessageContent(username="chris", text="list files")
     await brain.process("room1", content, callbacks=callbacks)
-    assert texts == []
+    on_text.assert_not_awaited()
 
 
 async def test_on_text_suppressed_on_multiple_intermediate_rounds(
@@ -84,11 +81,11 @@ async def test_on_text_suppressed_on_multiple_intermediate_rounds(
         ),
         FakeMessage(content=[make_text_block(text="All done.")]),
     ]
-    texts: list[str] = []
-    callbacks = ProcessCallbacks(on_text=lambda text: _capture(texts, text))
+    on_text = AsyncMock()
+    callbacks = ProcessCallbacks(on_text=on_text)
     content = MessageContent(username="chris", text="do things")
     response = await brain.process("room1", content, callbacks=callbacks)
-    assert texts == []
+    on_text.assert_not_awaited()
     assert response.text == "All done."
 
 

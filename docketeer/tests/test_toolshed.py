@@ -297,8 +297,8 @@ def test_discover_deduplicates_roots(tmp_path: Path):
         if cmd == "uvx":
             return str(uvx_bin)
         if cmd == "uv":
-            return str(uv_bin)
-        return None
+            return str(uv_bin)  # pragma: no cover - not checked by discover
+        return None  # pragma: no cover - defensive fallback
 
     with (
         patch("docketeer.toolshed.shutil.which", side_effect=fake_which),
@@ -324,7 +324,7 @@ def test_discover_finds_both_runtimes(tmp_path: Path):
             return str(node_bin)
         if cmd == "uvx":
             return str(uv_bin)
-        return None
+        return None  # pragma: no cover - defensive fallback
 
     with (
         patch("docketeer.toolshed.shutil.which", side_effect=fake_which),
@@ -348,7 +348,7 @@ def test_discover_skips_duplicate_roots_across_runtimes(tmp_path: Path):
             return str(shared_bin / "node")
         if cmd == "uvx":
             return str(shared_bin / "uvx")
-        return None
+        return None  # pragma: no cover - defensive fallback
 
     with (
         patch("docketeer.toolshed.shutil.which", side_effect=fake_which),

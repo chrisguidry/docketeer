@@ -47,6 +47,7 @@ timeout = 1
 addopts = [
     "--import-mode=importlib",
     "--cov=docketeer_1password",
+    "--cov=tests",
     "--cov-config=../pyproject.toml",
     "--cov-branch",
     "--cov-report=term-missing",

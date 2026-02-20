@@ -8,9 +8,9 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from docketeer_anthropic.claude_code_backend import _build_claude_args, _invoke_claude
 
 from docketeer.brain.backend import BackendAuthError, BackendError
-from docketeer.brain.claude_code_backend import _build_claude_args, _invoke_claude
 from docketeer.executor import ClaudeInvocation, RunningProcess
 
 
@@ -127,7 +127,7 @@ async def test_invoke_claude_dispatches_to_mcp_with_socket(tmp_path: Path):
     executor = _mock_executor(proc)
 
     with patch(
-        "docketeer.brain.claude_code_backend._invoke_claude_with_mcp",
+        "docketeer_anthropic.claude_code_backend._invoke_claude_with_mcp",
         new_callable=AsyncMock,
         return_value=("mcp result", "s1", None),
     ) as mock_mcp:
@@ -220,7 +220,7 @@ async def test_invoke_claude_builds_invocation_with_mcp_socket_path(tmp_path: Pa
     executor = _mock_executor(proc)
 
     with patch(
-        "docketeer.brain.claude_code_backend._invoke_claude_with_mcp",
+        "docketeer_anthropic.claude_code_backend._invoke_claude_with_mcp",
         new_callable=AsyncMock,
         return_value=("result", "s1", None),
     ):

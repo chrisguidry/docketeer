@@ -37,7 +37,7 @@ async def ddp_server():
 async def _ok_handler(ws: ServerConnection) -> None:
     """Standard handler: connect → connected, method → result, sub → ready."""
     try:
-        async for raw in ws:
+        async for raw in ws:  # pragma: no branch
             msg = json.loads(raw)
             match msg.get("msg"):
                 case "connect":
@@ -50,7 +50,7 @@ async def _ok_handler(ws: ServerConnection) -> None:
                     )
                 case "sub":
                     await ws.send(json.dumps({"msg": "ready", "subs": [msg["id"]]}))
-    except websockets.ConnectionClosed:
+    except websockets.ConnectionClosed:  # pragma: no cover
         pass
 
 
@@ -63,16 +63,16 @@ async def test_connect_success(ddp_server: Any):
 async def test_connect_failed(ddp_server: Any):
     async def handler(ws: ServerConnection) -> None:
         try:
-            async for raw in ws:
-                if json.loads(raw).get("msg") == "connect":
+            async for raw in ws:  # pragma: no branch
+                if json.loads(raw).get("msg") == "connect":  # pragma: no branch
                     await ws.send(json.dumps({"msg": "failed", "version": "1"}))
-        except websockets.ConnectionClosed:
+        except websockets.ConnectionClosed:  # pragma: no cover
             pass
 
     client, _ = await ddp_server(handler)
     with pytest.raises(ConnectionError, match="DDP connection failed"):
         async with client:
-            pass
+            pass  # pragma: no cover - never reached, raises on __aenter__
 
 
 async def test_send_not_connected():
@@ -86,14 +86,14 @@ async def test_receiver_ping_pong(ddp_server: Any):
 
     async def handler(ws: ServerConnection) -> None:
         try:
-            async for raw in ws:
+            async for raw in ws:  # pragma: no branch
                 msg = json.loads(raw)
                 if msg.get("msg") == "connect":
                     await ws.send(json.dumps({"msg": "connected", "session": "s1"}))
                     await ws.send(json.dumps({"msg": "ping"}))
-                elif msg.get("msg") == "pong":
+                elif msg.get("msg") == "pong":  # pragma: no branch
                     pong_seen.set()
-        except websockets.ConnectionClosed:
+        except websockets.ConnectionClosed:  # pragma: no cover
             pass
 
     client, _ = await ddp_server(handler)
@@ -111,13 +111,13 @@ async def test_receiver_result_dispatch(ddp_server: Any):
 async def test_receiver_events(ddp_server: Any):
     async def handler(ws: ServerConnection) -> None:
         try:
-            async for raw in ws:
+            async for raw in ws:  # pragma: no branch
                 msg = json.loads(raw)
-                if msg.get("msg") == "connect":
+                if msg.get("msg") == "connect":  # pragma: no branch
                     await ws.send(json.dumps({"msg": "connected", "session": "s1"}))
                     await ws.send(json.dumps({"msg": "changed", "id": "1"}))
                     return  # server handler exits → connection closes
-        except websockets.ConnectionClosed:
+        except websockets.ConnectionClosed:  # pragma: no cover
             pass
 
     client, _ = await ddp_server(handler)
@@ -132,18 +132,18 @@ async def test_receiver_events(ddp_server: Any):
 async def test_receiver_connection_closed(ddp_server: Any):
     async def handler(ws: ServerConnection) -> None:
         try:
-            async for raw in ws:
-                if json.loads(raw).get("msg") == "connect":
+            async for raw in ws:  # pragma: no branch
+                if json.loads(raw).get("msg") == "connect":  # pragma: no branch
                     await ws.send(json.dumps({"msg": "connected", "session": "s1"}))
                     return  # server handler exits → connection closes
-        except websockets.ConnectionClosed:
+        except websockets.ConnectionClosed:  # pragma: no cover
             pass
 
     client, _ = await ddp_server(handler)
     async with client:
         events = []
-        async for event in client.events():
-            events.append(event)
+        async for event in client.events():  # pragma: no branch - never iterates
+            events.append(event)  # pragma: no cover - no events
         assert events == []
 
 
@@ -171,14 +171,14 @@ async def test_unsubscribe(ddp_server: Any):
 async def test_events_iterator(ddp_server: Any):
     async def handler(ws: ServerConnection) -> None:
         try:
-            async for raw in ws:
+            async for raw in ws:  # pragma: no branch
                 msg = json.loads(raw)
-                if msg.get("msg") == "connect":
+                if msg.get("msg") == "connect":  # pragma: no branch
                     await ws.send(json.dumps({"msg": "connected", "session": "s1"}))
                     for i in range(3):
                         await ws.send(json.dumps({"msg": "changed", "id": str(i)}))
                     return  # server handler exits → connection closes
-        except websockets.ConnectionClosed:
+        except websockets.ConnectionClosed:  # pragma: no cover
             pass
 
     client, _ = await ddp_server(handler)
@@ -213,22 +213,22 @@ async def test_receiver_connection_closed_exception(ddp_server: Any):
 
     async def handler(ws: ServerConnection) -> None:
         try:
-            async for raw in ws:
+            async for raw in ws:  # pragma: no branch
                 msg = json.loads(raw)
-                if msg.get("msg") == "connect":
+                if msg.get("msg") == "connect":  # pragma: no branch
                     await ws.send(json.dumps({"msg": "connected", "session": "s1"}))
                     # Force-close the underlying transport to cause ConnectionClosed
                     ws.transport.abort()
                     return
-        except websockets.ConnectionClosed:
+        except websockets.ConnectionClosed:  # pragma: no cover
             pass
 
     client, _ = await ddp_server(handler)
     async with client:
         # Wait for the receiver to process the connection abort
         events = []
-        async for event in client.events():
-            events.append(event)
+        async for event in client.events():  # pragma: no branch - never iterates
+            events.append(event)  # pragma: no cover - no events
         assert events == []
 
 
@@ -237,14 +237,14 @@ async def test_connect_ignores_unrelated_messages(ddp_server: Any):
 
     async def handler(ws: ServerConnection) -> None:
         try:
-            async for raw in ws:
+            async for raw in ws:  # pragma: no branch
                 msg = json.loads(raw)
-                if msg.get("msg") == "connect":
+                if msg.get("msg") == "connect":  # pragma: no branch
                     # Send a message that the receiver queues (not ping/result),
                     # so connect()'s while loop sees it and loops again.
                     await ws.send(json.dumps({"msg": "added", "collection": "x"}))
                     await ws.send(json.dumps({"msg": "connected", "session": "s2"}))
-        except websockets.ConnectionClosed:
+        except websockets.ConnectionClosed:  # pragma: no cover
             pass
 
     client, _ = await ddp_server(handler)
@@ -257,9 +257,9 @@ async def test_receiver_drops_unknown_result_id(ddp_server: Any):
 
     async def handler(ws: ServerConnection) -> None:
         try:
-            async for raw in ws:
+            async for raw in ws:  # pragma: no branch
                 msg = json.loads(raw)
-                if msg.get("msg") == "connect":
+                if msg.get("msg") == "connect":  # pragma: no branch
                     await ws.send(json.dumps({"msg": "connected", "session": "s1"}))
                     # Send a result with an ID nobody is waiting for
                     await ws.send(
@@ -268,7 +268,7 @@ async def test_receiver_drops_unknown_result_id(ddp_server: Any):
                     # Then send a normal event so we can verify the receiver continued
                     await ws.send(json.dumps({"msg": "changed", "id": "ev1"}))
                     return
-        except websockets.ConnectionClosed:
+        except websockets.ConnectionClosed:  # pragma: no cover
             pass
 
     client, _ = await ddp_server(handler)

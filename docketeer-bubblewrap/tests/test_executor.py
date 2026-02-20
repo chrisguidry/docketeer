@@ -146,7 +146,7 @@ def test_build_args_with_username_creates_group_file(tmp_path: Path):
 
 @pytest.fixture()
 def executor() -> BubblewrapExecutor:
-    if not has_bwrap:
+    if not has_bwrap:  # pragma: no cover
         pytest.skip("bwrap not on PATH")
     return BubblewrapExecutor()
 
@@ -296,7 +296,7 @@ async def test_home_uses_username_when_set(executor: BubblewrapExecutor):
 
 
 async def test_toolshed_mounts_and_env(tmp_path: Path):
-    if not has_bwrap:
+    if not has_bwrap:  # pragma: no cover
         pytest.skip("bwrap not on PATH")
 
     node_root = tmp_path / "node"

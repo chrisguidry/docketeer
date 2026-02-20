@@ -4,11 +4,14 @@ from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from anthropic.types import Base64ImageSourceParam, ImageBlockParam, MessageParam
-
 from docketeer.brain import Brain, ProcessCallbacks
 from docketeer.chat import RoomMessage
-from docketeer.prompt import MessageContent
+from docketeer.prompt import (
+    Base64ImageSourceParam,
+    ImageBlockParam,
+    MessageContent,
+    MessageParam,
+)
 from docketeer.tools import ToolContext
 
 from ..conftest import FakeMessage, make_text_block, make_tool_use_block
@@ -73,7 +76,7 @@ def test_load_history_user_messages(brain: Brain):
     ]
     count = brain.load_history("room1", msgs)
     assert count == 1
-    conv = brain._conversations["room1"][0]["content"]
+    conv = brain._conversations["room1"][0].content
     assert "@chris: hello" in conv
     assert "2026-02-06" in conv
 
@@ -90,7 +93,7 @@ def test_load_history_assistant_messages(brain: Brain):
         )
     ]
     brain.load_history("room1", msgs)
-    assert brain._conversations["room1"][0]["content"] == "hi there"
+    assert brain._conversations["room1"][0].content == "hi there"
 
 
 def test_has_history(brain: Brain):
@@ -129,8 +132,8 @@ def test_build_content_with_images(brain: Brain):
     )
     result = brain._build_content(content)
     assert isinstance(result, list)
-    assert any(b.get("type") == "image" for b in result)
-    assert any(b.get("type") == "text" for b in result)
+    assert any(b.type == "image" for b in result)
+    assert any(b.type == "text" for b in result)
 
 
 def test_build_content_empty_message(brain: Brain):
@@ -144,7 +147,7 @@ def test_build_content_images_only(brain: Brain):
     content = MessageContent(username="chris", images=[("image/png", b"\x89PNG")])
     result = brain._build_content(content)
     assert isinstance(result, list)
-    assert any(b.get("type") == "image" for b in result)
+    assert any(b.type == "image" for b in result)
 
 
 async def test_process_simple_text_response(brain: Brain, fake_messages: Any):
@@ -240,7 +243,7 @@ async def test_process_triggers_compaction(brain: Brain, fake_messages: Any):
     brain._room_token_counts["room1"] = 150_000
     for i in range(10):
         brain._conversations["room1"].append(
-            {"role": "user" if i % 2 == 0 else "assistant", "content": f"msg {i}"}
+            MessageParam(role="user" if i % 2 == 0 else "assistant", content=f"msg {i}")
         )
     fake_messages.responses = [
         FakeMessage(content=[make_text_block(text="Summary here")]),
@@ -263,7 +266,7 @@ async def test_process_exhausts_tool_rounds(brain: Brain, fake_messages: Any):
         for i in range(3)
     ]
     content = MessageContent(username="chris", text="keep going")
-    with patch("docketeer.brain.loop.MAX_TOOL_ROUNDS", 3):
+    with patch("docketeer_anthropic.loop.MAX_TOOL_ROUNDS", 3):
         response = await brain.process("room1", content)
     assert response.text == ""
 
@@ -271,13 +274,13 @@ async def test_process_exhausts_tool_rounds(brain: Brain, fake_messages: Any):
 async def test_process_multi_tool_results_in_history(brain: Brain, fake_messages: Any):
     """Messages with multiple tool_result blocks exercise the cache-strip inner loop."""
     brain._conversations["room1"] = [
-        {
-            "role": "assistant",
-            "content": [make_tool_use_block(id="t1", name="list_files", input={})],
-        },
-        {
-            "role": "user",
-            "content": [
+        MessageParam(
+            role="assistant",
+            content=[make_tool_use_block(id="t1", name="list_files", input={})],
+        ),
+        MessageParam(
+            role="user",
+            content=[
                 {
                     "type": "tool_result",
                     "tool_use_id": "t1",
@@ -292,7 +295,7 @@ async def test_process_multi_tool_results_in_history(brain: Brain, fake_messages
                     "cache_control": {"type": "ephemeral"},
                 },
             ],
-        },
+        ),
     ]
     fake_messages.responses = [
         FakeMessage(
@@ -334,8 +337,8 @@ async def test_process_no_tools_registered(brain: Brain, fake_messages: Any):
 
 async def test_compact_history_few_messages(brain: Brain, fake_messages: Any):
     brain._conversations["room1"] = [
-        {"role": "user", "content": "hi"},
-        {"role": "assistant", "content": "hey"},
+        MessageParam(role="user", content="hi"),
+        MessageParam(role="assistant", content="hey"),
     ]
     await brain._compact_history("room1", [], [], "claude-haiku-4-5-20251001")
     assert len(brain._conversations["room1"]) == 2
@@ -372,10 +375,8 @@ async def test_compact_history_success(brain: Brain, fake_messages: Any):
     ]
     await brain._compact_history("room1", [], [], "claude-haiku-4-5-20251001")
     msgs = brain._conversations["room1"]
-    content0 = msgs[0]["content"]
-    assert isinstance(content0, str)
-    assert content0.startswith("[Earlier conversation summary]")
-    assert msgs[1]["content"] == "Got it, I have that context."
+    assert msgs[0].role == "user"
+    assert msgs[1].content == "Got it, I have that context."
 
 
 async def test_compact_history_summarization_failure(brain: Brain, fake_messages: Any):

@@ -11,14 +11,6 @@ from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from datetime import datetime
 
-from anthropic.types import (
-    Base64ImageSourceParam,
-    ContentBlockParam,
-    ImageBlockParam,
-    MessageParam,
-    TextBlockParam,
-)
-
 from docketeer import environment
 from docketeer.brain.backend import (
     BackendAuthError,
@@ -30,11 +22,17 @@ from docketeer.brain.compaction import compact_history
 from docketeer.brain.helpers import classify_response, summarize_webpage
 from docketeer.chat import RoomMessage
 from docketeer.executor import CommandExecutor
+from docketeer.plugins import discover_one
 from docketeer.prompt import (
+    Base64ImageSourceParam,
     BrainResponse,
     CacheControl,
+    ContentBlockParam,
+    ImageBlockParam,
     MessageContent,
+    MessageParam,
     SystemBlock,
+    TextBlockParam,
     build_dynamic_context,
     build_system_blocks,
     ensure_template,
@@ -90,21 +88,16 @@ APOLOGY = (
 def _create_backend(
     executor: CommandExecutor | None = None,
 ) -> InferenceBackend:
-    """Create the inference backend based on DOCKETEER_INFERENCE env var."""
-    mode = environment.get_str("INFERENCE", "api")
-    if mode == "api":
-        from docketeer.brain.anthropic_backend import AnthropicAPIBackend
+    """Create the inference backend using the plugin discovery system."""
+    ep = discover_one("docketeer.inference", "INFERENCE")
+    if ep is None:
+        raise RuntimeError(
+            "No inference backend plugin installed. "
+            "Install one such as docketeer-anthropic."
+        )
 
-        api_key = environment.get_str("ANTHROPIC_API_KEY")
-        return AnthropicAPIBackend(api_key)
-    if mode == "claude-code":
-        from docketeer.brain.claude_code_backend import ClaudeCodeBackend
-
-        if executor is None:
-            raise ValueError("claude-code backend requires an executor plugin")
-        oauth_token = environment.get_str("CLAUDE_CODE_OAUTH_TOKEN")
-        return ClaudeCodeBackend(executor=executor, oauth_token=oauth_token)
-    raise ValueError(f"Unknown inference backend: {mode!r}")
+    backend_factory = ep.load()
+    return backend_factory(executor=executor)
 
 
 @dataclass
@@ -347,7 +340,7 @@ class Brain:
                     type="image",
                     source=Base64ImageSourceParam(
                         type="base64",
-                        media_type=media_type,  # type: ignore[arg-type]
+                        media_type=media_type,
                         data=base64.b64encode(data).decode("utf-8"),
                     ),
                 )
@@ -360,7 +353,7 @@ class Brain:
         elif not blocks:
             blocks.append(TextBlockParam(type="text", text=empty))
 
-        if len(blocks) == 1 and blocks[0]["type"] == "text":
-            return blocks[0]["text"]
+        if len(blocks) == 1 and isinstance(blocks[0], TextBlockParam):
+            return blocks[0].text
 
         return blocks

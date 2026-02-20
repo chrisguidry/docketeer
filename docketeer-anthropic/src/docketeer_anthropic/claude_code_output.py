@@ -6,7 +6,7 @@ import asyncio
 import json
 import logging
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from docketeer.brain.backend import (
     BackendAuthError,
@@ -20,9 +20,11 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-def extract_text(message: dict) -> str:
-    """Pull text from a message's content (string or list-of-blocks)."""
-    content = message.get("content", "")
+def extract_text(message: Any) -> str:
+    """Anthropic Claude Code output parsing utilities."""
+    content = (
+        message.content if hasattr(message, "content") else message.get("content", "")
+    )
     if isinstance(content, str):
         return content
     parts: list[str] = []
@@ -31,10 +33,12 @@ def extract_text(message: dict) -> str:
             parts.append(block)
         elif isinstance(block, dict) and block.get("type") == "text":
             parts.append(block.get("text", ""))
+        elif hasattr(block, "text"):
+            parts.append(block.text)
     return "\n".join(parts)
 
 
-def format_prompt(messages: list[dict], *, resume: bool = False) -> str:
+def format_prompt(messages: list, *, resume: bool = False) -> str:
     """Build the prompt to send to claude -p.
 
     For resumed sessions, only the latest message is needed since Claude Code
@@ -52,7 +56,8 @@ def format_prompt(messages: list[dict], *, resume: bool = False) -> str:
         text = extract_text(msg)
         if not text:
             continue
-        if msg.get("role") == "assistant":
+        role = msg.role if hasattr(msg, "role") else msg.get("role")
+        if role == "assistant":
             parts.append(f"[assistant] {text}")
         else:
             parts.append(text)

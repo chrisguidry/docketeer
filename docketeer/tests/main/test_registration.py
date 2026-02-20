@@ -159,7 +159,7 @@ def test_instance_lock_already_held(tmp_path: Path):
     try:
         with pytest.raises(SystemExit):
             with _instance_lock(tmp_path):
-                pass
+                ...  # pragma: no cover - never reached, SystemExit raised
     finally:
         held.close()
 

@@ -5,12 +5,12 @@ import re
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from anthropic import AuthenticationError, PermissionDeniedError
 from croniter import croniter
 from docket.dependencies import Perpetual
 
 from docketeer import environment
 from docketeer.brain import APOLOGY, CHAT_MODEL, Brain
+from docketeer.brain.backend import BackendAuthError
 from docketeer.chat import ChatClient
 from docketeer.cycles import consolidation, reverie
 from docketeer.dependencies import CurrentBrain, CurrentChatClient
@@ -62,7 +62,7 @@ async def nudge(
         response: BrainResponse = await brain.process(
             context_room, content, model=model or CHAT_MODEL
         )
-    except (AuthenticationError, PermissionDeniedError):
+    except BackendAuthError:
         raise
     except Exception:
         _consecutive_failures[key] = _consecutive_failures.get(key, 0) + 1
@@ -107,7 +107,7 @@ async def nudge_every(
         response: BrainResponse = await brain.process(
             context_room, content, model=model or CHAT_MODEL
         )
-    except (AuthenticationError, PermissionDeniedError):
+    except BackendAuthError:
         raise
     except Exception:
         _consecutive_failures[key] = _consecutive_failures.get(key, 0) + 1

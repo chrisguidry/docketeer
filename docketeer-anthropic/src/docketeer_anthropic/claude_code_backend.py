@@ -11,17 +11,15 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from anthropic.types import Usage
-
 from docketeer import environment
 from docketeer.audit import log_usage, record_usage
-from docketeer.brain.backend import InferenceBackend
-from docketeer.brain.claude_code_output import (
+from docketeer.brain.backend import InferenceBackend, Usage
+from docketeer.executor import ClaudeInvocation, CommandExecutor, RunningProcess
+from docketeer_anthropic.claude_code_output import (
     check_process_exit,
     format_prompt,
     stream_response,
 )
-from docketeer.executor import ClaudeInvocation, CommandExecutor, RunningProcess
 
 if TYPE_CHECKING:
     from docketeer.brain.core import InferenceModel, ProcessCallbacks

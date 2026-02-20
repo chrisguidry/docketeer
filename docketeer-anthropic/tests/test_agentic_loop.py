@@ -7,8 +7,8 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from docketeer_anthropic.claude_code_backend import ClaudeCodeBackend
 
-from docketeer.brain.claude_code_backend import ClaudeCodeBackend
 from docketeer.brain.core import InferenceModel
 
 MODEL = InferenceModel(model_id="claude-opus-4-6", max_output_tokens=128_000)
@@ -31,7 +31,7 @@ def _patch_invoke(
     return_value: tuple[str, str | None, dict | None],
 ) -> patch:  # type: ignore[type-arg]
     return patch(
-        "docketeer.brain.claude_code_backend._invoke_claude",
+        "docketeer_anthropic.claude_code_backend._invoke_claude",
         new_callable=AsyncMock,
         return_value=return_value,
     )

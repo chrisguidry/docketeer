@@ -1,7 +1,6 @@
 # Docketeer
 
 Build the AI personal assistant you need with
-[Anthropic](https://platform.claude.com/docs/en/api/sdks/python) and
 [Docket](https://github.com/chrisguidry/docket).
 
 ## What is docketeer?
@@ -47,9 +46,9 @@ required and enforced.
 ## Security
 
 Obviously, there are inherent risks to running an autonomous agent. Docketeer
-does not attempt to mitigate those risks. By using only Anthropic's extremely
-well-aligned and intelligent models, I'm hoping to avoid the most catastrophic
-outcomes that could come from letting an agent loose on your network. However,
+does not attempt to mitigate those risks. By using only well-aligned and
+intelligent models, I'm hoping to avoid the most catastrophic outcomes
+that could come from letting an agent loose on your network. However,
 the largest risks are still likely to come from nefarious _human_ actors who are
 eager to target these new types of autonomous AIs.
 

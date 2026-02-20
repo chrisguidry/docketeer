@@ -6,9 +6,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Literal
-
-from anthropic.types import CacheControlEphemeralParam, TextBlockParam
+from typing import Any, Literal
 
 from docketeer.people import load_person_context
 from docketeer.plugins import discover_all
@@ -22,8 +20,8 @@ class CacheControl:
 
     ttl: Literal["5m", "1h"] = "5m"
 
-    def to_api_dict(self) -> CacheControlEphemeralParam:
-        return CacheControlEphemeralParam(type="ephemeral", ttl=self.ttl)
+    def to_dict(self) -> dict[str, str]:
+        return {"type": "ephemeral", "ttl": self.ttl}
 
 
 @dataclass
@@ -33,11 +31,11 @@ class SystemBlock:
     text: str
     cache_control: CacheControl | None = None
 
-    def to_api_dict(self) -> TextBlockParam:
-        """Serialize for the Anthropic API system parameter."""
-        d = TextBlockParam(type="text", text=self.text)
+    def to_dict(self) -> dict[str, str | dict]:
+        """Serialize to a dictionary representation."""
+        d = {"type": "text", "text": self.text}
         if self.cache_control:
-            d["cache_control"] = self.cache_control.to_api_dict()
+            d["cache_control"] = self.cache_control.to_dict()
         return d
 
 
@@ -190,3 +188,66 @@ def extract_text(content: str | Iterable) -> str:
         elif hasattr(block, "text"):
             parts.append(block.text)
     return "\n".join(parts)
+
+
+@dataclass
+class TextBlockParam:
+    """A text block."""
+
+    text: str
+    type: Literal["text"] = "text"
+
+    def to_dict(self) -> dict[str, str]:
+        return {"type": self.type, "text": self.text}
+
+
+@dataclass
+class Base64ImageSourceParam:
+    """Base64 encoded image source."""
+
+    media_type: str
+    data: str
+    type: Literal["base64"] = "base64"
+
+    def to_dict(self) -> dict[str, str]:
+        return {"type": self.type, "media_type": self.media_type, "data": self.data}
+
+
+@dataclass
+class ImageBlockParam:
+    """An image block."""
+
+    source: Base64ImageSourceParam
+    type: Literal["image"] = "image"
+
+    def to_dict(self) -> dict[str, str | dict[str, str]]:
+        return {"type": self.type, "source": self.source.to_dict()}
+
+
+ContentBlockParam = TextBlockParam | ImageBlockParam
+
+
+@dataclass
+class MessageParam:
+    """A message parameter for Chat API."""
+
+    role: Literal["user", "assistant", "system"]
+    content: str | list[Any]
+
+    def to_dict(self) -> dict:
+        """Convert to a dictionary for API usage."""
+        if isinstance(self.content, str):
+            return {"role": self.role, "content": self.content}
+        elif isinstance(self.content, list):
+            serialized_content = []
+            for block in self.content:
+                if callable(getattr(block, "to_dict", None)):
+                    serialized_content.append(block.to_dict())
+                elif callable(getattr(block, "model_dump", None)):
+                    serialized_content.append(block.model_dump())
+                elif isinstance(block, dict):
+                    serialized_content.append(block)
+                else:
+                    serialized_content.append({"type": "text", "text": str(block)})
+            return {"role": self.role, "content": serialized_content}
+        return {"role": self.role, "content": self.content}

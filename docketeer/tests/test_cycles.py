@@ -4,9 +4,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from anthropic import AuthenticationError
 
 from docketeer.brain import Brain
+from docketeer.brain.backend import BackendAuthError
 from docketeer.cycles import (
     CONSOLIDATION_PROMPT,
     REVERIE_PROMPT,
@@ -20,7 +20,7 @@ from docketeer.tasks import docketeer_tasks
 
 from .conftest import (
     FakeMessage,
-    make_auth_error,
+    make_backend_auth_error,
     make_tool_use_block,
 )
 
@@ -69,7 +69,7 @@ async def test_reverie_calls_brain(brain: Brain, workspace: Path, fake_messages:
     await reverie(brain=brain, workspace=workspace)
     assert "__tasks__" in brain._conversations
     msgs = brain._conversations["__tasks__"]
-    assert any(REVERIE_PROMPT in extract_text(m.get("content", "")) for m in msgs)
+    assert any(REVERIE_PROMPT in extract_text(m.content) for m in msgs)
 
 
 async def test_consolidation_calls_brain(
@@ -78,7 +78,7 @@ async def test_consolidation_calls_brain(
     await consolidation(brain=brain, workspace=workspace)
     assert "__tasks__" in brain._conversations
     msgs = brain._conversations["__tasks__"]
-    assert any(CONSOLIDATION_PROMPT in extract_text(m.get("content", "")) for m in msgs)
+    assert any(CONSOLIDATION_PROMPT in extract_text(m.content) for m in msgs)
 
 
 async def test_reverie_empty_response(
@@ -132,20 +132,20 @@ async def test_consolidation_error_returns_early(workspace: Path):
 
 
 async def test_reverie_auth_error_propagates(workspace: Path):
-    """AuthenticationError propagates from reverie."""
+    """BackendAuthError propagates from reverie."""
     from unittest.mock import AsyncMock
 
     brain = AsyncMock()
-    brain.process.side_effect = make_auth_error()
-    with pytest.raises(AuthenticationError):
+    brain.process.side_effect = make_backend_auth_error()
+    with pytest.raises(BackendAuthError):
         await reverie(brain=brain, workspace=workspace)
 
 
 async def test_consolidation_auth_error_propagates(workspace: Path):
-    """AuthenticationError propagates from consolidation."""
+    """BackendAuthError propagates from consolidation."""
     from unittest.mock import AsyncMock
 
     brain = AsyncMock()
-    brain.process.side_effect = make_auth_error()
-    with pytest.raises(AuthenticationError):
+    brain.process.side_effect = make_backend_auth_error()
+    with pytest.raises(BackendAuthError):
         await consolidation(brain=brain, workspace=workspace)

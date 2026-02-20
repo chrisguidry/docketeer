@@ -217,8 +217,10 @@ async def test_incoming_messages_eof():
     client = TUIClient()
     with patch.object(client, "_read_input", AsyncMock(side_effect=EOFError)):
         messages = []
-        async for msg in client.incoming_messages():
-            messages.append(msg)
+        async for (
+            msg
+        ) in client.incoming_messages():  # pragma: no branch - never iterates
+            messages.append(msg)  # pragma: no cover
     assert len(messages) == 0
 
 
@@ -226,8 +228,10 @@ async def test_incoming_messages_keyboard_interrupt():
     client = TUIClient()
     with patch.object(client, "_read_input", AsyncMock(side_effect=KeyboardInterrupt)):
         messages = []
-        async for msg in client.incoming_messages():
-            messages.append(msg)
+        async for (
+            msg
+        ) in client.incoming_messages():  # pragma: no branch - never iterates
+            messages.append(msg)  # pragma: no cover
     assert len(messages) == 0
 
 
@@ -251,8 +255,8 @@ async def test_incoming_messages_closed():
     client = TUIClient()
     client._closed = True
     messages = []
-    async for msg in client.incoming_messages():
-        messages.append(msg)
+    async for msg in client.incoming_messages():  # pragma: no branch - never iterates
+        messages.append(msg)  # pragma: no cover
     assert len(messages) == 0
 
 

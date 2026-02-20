@@ -26,7 +26,7 @@ class FakeExecutor(CommandExecutor):
         mounts: list[Mount] | None = None,
         network_access: bool = False,
         username: str | None = None,
-    ) -> RunningProcess:
+    ) -> RunningProcess:  # pragma: no cover
         raise NotImplementedError
 
 

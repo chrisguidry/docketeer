@@ -4,9 +4,9 @@ from datetime import UTC, datetime
 from unittest.mock import patch
 
 import pytest
-from anthropic import AuthenticationError
 
 from docketeer.brain import APOLOGY, Brain
+from docketeer.brain.backend import BackendAuthError
 from docketeer.chat import Attachment, IncomingMessage, RoomKind, RoomMessage
 from docketeer.handlers import build_content, handle_message, send_response
 from docketeer.main import run
@@ -16,7 +16,7 @@ from docketeer.testing import MemoryChat, Reaction
 from ..conftest import (
     FakeMessage,
     FakeMessages,
-    make_auth_error,
+    make_backend_auth_error,
     make_text_block,
     make_tool_use_block,
 )
@@ -431,8 +431,8 @@ async def test_handle_message_auth_error_propagates(
         ],
     )
 
-    with patch.object(brain, "process", side_effect=make_auth_error()):
-        with pytest.raises(AuthenticationError):
+    with patch.object(brain, "process", side_effect=make_backend_auth_error()):
+        with pytest.raises(BackendAuthError):
             await handle_message(chat, brain, _make_incoming())
 
 

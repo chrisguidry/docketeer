@@ -3,15 +3,15 @@
 import json
 
 import pytest
-
-from docketeer.brain.backend import BackendAuthError, BackendError, ContextTooLargeError
-from docketeer.brain.claude_code_output import (
+from docketeer_anthropic.claude_code_output import (
     check_error,
     check_process_exit,
     extract_text,
     format_prompt,
     parse_response,
 )
+
+from docketeer.brain.backend import BackendAuthError, BackendError, ContextTooLargeError
 
 # -- extract_text --
 
@@ -48,12 +48,46 @@ def test_extract_text_empty():
     assert extract_text({}) == ""
 
 
+def test_extract_text_messageparam_dataclass():
+    """extract_text handles MessageParam dataclass with text blocks."""
+    from docketeer.prompt import MessageParam, TextBlockParam
+
+    msg = MessageParam(
+        role="user",
+        content=[TextBlockParam(text="hello"), TextBlockParam(text="world")],
+    )
+    assert extract_text(msg) == "hello\nworld"
+
+
+def test_extract_text_messageparam_string():
+    """extract_text handles MessageParam dataclass with string content."""
+    from docketeer.prompt import MessageParam
+
+    msg = MessageParam(role="user", content="hello world")
+    assert extract_text(msg) == "hello world"
+
+
 # -- format_prompt --
 
 
 def test_format_prompt_single_message():
     messages = [{"role": "user", "content": "[21:19] @peps: hello"}]
     assert format_prompt(messages) == "[21:19] @peps: hello"
+
+
+def test_format_prompt_messageparam_dataclass():
+    """format_prompt handles MessageParam dataclass."""
+    from docketeer.prompt import MessageParam
+
+    messages = [
+        MessageParam(role="user", content="hello"),
+        MessageParam(role="assistant", content="hi there"),
+        MessageParam(role="user", content="question"),
+    ]
+    result = format_prompt(messages)
+    assert "hello" in result
+    assert "[assistant] hi there" in result
+    assert "question" in result
 
 
 def test_format_prompt_includes_history_for_new_session():

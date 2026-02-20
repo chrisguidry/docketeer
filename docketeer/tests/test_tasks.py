@@ -5,14 +5,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from zoneinfo import ZoneInfo
 
 import pytest
-from anthropic import AuthenticationError
 
 from docketeer import environment
 from docketeer.brain import APOLOGY
+from docketeer.brain.backend import BackendAuthError
 from docketeer.prompt import BrainResponse, MessageContent
 from docketeer.tasks import docketeer_tasks, nudge, nudge_every, parse_every
 
-from .conftest import make_api_connection_error, make_auth_error
+from .conftest import make_api_connection_error, make_backend_auth_error
 
 
 def test_collection_contains_nudge():
@@ -121,12 +121,12 @@ async def test_nudge_silent_error_logged_only():
 
 
 async def test_nudge_auth_error_propagates():
-    """AuthenticationError propagates from nudge."""
+    """BackendAuthError propagates from nudge."""
     brain = AsyncMock()
-    brain.process.side_effect = make_auth_error()
+    brain.process.side_effect = make_backend_auth_error()
     client = AsyncMock()
 
-    with pytest.raises(AuthenticationError):
+    with pytest.raises(BackendAuthError):
         await nudge(prompt="do stuff", room_id="room123", brain=brain, client=client)
 
 
@@ -332,11 +332,11 @@ async def test_nudge_every_error_silent_still_reschedules():
 
 async def test_nudge_every_auth_error_propagates():
     brain = AsyncMock()
-    brain.process.side_effect = make_auth_error()
+    brain.process.side_effect = make_backend_auth_error()
     client = AsyncMock()
     perpetual = MagicMock()
 
-    with pytest.raises(AuthenticationError):
+    with pytest.raises(BackendAuthError):
         await nudge_every(
             prompt="check",
             every="PT30M",

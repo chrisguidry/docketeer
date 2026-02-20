@@ -40,16 +40,20 @@ async def test_incoming_messages_reconnects_on_disconnect():
 
     ddp1 = AsyncMock()
 
-    async def fake_events_1() -> AsyncGenerator[dict[str, Any], None]:
-        for e in first_events:
+    async def fake_events_1() -> AsyncGenerator[
+        dict[str, Any], None
+    ]:  # pragma: no branch
+        for e in first_events:  # pragma: no branch
             yield e
 
     ddp1.events = fake_events_1
 
     ddp2 = AsyncMock()
 
-    async def fake_events_2() -> AsyncGenerator[dict[str, Any], None]:
-        for e in second_events:
+    async def fake_events_2() -> AsyncGenerator[
+        dict[str, Any], None
+    ]:  # pragma: no branch
+        for e in second_events:  # pragma: no branch
             yield e
 
     ddp2.events = fake_events_2
@@ -67,7 +71,7 @@ async def test_incoming_messages_reconnects_on_disconnect():
 
     results = []
     with patch("asyncio.sleep", new_callable=AsyncMock):
-        async for msg in client.incoming_messages():
+        async for msg in client.incoming_messages():  # pragma: no branch
             results.append(msg)
             if len(results) == 2:
                 break
@@ -84,7 +88,9 @@ async def test_incoming_messages_backoff_on_reconnect_failure():
 
     ddp = AsyncMock()
 
-    async def fake_events() -> AsyncGenerator[dict[str, Any], None]:
+    async def fake_events() -> AsyncGenerator[
+        dict[str, Any], None
+    ]:  # pragma: no branch
         yield _make_event("m1", "hello")
 
     ddp.events = fake_events
@@ -111,7 +117,7 @@ async def test_incoming_messages_backoff_on_reconnect_failure():
     results = []
     with patch("asyncio.sleep", side_effect=tracking_sleep):
         try:
-            async for msg in client.incoming_messages():
+            async for msg in client.incoming_messages():  # pragma: no branch
                 results.append(msg)
         except asyncio.CancelledError:
             pass
@@ -127,7 +133,9 @@ async def test_incoming_messages_calls_on_history():
 
     ddp = AsyncMock()
 
-    async def fake_events() -> AsyncGenerator[dict[str, Any], None]:
+    async def fake_events() -> AsyncGenerator[
+        dict[str, Any], None
+    ]:  # pragma: no branch
         yield _make_event("m1", "hello")
 
     ddp.events = fake_events
@@ -156,7 +164,9 @@ async def test_incoming_messages_calls_on_history():
         patch.object(client, "list_rooms", return_value=rooms),
         patch.object(client, "fetch_messages", return_value=history_msgs),
     ):
-        async for _msg in client.incoming_messages(on_history=record_history):
+        async for _msg in client.incoming_messages(
+            on_history=record_history
+        ):  # pragma: no branch
             break
 
     assert len(history_calls) == 1
@@ -172,7 +182,9 @@ async def test_incoming_messages_updates_high_water():
     ts = {"$date": int(datetime(2026, 2, 10, 12, 0, tzinfo=UTC).timestamp() * 1000)}
     ddp = AsyncMock()
 
-    async def fake_events() -> AsyncGenerator[dict[str, Any], None]:
+    async def fake_events() -> AsyncGenerator[
+        dict[str, Any], None
+    ]:  # pragma: no branch
         yield {
             "msg": "changed",
             "fields": {
@@ -193,7 +205,7 @@ async def test_incoming_messages_updates_high_water():
 
     assert client._high_water is None
     with patch.object(client, "_after_connect", new_callable=AsyncMock):
-        async for _msg in client.incoming_messages():
+        async for _msg in client.incoming_messages():  # pragma: no branch
             break
     assert client._high_water == datetime(2026, 2, 10, 12, 0, tzinfo=UTC)
 
@@ -203,7 +215,9 @@ async def test_prime_history_list_rooms_failure():
     client = RocketChatClient()
     calls: list[object] = []
 
-    async def record(room: object, msgs: object) -> None:
+    async def record(
+        room: object, msgs: object
+    ) -> None:  # pragma: no cover - never called
         calls.append(room)
 
     with patch.object(client, "list_rooms", side_effect=ConnectionError("boom")):
@@ -218,7 +232,9 @@ async def test_prime_history_fetch_messages_failure():
     rooms = [RoomInfo(room_id="r1", kind=RoomKind.direct, members=["bot", "alice"])]
     calls: list[object] = []
 
-    async def record(room: RoomInfo, msgs: object) -> None:
+    async def record(
+        room: RoomInfo, msgs: object
+    ) -> None:  # pragma: no cover - never called
         calls.append(room)
 
     with (
@@ -299,7 +315,9 @@ async def test_prime_history_empty_messages_skipped():
     rooms = [RoomInfo(room_id="r1", kind=RoomKind.direct, members=["bot", "alice"])]
     calls: list[object] = []
 
-    async def record(room: RoomInfo, msgs: object) -> None:
+    async def record(
+        room: RoomInfo, msgs: object
+    ) -> None:  # pragma: no cover - never called
         calls.append(room)
 
     with (

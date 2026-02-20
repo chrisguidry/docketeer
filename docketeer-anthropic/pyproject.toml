@@ -1,7 +1,7 @@
 [project]
-name = "docketeer-git"
+name = "docketeer-anthropic"
 dynamic = ["version"]
-description = "Git-backed workspace backup plugin for Docketeer"
+description = "Anthropic inference backend plugin for Docketeer"
 readme = "README.md"
 authors = [
     { name = "Chris Guidry", email = "guid@omg.lol" }
@@ -12,12 +12,11 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
-    "Topic :: System :: Archiving :: Backup",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
+    "anthropic",
     "docketeer",
-    "pydocket",
 ]
 
 [project.urls]
@@ -25,8 +24,8 @@ Homepage = "https://github.com/chrisguidry/docketeer"
 Repository = "https://github.com/chrisguidry/docketeer"
 Issues = "https://github.com/chrisguidry/docketeer/issues"
 
-[project.entry-points."docketeer.tasks"]
-git = "docketeer_git:task_collections"
+[project.entry-points."docketeer.inference"]
+anthropic = "docketeer_anthropic:create_backend"
 
 [build-system]
 requires = ["hatchling", "hatch-vcs"]
@@ -37,20 +36,21 @@ source = "vcs"
 raw-options.root = ".."
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/docketeer_git"]
+packages = ["src/docketeer_anthropic"]
 
 [tool.uv.sources]
 docketeer = { workspace = true }
 
 [tool.pytest_env]
 DOCKETEER_ANTHROPIC_API_KEY = "test-key"
+DOCKETEER_ANTHROPIC_BACKEND = "api"
 
 [tool.pytest.ini_options]
 minversion = "9.0"
 timeout = 1
 addopts = [
     "--import-mode=importlib",
-    "--cov=docketeer_git",
+    "--cov=docketeer_anthropic",
     "--cov=tests",
     "--cov-branch",
     "--cov-report=term-missing",

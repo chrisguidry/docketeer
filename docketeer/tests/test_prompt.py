@@ -8,6 +8,7 @@ import pytest
 
 from docketeer.prompt import (
     CacheControl,
+    MessageParam,
     SystemBlock,
     _load_prompt_providers,
     build_dynamic_context,
@@ -111,14 +112,14 @@ def test_build_system_blocks_provider_blocks_after_stable(
     assert blocks[-1].cache_control == CacheControl()
 
 
-def test_system_block_to_api_dict():
+def test_system_block_to_dict():
     block = SystemBlock(text="hello")
-    assert block.to_api_dict() == {"type": "text", "text": "hello"}
+    assert block.to_dict() == {"type": "text", "text": "hello"}
 
 
-def test_system_block_to_api_dict_with_cache_control():
+def test_system_block_to_dict_with_cache_control():
     block = SystemBlock(text="hello", cache_control=CacheControl())
-    api_dict = block.to_api_dict()
+    api_dict = block.to_dict()
     assert api_dict == {
         "type": "text",
         "text": "hello",
@@ -207,3 +208,88 @@ def test_format_message_time_two_unit_max():
     t2 = datetime(2026, 2, 7, 11, 15, 30, tzinfo=UTC)
     result = format_message_time(t2, t1)
     assert result == "+1d 1h"
+
+
+def test_message_param_to_dict_str_content():
+    msg = MessageParam(role="user", content="hello")
+    assert msg.to_dict() == {"role": "user", "content": "hello"}
+
+
+def test_message_param_to_dict_list_with_to_dict():
+    from docketeer.prompt import TextBlockParam
+
+    msg = MessageParam(role="user", content=[TextBlockParam(text="hello")])
+    result = msg.to_dict()
+    assert result["role"] == "user"
+    assert result["content"] == [{"type": "text", "text": "hello"}]
+
+
+def test_message_param_to_dict_list_with_dict():
+    msg = MessageParam(role="user", content=[{"type": "text", "text": "hello"}])
+    result = msg.to_dict()
+    assert result["role"] == "user"
+    assert result["content"] == [{"type": "text", "text": "hello"}]
+
+
+def test_message_param_to_dict_list_with_other():
+    msg = MessageParam(role="user", content=["plain string"])
+    result = msg.to_dict()
+    assert result["role"] == "user"
+    assert result["content"] == [{"type": "text", "text": "plain string"}]
+
+
+def test_message_param_to_dict_list_with_model_dump():
+    """Test that objects with model_dump() but not to_dict() are handled."""
+
+    class ModelWithDump:
+        def model_dump(self) -> dict[str, str]:
+            return {"type": "custom", "value": "test"}
+
+    msg = MessageParam(role="user", content=[ModelWithDump()])
+    result = msg.to_dict()
+    assert result["role"] == "user"
+    assert result["content"] == [{"type": "custom", "value": "test"}]
+
+
+def test_message_param_to_dict_list_with_anthropic_block():
+    """Test that anthropic blocks (which have to_dict) are handled."""
+    from anthropic.types import TextBlock
+
+    block = TextBlock(type="text", text="from anthropic")
+    msg = MessageParam(role="user", content=[block])
+    result = msg.to_dict()
+    assert result["role"] == "user"
+    assert result["content"] == [{"type": "text", "text": "from anthropic"}]
+
+
+def test_text_block_param_to_dict():
+    from docketeer.prompt import TextBlockParam
+
+    block = TextBlockParam(text="hello")
+    assert block.to_dict() == {"type": "text", "text": "hello"}
+
+
+def test_image_block_param_to_dict():
+    from docketeer.prompt import Base64ImageSourceParam, ImageBlockParam
+
+    source = Base64ImageSourceParam(media_type="image/png", data="abc123")
+    block = ImageBlockParam(source=source)
+    result = block.to_dict()
+    assert result == {
+        "type": "image",
+        "source": {"type": "base64", "media_type": "image/png", "data": "abc123"},
+    }
+
+
+def test_base64_image_source_param_to_dict():
+    from docketeer.prompt import Base64ImageSourceParam
+
+    source = Base64ImageSourceParam(media_type="image/jpeg", data="xyz789")
+    result = source.to_dict()
+    assert result == {"type": "base64", "media_type": "image/jpeg", "data": "xyz789"}
+
+
+def test_message_param_to_dict_fallback():
+    msg = MessageParam(role="user", content=b"bytes")  # type: ignore[arg-type]
+    result = msg.to_dict()
+    assert result == {"role": "user", "content": b"bytes"}

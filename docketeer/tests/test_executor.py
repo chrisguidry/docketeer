@@ -112,3 +112,13 @@ def test_running_process_kill_already_exited():
 def test_command_executor_cannot_be_instantiated():
     with pytest.raises(TypeError):
         CommandExecutor()
+
+
+async def test_running_process_wait_for_exit():
+    proc = AsyncMock()
+    proc.wait.return_value = None
+    proc.returncode = 42
+    rp = RunningProcess(proc)
+    result = await rp.wait_for_exit()
+    assert result == 42
+    proc.wait.assert_called_once()

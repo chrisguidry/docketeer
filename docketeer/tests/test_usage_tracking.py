@@ -5,9 +5,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from anthropic.types import Usage
-
 from docketeer.audit import record_usage
+from docketeer.brain.backend import Usage
 
 
 @patch("docketeer.audit.datetime")

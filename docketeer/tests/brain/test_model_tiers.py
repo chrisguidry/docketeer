@@ -130,3 +130,20 @@ async def test_thinking_not_sent_without_flag(
     from anthropic import omit
 
     assert fake_messages.last_kwargs["thinking"] is omit
+
+
+def test_create_backend_no_plugin_raises():
+    from unittest.mock import patch
+
+    from docketeer.brain.core import _create_backend
+
+    with patch("docketeer.brain.core.discover_one", return_value=None):
+        with pytest.raises(RuntimeError, match="No inference backend plugin installed"):
+            _create_backend()
+
+
+def test_create_backend_with_plugin():
+    from docketeer.brain.core import _create_backend
+
+    backend = _create_backend()
+    assert backend is not None

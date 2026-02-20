@@ -5,7 +5,7 @@ import logging
 from datetime import UTC, datetime
 from pathlib import Path
 
-import anthropic
+from docketeer.brain.backend import Usage
 
 log = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ def audit_log(
         f.write(json.dumps(record) + "\n")
 
 
-def record_usage(usage_dir: Path, model: str, usage: anthropic.types.Usage) -> None:
+def record_usage(usage_dir: Path, model: str, usage: Usage) -> None:
     """Append a token usage record to today's JSONL file."""
     now = datetime.now(UTC)
     usage_dir.mkdir(parents=True, exist_ok=True)
@@ -47,7 +47,7 @@ def record_usage(usage_dir: Path, model: str, usage: anthropic.types.Usage) -> N
         f.write(json.dumps(record) + "\n")
 
 
-def log_usage(model: str, usage: anthropic.types.Usage) -> None:
+def log_usage(model: str, usage: Usage) -> None:
     """Log token usage including cache stats."""
     u = usage
     cr = u.cache_read_input_tokens or 0

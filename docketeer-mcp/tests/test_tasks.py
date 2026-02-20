@@ -93,7 +93,9 @@ async def test_mcp_oauth_refresh_no_access_token():
         )
 
     # Should not store an empty access token
-    for call in mock_vault.store.call_args_list:
+    for call in (
+        mock_vault.store.call_args_list
+    ):  # pragma: no cover - empty when no access_token
         assert call.args[0] != "mcp/api/token" or call.args[1] != ""
 
 

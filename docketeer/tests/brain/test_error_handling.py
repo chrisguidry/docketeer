@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from docketeer.brain import APOLOGY, BackendAuthError, Brain
-from docketeer.prompt import MessageContent
+from docketeer.prompt import MessageContent, MessageParam
 
 from ..conftest import (
     FakeMessage,
@@ -24,7 +24,7 @@ async def test_process_request_too_large_compacts_and_retries(
     """413 triggers compaction and a successful retry."""
     for i in range(10):
         brain._conversations["room1"].append(
-            {"role": "user" if i % 2 == 0 else "assistant", "content": f"msg {i}"}
+            MessageParam(role="user" if i % 2 == 0 else "assistant", content=f"msg {i}")
         )
 
     call_count = 0
@@ -51,7 +51,7 @@ async def test_process_request_too_large_persistent(brain: Brain, fake_messages:
     """413 persists after compaction — returns apology."""
     for i in range(10):
         brain._conversations["room1"].append(
-            {"role": "user" if i % 2 == 0 else "assistant", "content": f"msg {i}"}
+            MessageParam(role="user" if i % 2 == 0 else "assistant", content=f"msg {i}")
         )
 
     def stream_always_413(**kwargs: Any) -> Never:

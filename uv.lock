@@ -7,6 +7,7 @@ members = [
     "docketeer",
     "docketeer-1password",
     "docketeer-agentskills",
+    "docketeer-anthropic",
     "docketeer-bubblewrap",
     "docketeer-git",
     "docketeer-mcp",
@@ -22,6 +23,7 @@ dev = [
     { name = "docketeer", editable = "docketeer" },
     { name = "docketeer-1password", editable = "docketeer-1password" },
     { name = "docketeer-agentskills", editable = "docketeer-agentskills" },
+    { name = "docketeer-anthropic", editable = "docketeer-anthropic" },
     { name = "docketeer-bubblewrap", editable = "docketeer-bubblewrap" },
     { name = "docketeer-git", editable = "docketeer-git" },
     { name = "docketeer-mcp", editable = "docketeer-mcp" },
@@ -470,7 +472,6 @@ wheels = [
 name = "docketeer"
 source = { editable = "docketeer" }
 dependencies = [
-    { name = "anthropic" },
     { name = "croniter" },
     { name = "mcp" },
     { name = "pydocket" },
@@ -480,7 +481,6 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "anthropic" },
     { name = "croniter" },
     { name = "mcp" },
     { name = "pydocket", specifier = ">=0.17.8" },
@@ -510,6 +510,20 @@ dependencies = [
 requires-dist = [
     { name = "docketeer", editable = "docketeer" },
     { name = "pyyaml" },
+]
+
+[[package]]
+name = "docketeer-anthropic"
+source = { editable = "docketeer-anthropic" }
+dependencies = [
+    { name = "anthropic" },
+    { name = "docketeer" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "anthropic" },
+    { name = "docketeer", editable = "docketeer" },
 ]
 
 [[package]]

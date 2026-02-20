@@ -159,6 +159,24 @@ async def test_call_tool(
     assert content[0]["text"] == "Hello, World!"
 
 
+async def test_call_tool_with_multiple_args(
+    registry_with_tools: ToolRegistry,
+    tool_context: ToolContext,
+    audit_path: Path,
+):
+    server = create_mcp_server(registry_with_tools, tool_context, audit_path)
+    req = _jsonrpc_request("tools/call", {"name": "add", "arguments": {"a": 3, "b": 5}})
+
+    responses = await _run_server_with_requests(server, [req])
+
+    call_response = responses[1]
+    assert "result" in call_response
+    content = call_response["result"]["content"]
+    assert len(content) == 1
+    assert content[0]["type"] == "text"
+    assert content[0]["text"] == "8"
+
+
 async def test_call_tool_writes_audit_log(
     registry_with_tools: ToolRegistry,
     tool_context: ToolContext,

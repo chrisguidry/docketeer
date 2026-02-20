@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING
 
 import anthropic
 from anthropic.types import (
-    MessageParam,
     TextBlock,
     ThinkingConfigEnabledParam,
     ToolResultBlockParam,
@@ -18,7 +17,8 @@ from anthropic.types import (
 )
 
 from docketeer.audit import audit_log, log_usage, record_usage
-from docketeer.prompt import CacheControl, SystemBlock
+from docketeer.brain.backend import Usage
+from docketeer.prompt import CacheControl, MessageParam, SystemBlock
 from docketeer.tools import ToolContext, ToolDefinition, registry
 
 if TYPE_CHECKING:
@@ -65,8 +65,14 @@ async def agentic_loop(
             thinking=thinking,
         )
 
-        log_usage(model.model_id, response.usage)
-        record_usage(usage_path, model.model_id, response.usage)
+        usage = Usage(
+            input_tokens=response.usage.input_tokens,
+            output_tokens=response.usage.output_tokens,
+            cache_read_input_tokens=response.usage.cache_read_input_tokens or 0,
+            cache_creation_input_tokens=response.usage.cache_creation_input_tokens or 0,
+        )
+        log_usage(model.model_id, usage)
+        record_usage(usage_path, model.model_id, usage)
 
         tool_blocks = [b for b in response.content if isinstance(b, ToolUseBlock)]
         if tool_blocks:
@@ -109,8 +115,14 @@ async def agentic_loop(
             on_first_text=callbacks_on_first_text,
             thinking=thinking,
         )
-        log_usage(model.model_id, response.usage)
-        record_usage(usage_path, model.model_id, response.usage)
+        usage = Usage(
+            input_tokens=response.usage.input_tokens,
+            output_tokens=response.usage.output_tokens,
+            cache_read_input_tokens=response.usage.cache_read_input_tokens or 0,
+            cache_creation_input_tokens=response.usage.cache_creation_input_tokens or 0,
+        )
+        log_usage(model.model_id, usage)
+        record_usage(usage_path, model.model_id, usage)
 
     return build_reply(response, used_tools, rounds)
 
@@ -131,13 +143,19 @@ async def stream_message(
         if thinking and model.thinking_budget
         else anthropic.omit
     )
+    serialized_messages = [
+        msg.to_dict() if callable(getattr(msg, "to_dict", None)) else msg
+        for msg in messages
+    ]
+    serialized_system = [b.to_dict() for b in system]
+    serialized_tools = [t.to_dict() for t in tools]
     async with client.messages.stream(
         model=model.model_id,
         max_tokens=model.max_output_tokens,
         thinking=thinking_config,
-        system=[b.to_api_dict() for b in system],
-        messages=messages,
-        tools=[t.to_api_dict() for t in tools],
+        system=serialized_system,  # type: ignore[arg-type]
+        messages=serialized_messages,  # type: ignore[arg-type]
+        tools=serialized_tools,  # type: ignore[arg-type]
     ) as stream:
         if on_first_text:
             async for _text in stream.text_stream:
@@ -183,13 +201,13 @@ def update_cache_breakpoints(
 ) -> None:
     """Move the cache breakpoint to the latest tool result."""
     for prev_msg in messages:
-        if prev_msg["role"] != "user" or not isinstance(prev_msg["content"], list):
+        if prev_msg.role != "user" or not isinstance(prev_msg.content, list):
             continue
-        for block in prev_msg["content"]:
+        for block in prev_msg.content:
             if isinstance(block, dict) and block.get("type") == "tool_result":
-                block.pop("cache_control", None)  # type: ignore[misc]
+                block.pop("cache_control", None)
 
-    tool_results[-1]["cache_control"] = CacheControl().to_api_dict()
+    tool_results[-1]["cache_control"] = CacheControl().to_dict()  # type: ignore[typeddict-item]
 
 
 def build_reply(

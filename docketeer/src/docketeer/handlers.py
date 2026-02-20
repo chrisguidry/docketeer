@@ -3,9 +3,8 @@
 import asyncio
 import logging
 
-from anthropic import AuthenticationError, PermissionDeniedError
-
 from docketeer.brain import APOLOGY, CHAT_MODEL, Brain, ProcessCallbacks
+from docketeer.brain.backend import BackendAuthError
 from docketeer.chat import ChatClient, IncomingMessage, RoomInfo, RoomMessage
 from docketeer.prompt import BrainResponse, MessageContent
 from docketeer.tools import registry
@@ -49,7 +48,7 @@ def _check_handle_result(task: asyncio.Task[None]) -> None:
     exc = task.exception()
     if exc is None:
         return
-    if isinstance(exc, (AuthenticationError, PermissionDeniedError)):
+    if isinstance(exc, BackendAuthError):
         raise exc
     log.exception("Unhandled error processing message", exc_info=exc)
 
@@ -102,7 +101,7 @@ async def handle_message(
             model=CHAT_MODEL,
             room_context=room_ctx,
         )
-    except (AuthenticationError, PermissionDeniedError):
+    except BackendAuthError:
         raise
     except Exception:
         log.exception(

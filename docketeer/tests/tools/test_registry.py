@@ -24,7 +24,7 @@ def test_tool_registration():
 
         name: person to greet
         """
-        return f"Hello {name}"
+        return f"Hello {name}"  # pragma: no cover
 
     assert "greet" in reg._tools
     assert reg._schemas["greet"].name == "greet"
@@ -37,12 +37,12 @@ def test_definitions_returns_all():
     @reg.tool
     async def tool_a(ctx: ToolContext) -> str:
         """Tool A."""
-        return "a"
+        return "a"  # pragma: no cover
 
     @reg.tool
     async def tool_b(ctx: ToolContext) -> str:
         """Tool B."""
-        return "b"
+        return "b"  # pragma: no cover
 
     defs = reg.definitions()
     assert len(defs) == 2
@@ -91,7 +91,7 @@ def test_schema_from_hints_types():
         active: is active
         score: the score
         """
-        return ""
+        return ""  # pragma: no cover
 
     schema = _schema_from_hints(fn)
     assert schema["properties"]["name"]["type"] == "string"
@@ -106,7 +106,7 @@ def test_schema_from_hints_list_of_strings():
 
         items: the items
         """
-        return ""
+        return ""  # pragma: no cover
 
     schema = _schema_from_hints(fn)
     assert schema["properties"]["items"]["type"] == "array"
@@ -119,7 +119,7 @@ def test_schema_from_hints_optional_dict():
 
         env: environment variables
         """
-        return ""
+        return ""  # pragma: no cover
 
     schema = _schema_from_hints(fn)
     assert schema["properties"]["env"]["type"] == "object"
@@ -133,7 +133,7 @@ def test_schema_from_hints_dict_of_strings():
 
         env: environment variables
         """
-        return ""
+        return ""  # pragma: no cover
 
     schema = _schema_from_hints(fn)
     assert schema["properties"]["env"]["type"] == "object"
@@ -145,7 +145,7 @@ def test_schema_from_hints_required_vs_default():
         ctx: ToolContext, required_param: str, optional_param: str = "default"
     ) -> str:
         """Test."""
-        return ""
+        return ""  # pragma: no cover
 
     schema = _schema_from_hints(fn)
     assert "required_param" in schema["required"]
@@ -156,7 +156,7 @@ def test_schema_from_hints_required_vs_default():
 def test_schema_from_hints_skips_ctx():
     async def fn(ctx: ToolContext, name: str) -> str:
         """Test."""
-        return ""
+        return ""  # pragma: no cover
 
     schema = _schema_from_hints(fn)
     assert "ctx" not in schema["properties"]
@@ -226,7 +226,7 @@ def test_tool_registration_with_emoji():
     @reg.tool(emoji=":mag:")
     async def search(ctx: ToolContext, query: str) -> str:
         """Search."""
-        return ""
+        return ""  # pragma: no cover
 
     assert reg._schemas["search"].emoji == ":mag:"
 
@@ -237,7 +237,7 @@ def test_tool_registration_without_emoji():
     @reg.tool
     async def plain(ctx: ToolContext) -> str:
         """Plain."""
-        return ""
+        return ""  # pragma: no cover
 
     assert reg._schemas["plain"].emoji == ""
 
@@ -248,7 +248,7 @@ def test_emoji_for_registered_tool():
     @reg.tool(emoji=":lock:")
     async def my_tool(ctx: ToolContext) -> str:
         """Tool."""
-        return ""
+        return ""  # pragma: no cover
 
     assert reg.emoji_for("my_tool") == ":lock:"
 
@@ -264,7 +264,7 @@ def test_emoji_for_mcp_prefixed_name():
     @reg.tool(emoji=":open_file_folder:")
     async def list_files(ctx: ToolContext) -> str:
         """List files."""
-        return ""
+        return ""  # pragma: no cover
 
     assert reg.emoji_for("mcp__docketeer__list_files") == ":open_file_folder:"
 

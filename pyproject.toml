@@ -3,6 +3,7 @@ members = [
     "docketeer",
     "docketeer-1password",
     "docketeer-agentskills",
+    "docketeer-anthropic",
     "docketeer-bubblewrap",
     "docketeer-git",
     "docketeer-mcp",
@@ -17,6 +18,7 @@ dev = [
     "docketeer",
     "docketeer-1password",
     "docketeer-agentskills",
+    "docketeer-anthropic",
     "docketeer-bubblewrap",
     "docketeer-git",
     "docketeer-mcp",
@@ -42,6 +44,7 @@ dev = [
 docketeer = { workspace = true }
 docketeer-1password = { workspace = true }
 docketeer-agentskills = { workspace = true }
+docketeer-anthropic = { workspace = true }
 docketeer-bubblewrap = { workspace = true }
 docketeer-git = { workspace = true }
 docketeer-mcp = { workspace = true }

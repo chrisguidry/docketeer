@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 import anthropic
 from anthropic import APIError, AuthenticationError, PermissionDeniedError
 from anthropic._exceptions import RequestTooLargeError
-from anthropic.types import MessageParam, TextBlock
+from anthropic.types import TextBlock
 
 from docketeer.brain.backend import (
     BackendAuthError,
@@ -17,7 +17,7 @@ from docketeer.brain.backend import (
     ContextTooLargeError,
     InferenceBackend,
 )
-from docketeer.brain.loop import agentic_loop
+from docketeer_anthropic.loop import agentic_loop
 
 if TYPE_CHECKING:
     from docketeer.brain.core import InferenceModel, ProcessCallbacks
@@ -76,11 +76,14 @@ class AnthropicAPIBackend(InferenceBackend):
         messages: list,
     ) -> int:
         try:
+            serialized_messages = [
+                msg.to_dict() if hasattr(msg, "to_dict") else msg for msg in messages
+            ]
             result = await self._client.messages.count_tokens(
                 model=model_id,
-                system=[b.to_api_dict() for b in system],
-                tools=[t.to_api_dict() for t in tools],
-                messages=messages,
+                system=[self._system_to_dict(b) for b in system],  # type: ignore[arg-type]
+                tools=[self._tool_to_dict(t) for t in tools],  # type: ignore[arg-type]
+                messages=serialized_messages,
             )
         except APIError:
             log.warning("Token counting failed", exc_info=True)
@@ -94,14 +97,29 @@ class AnthropicAPIBackend(InferenceBackend):
         max_tokens: int = 1024,
     ) -> str:
         from docketeer.brain.core import MODELS
+        from docketeer.prompt import MessageParam as DocketeerMessageParam
 
         try:
             response = await self._client.messages.create(
                 model=MODELS["haiku"].model_id,
                 max_tokens=max_tokens,
-                messages=[MessageParam(role="user", content=prompt)],
+                messages=[DocketeerMessageParam(role="user", content=prompt).to_dict()],  # type: ignore[arg-type]
             )
         except APIError as exc:
             raise BackendError(str(exc)) from exc
         block = response.content[0]
         return block.text if isinstance(block, TextBlock) else str(block)
+
+    def _system_to_dict(self, block: SystemBlock) -> dict:
+        """Convert SystemBlock to dict format."""
+        d = {"type": "text", "text": block.text}
+        if block.cache_control:
+            d["cache_control"] = {"type": "ephemeral", "ttl": block.cache_control.ttl}
+        return d
+
+    def _tool_to_dict(self, tool: ToolDefinition) -> dict:
+        """Convert ToolDefinition to dict format."""
+        try:
+            return tool.to_api_dict()  # type: ignore[union-attr]
+        except AttributeError:
+            return {"name": tool.name, "input_schema": tool.input_schema}
