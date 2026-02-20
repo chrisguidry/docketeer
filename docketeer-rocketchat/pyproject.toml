@@ -47,7 +47,6 @@ docketeer = { workspace = true }
 DOCKETEER_ROCKETCHAT_URL = "http://localhost:3000"
 DOCKETEER_ROCKETCHAT_USERNAME = "testbot"
 DOCKETEER_ROCKETCHAT_PASSWORD = "testpass"
-DOCKETEER_ANTHROPIC_API_KEY = "test-key"
 
 [tool.pytest.ini_options]
 minversion = "9.0"

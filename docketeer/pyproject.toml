@@ -46,11 +46,6 @@ packages = ["src/docketeer"]
 apt-packages = ["bubblewrap", "socat"]
 sysctl = ["kernel.apparmor_restrict_unprivileged_userns=0"]
 
-[tool.pytest_env]
-DOCKETEER_INFERENCE = "anthropic"
-DOCKETEER_ANTHROPIC_BACKEND = "api"
-DOCKETEER_ANTHROPIC_API_KEY = "test-key"
-
 [tool.pytest.ini_options]
 minversion = "9.0"
 timeout = 1

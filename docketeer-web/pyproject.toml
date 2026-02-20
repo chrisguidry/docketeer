@@ -43,7 +43,6 @@ packages = ["src/docketeer_web"]
 docketeer = { workspace = true }
 
 [tool.pytest_env]
-DOCKETEER_ANTHROPIC_API_KEY = "test-key"
 DOCKETEER_BRAVE_API_KEY = "brave-test-key"
 
 [tool.pytest.ini_options]

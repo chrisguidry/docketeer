@@ -145,5 +145,12 @@ def test_create_backend_no_plugin_raises():
 def test_create_backend_with_plugin():
     from docketeer.brain.core import _create_backend
 
-    backend = _create_backend()
-    assert backend is not None
+    with patch.dict(
+        "os.environ",
+        {
+            "DOCKETEER_ANTHROPIC_BACKEND": "api",
+            "DOCKETEER_ANTHROPIC_API_KEY": "test-key",
+        },
+    ):
+        backend = _create_backend()
+        assert backend is not None
