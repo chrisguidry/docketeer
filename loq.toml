@@ -4,5 +4,4 @@ exclude = [
     "**/vendor/**",
     "**/__init__.py",
     "*.lock",
-    "tests/**",
 ]

@@ -22,6 +22,7 @@ from docketeer.brain.compaction import compact_history
 from docketeer.brain.helpers import classify_response, summarize_webpage
 from docketeer.chat import RoomMessage
 from docketeer.executor import CommandExecutor
+from docketeer.people import load_person_context
 from docketeer.plugins import discover_one
 from docketeer.prompt import (
     Base64ImageSourceParam,
@@ -33,7 +34,6 @@ from docketeer.prompt import (
     MessageParam,
     SystemBlock,
     TextBlockParam,
-    build_dynamic_context,
     build_system_blocks,
     ensure_template,
     format_message_time,
@@ -41,6 +41,44 @@ from docketeer.prompt import (
 from docketeer.tools import ToolContext, ToolDefinition, registry
 
 log = logging.getLogger(__name__)
+
+MAX_LOG_CONTENT_LENGTH = 500
+
+
+def _format_message_content(content: str | list) -> str:
+    """Extract and truncate message content for logging."""
+    if isinstance(content, str):
+        text = content
+    elif isinstance(content, list):
+        parts = []
+        for block in content:
+            if hasattr(block, "text"):
+                parts.append(block.text)
+            elif isinstance(block, dict) and block.get("type") == "text":
+                parts.append(block.get("text", ""))
+        text = "\n".join(parts)
+    else:
+        text = str(content)
+
+    if len(text) > MAX_LOG_CONTENT_LENGTH:
+        return text[:MAX_LOG_CONTENT_LENGTH] + "..."
+    return text
+
+
+def _format_message_for_log(msg: MessageParam) -> str:
+    """Format a message for logging (no system prompts)."""
+    content = _format_message_content(msg.content)
+    tool_calls = msg.tool_calls
+
+    if tool_calls:
+        tc_names = [tc.get("function", {}).get("name", "?") for tc in tool_calls]
+        return f"tools={tc_names}: {content[:200]}"
+
+    # For user messages, extract just the actual text (strip @username: prefix)
+    if msg.role == "user" and ": " in content:
+        content = content.split(": ", 1)[1]
+
+    return content
 
 
 @dataclass(frozen=True)
@@ -107,6 +145,7 @@ class Brain:
         )
         self._room_token_counts: dict[str, int] = {}
         self._last_user_timestamp: dict[str, datetime] = {}
+        self._profiles_loaded: dict[str, set[str]] = defaultdict(set)
 
         soul_path = self._workspace / "SOUL.md"
         first_run = not soul_path.exists()
@@ -162,14 +201,7 @@ class Brain:
         """Process a message and return a response with tool call info."""
         tier = model or CHAT_MODEL
 
-        current_time = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M %Z")
         system = build_system_blocks(self._workspace)
-        dynamic_context = build_dynamic_context(
-            current_time,
-            content.username,
-            workspace=self._workspace,
-            room_context=room_context,
-        )
 
         tools = registry.definitions()
         if tools:
@@ -183,8 +215,31 @@ class Brain:
         async with self._conversation_locks[room_id]:
             if self._room_token_counts.get(room_id, 0) > COMPACT_THRESHOLD:
                 await self._compact_history(room_id, system, tools, tier)
+                # Reset profiles after compaction since history is cleared
+                self._profiles_loaded[room_id].clear()
 
-            user_content = self._build_content(content, dynamic_context, room_id)
+            messages = self._conversations[room_id]
+
+            # Layer B: Load user profiles on first message from each user in conversation
+            current_user = content.username
+            if current_user not in self._profiles_loaded[room_id]:
+                profile = load_person_context(self._workspace, current_user)
+                if profile:
+                    profile_message = (
+                        f"## What I know about @{current_user}\n\n{profile}"
+                    )
+                    messages.append(
+                        MessageParam(role="system", content=profile_message)
+                    )
+                    log.info(
+                        "→ BRAIN: [profile %s]: %s",
+                        current_user,
+                        profile[:200] + "..." if len(profile) > 200 else profile,
+                    )
+                self._profiles_loaded[room_id].add(current_user)
+
+            # Layer C: Per-message context - just timestamp, room/thread, @username: message
+            user_content = self._build_content(content, room_id)
             self._conversations[room_id].append(
                 MessageParam(role="user", content=user_content)
             )
@@ -192,6 +247,10 @@ class Brain:
             messages = self._conversations[room_id]
 
             log.debug("Processing message with %d history messages", len(messages))
+
+            # Log the user message being sent to the brain (not system prompt)
+            last_msg = messages[-1]
+            log.info("→ BRAIN: %s", _format_message_for_log(last_msg))
 
             try:
                 reply = await self._backend.run_agentic_loop(
@@ -233,6 +292,7 @@ class Brain:
                 self._conversations[room_id].append(
                     MessageParam(role="assistant", content=reply)
                 )
+                log.info("← BRAIN: %s", reply)
 
             tokens = await self._measure_context(room_id, system, tools, tier)
             log.info(
@@ -242,7 +302,6 @@ class Brain:
                 room_id,
             )
 
-            log.debug("Response: %s", reply[:100])
             return BrainResponse(text=reply)
 
     async def _measure_context(
@@ -295,14 +354,10 @@ class Brain:
     def _build_content(
         self,
         content: MessageContent,
-        dynamic_context: str = "",
         room_id: str = "",
     ) -> list[ContentBlockParam] | str:
         """Build content blocks for Claude."""
         blocks: list[ContentBlockParam] = []
-
-        if dynamic_context:
-            blocks.append(TextBlockParam(type="text", text=dynamic_context))
 
         id_tag = f"[{content.message_id}] " if content.message_id else ""
         ts_tag = ""
