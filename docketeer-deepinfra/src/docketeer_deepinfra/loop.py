@@ -76,11 +76,18 @@ async def agentic_loop(
         )
 
         # Log usage
+        cached_tokens = 0
+        if response.usage and response.usage.prompt_tokens_details:
+            # Handle both real PromptTokensDetails and mock objects
+            cached_tokens_attr = response.usage.prompt_tokens_details.cached_tokens
+            if isinstance(cached_tokens_attr, int):
+                cached_tokens = cached_tokens_attr
+
         usage = Usage(
             input_tokens=response.usage.prompt_tokens if response.usage else 0,
             output_tokens=response.usage.completion_tokens if response.usage else 0,
-            cache_read_input_tokens=0,
-            cache_creation_input_tokens=0,
+            cache_read_input_tokens=cached_tokens,
+            cache_creation_input_tokens=0,  # Cache creation tracked separately if available
         )
         log_usage(model.model_id, usage)
         record_usage(usage_path, model.model_id, usage)
@@ -159,10 +166,16 @@ async def agentic_loop(
             on_first_text=callbacks_on_first_text,
             default_model=default_model,
         )
+        cached_tokens = 0
+        if response.usage and response.usage.prompt_tokens_details:
+            cached_tokens_attr = response.usage.prompt_tokens_details.cached_tokens
+            if isinstance(cached_tokens_attr, int):
+                cached_tokens = cached_tokens_attr
+
         usage = Usage(
             input_tokens=response.usage.prompt_tokens if response.usage else 0,
             output_tokens=response.usage.completion_tokens if response.usage else 0,
-            cache_read_input_tokens=0,
+            cache_read_input_tokens=cached_tokens,
             cache_creation_input_tokens=0,
         )
         log_usage(model.model_id, usage)
@@ -325,12 +338,17 @@ def _serialize_messages(
             msg_dict["content"] = msg.content
         elif isinstance(msg.content, list):
             # Normal content list
-            msg_dict["content"] = [
-                b.to_dict()
-                if hasattr(b, "to_dict")
-                else (b if isinstance(b, dict) else {"type": "text", "text": str(b)})
-                for b in msg.content
-            ]
+            serialized_content = []
+            for b in msg.content:
+                if hasattr(b, "to_dict"):
+                    serialized_content.append(b.to_dict())
+                elif isinstance(b, dict):
+                    serialized_content.append(b)
+                else:
+                    serialized_content.append(  # pragma: no cover
+                        {"type": "text", "text": str(b)}
+                    )
+            msg_dict["content"] = serialized_content
         else:
             msg_dict["content"] = (
                 str(msg.content) if msg.content else ""
