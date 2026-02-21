@@ -1,5 +1,6 @@
 """Typed environment variable helpers with DOCKETEER_ prefix."""
 
+import logging
 import os
 import re
 from datetime import UTC, datetime, timedelta, tzinfo
@@ -79,6 +80,31 @@ def _parse_iso8601_duration(value: str) -> timedelta:
     minutes = int(m.group(3) or 0)
     seconds = int(m.group(4) or 0)
     return timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds)
+
+
+def get_log_level(name: str, default: int) -> int:
+    """Read DOCKETEER_{name} as a logging level constant.
+
+    Raises ValueError for invalid log level names.
+    """
+    level_map = {
+        "DEBUG": logging.DEBUG,
+        "INFO": logging.INFO,
+        "WARNING": logging.WARNING,
+        "ERROR": logging.ERROR,
+        "CRITICAL": logging.CRITICAL,
+    }
+    raw = os.environ.get(f"{_PREFIX}{name}")
+    if raw is None:
+        return default
+
+    level = raw.upper()
+    if level not in level_map:
+        raise ValueError(
+            f"Invalid log level: {raw}. Must be one of: {', '.join(level_map.keys())}"
+        )
+
+    return level_map[level]
 
 
 def local_timezone() -> tzinfo:

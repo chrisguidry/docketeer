@@ -16,6 +16,7 @@ from croniter import croniter
 from docket import Docket, Worker
 
 from docketeer import environment, tasks
+from docketeer import logging as docketeer_logging
 from docketeer.brain import Brain
 from docketeer.chat import (
     ChatClient,
@@ -38,9 +39,7 @@ from docketeer.tasks import parse_every
 from docketeer.tools import ToolContext, registry
 from docketeer.vault import discover_vault
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s"
-)
+docketeer_logging.configure_logging()
 log = logging.getLogger(__name__)
 
 DOCKET_URL = environment.get_str("DOCKET_URL", "redis://localhost:6379/0")
