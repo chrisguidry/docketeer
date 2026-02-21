@@ -89,9 +89,6 @@ class ChatClient(ABC):
     async def __aexit__(self, *exc: object) -> None: ...
 
     @abstractmethod
-    async def subscribe_to_my_messages(self) -> None: ...
-
-    @abstractmethod
     def incoming_messages(
         self,
         on_history: OnHistoryCallback | None = None,

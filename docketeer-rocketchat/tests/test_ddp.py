@@ -232,6 +232,57 @@ async def test_receiver_connection_closed_exception(ddp_server: Any):
         assert events == []
 
 
+async def test_receiver_logs_ready(ddp_server: Any):
+    """A 'ready' message is logged and not queued as an event."""
+
+    async def handler(ws: ServerConnection) -> None:
+        try:
+            async for raw in ws:  # pragma: no branch
+                msg = json.loads(raw)
+                if msg.get("msg") == "connect":  # pragma: no branch
+                    await ws.send(json.dumps({"msg": "connected", "session": "s1"}))
+                    await ws.send(json.dumps({"msg": "ready", "subs": ["sub-1"]}))
+                    await ws.send(json.dumps({"msg": "changed", "id": "ev1"}))
+                    return
+        except websockets.ConnectionClosed:  # pragma: no cover
+            pass
+
+    client, _ = await ddp_server(handler)
+    async with client:
+        events = []
+        async for event in client.events():
+            events.append(event)
+        # ready should not appear as an event; changed should
+        assert all(e.get("msg") != "ready" for e in events)
+        assert any(e.get("id") == "ev1" for e in events)
+
+
+async def test_receiver_logs_nosub(ddp_server: Any):
+    """A 'nosub' message is logged and not queued as an event."""
+
+    async def handler(ws: ServerConnection) -> None:
+        try:
+            async for raw in ws:  # pragma: no branch
+                msg = json.loads(raw)
+                if msg.get("msg") == "connect":  # pragma: no branch
+                    await ws.send(json.dumps({"msg": "connected", "session": "s1"}))
+                    await ws.send(
+                        json.dumps({"msg": "nosub", "id": "bad-sub", "error": "nope"})
+                    )
+                    await ws.send(json.dumps({"msg": "changed", "id": "ev1"}))
+                    return
+        except websockets.ConnectionClosed:  # pragma: no cover
+            pass
+
+    client, _ = await ddp_server(handler)
+    async with client:
+        events = []
+        async for event in client.events():
+            events.append(event)
+        assert all(e.get("msg") != "nosub" for e in events)
+        assert any(e.get("id") == "ev1" for e in events)
+
+
 async def test_connect_ignores_unrelated_messages(ddp_server: Any):
     """Connect loop iterates past messages that aren't 'connected' or 'failed'."""
 

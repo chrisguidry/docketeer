@@ -71,24 +71,24 @@ async def test_aenter_authenticates():
             ddp.call.assert_called_once()
 
 
-async def test_subscribe_to_my_messages():
+async def test_subscribe_to_messages():
     client = RocketChatClient()
     client._user_id = "uid_bot"
     ddp = AsyncMock()
     client._ddp = ddp
-    await client.subscribe_to_my_messages()
+    await client._subscribe_to_messages()
     ddp.subscribe.assert_called_once()
 
 
-async def test_subscribe_to_my_messages_no_ddp():
+async def test_subscribe_to_messages_no_ddp():
     client = RocketChatClient()
     client._ddp = None
-    await client.subscribe_to_my_messages()
+    await client._subscribe_to_messages()
 
 
-async def test_subscribe_to_my_messages_no_user_id():
+async def test_subscribe_to_messages_no_user_id():
     client = RocketChatClient()
     client._ddp = AsyncMock()
     client._user_id = None
-    await client.subscribe_to_my_messages()
+    await client._subscribe_to_messages()
     client._ddp.subscribe.assert_not_called()

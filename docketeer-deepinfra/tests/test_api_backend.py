@@ -180,6 +180,33 @@ class TestRunAgenticLoop:
                     callbacks=None,
                 )
 
+    async def test_run_agentic_loop_raises_context_too_large_for_context_length(
+        self,
+        backend: DeepInfraAPIBackend,
+        tool_context: ToolContext,
+        tmp_path: Path,
+    ) -> None:
+        """run_agentic_loop converts 'context length' APIError to ContextTooLargeError."""
+        from openai import APIError
+
+        with patch("docketeer_deepinfra.api_backend.agentic_loop") as mock_loop:
+            mock_loop.side_effect = APIError(
+                message="This request, with 135000 input tokens, exceeds the model's maximum context length of 196608 tokens",
+                request=MagicMock(),
+                body=None,
+            )
+            with pytest.raises(ContextTooLargeError):
+                await backend.run_agentic_loop(
+                    tier="balanced",
+                    system=[],
+                    messages=[],
+                    tools=[],
+                    tool_context=tool_context,
+                    audit_path=tmp_path / "audit",
+                    usage_path=tmp_path / "usage",
+                    callbacks=None,
+                )
+
     async def test_run_agentic_loop_raises_backend_error(
         self,
         backend: DeepInfraAPIBackend,
@@ -207,12 +234,26 @@ class TestRunAgenticLoop:
 
 
 class TestCountTokens:
-    async def test_count_tokens_returns_minus_one(
+    async def test_count_tokens_returns_positive_estimate(
         self, backend: DeepInfraAPIBackend
     ) -> None:
-        """count_tokens returns -1 as DeepInfra doesn't provide token counting."""
+        """count_tokens returns a positive character-based estimate."""
+        from docketeer.prompt import MessageParam, SystemBlock
+
+        result = await backend.count_tokens(
+            "some-model",
+            [SystemBlock(text="You are a helpful assistant.")],
+            [],
+            [MessageParam(role="user", content="Hello, how are you?")],
+        )
+        assert result > 0
+
+    async def test_count_tokens_empty_messages(
+        self, backend: DeepInfraAPIBackend
+    ) -> None:
+        """count_tokens with no system/messages returns a small positive value."""
         result = await backend.count_tokens("some-model", [], [], [])
-        assert result == -1
+        assert result >= 0
 
 
 class TestUtilityComplete:

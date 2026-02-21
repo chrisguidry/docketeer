@@ -66,7 +66,7 @@ async def test_incoming_messages_reconnects_on_disconnect():
         client._user_id = "bot_uid"
 
     client._open_connections = fake_open_connections  # type: ignore[assignment]
-    client.subscribe_to_my_messages = AsyncMock()  # type: ignore[assignment]
+    client._subscribe_to_messages = AsyncMock()  # type: ignore[assignment]
     client.set_status = AsyncMock()  # type: ignore[assignment]
 
     results = []
@@ -106,7 +106,7 @@ async def test_incoming_messages_backoff_on_reconnect_failure():
         raise ConnectionError("refused")
 
     client._open_connections = failing_open_connections  # type: ignore[assignment]
-    client.subscribe_to_my_messages = AsyncMock()  # type: ignore[assignment]
+    client._subscribe_to_messages = AsyncMock()  # type: ignore[assignment]
     client.set_status = AsyncMock()  # type: ignore[assignment]
 
     sleep_values: list[float] = []
@@ -159,7 +159,7 @@ async def test_incoming_messages_calls_on_history():
         history_calls.append((room, messages))
 
     with (
-        patch.object(client, "subscribe_to_my_messages", new_callable=AsyncMock),
+        patch.object(client, "_subscribe_to_messages", new_callable=AsyncMock),
         patch.object(client, "set_status", new_callable=AsyncMock),
         patch.object(client, "list_rooms", return_value=rooms),
         patch.object(client, "fetch_messages", return_value=history_msgs),

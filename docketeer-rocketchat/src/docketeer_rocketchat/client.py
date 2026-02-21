@@ -84,10 +84,7 @@ class RocketChatClient(ChatClient):
         me = await self._get("me")
         log.info("Logged in as @%s (%s)", me.get("username"), me.get("name", ""))
 
-        await self._ddp.call(
-            "login",
-            [{"user": {"username": self.username}, "password": self.password}],
-        )
+        await self._ddp.call("login", [{"resume": auth_token}])
 
     async def _close_connections(self) -> None:
         if self._conn_stack:
@@ -118,11 +115,12 @@ class RocketChatClient(ChatClient):
         resp.raise_for_status()
         return resp.json()
 
-    async def subscribe_to_my_messages(self) -> None:
+    async def _subscribe_to_messages(self) -> None:
         if self._ddp and self._user_id:
-            await self._ddp.subscribe(
+            sub_id = await self._ddp.subscribe(
                 "stream-notify-user", [f"{self._user_id}/notification", False]
             )
+            log.info("Subscribed to notifications (sub_id=%s)", sub_id)
 
     async def send_message(
         self,
@@ -380,7 +378,7 @@ class RocketChatClient(ChatClient):
         since: datetime | None = None,
     ) -> None:
         """Subscribe, set status, and prime history after a successful connect."""
-        await self.subscribe_to_my_messages()
+        await self._subscribe_to_messages()
         await self.set_status("online")
         await self._prime_history(on_history, since=since)
 
@@ -434,18 +432,22 @@ class RocketChatClient(ChatClient):
     ) -> IncomingMessage | None:
         """Parse a DDP event into an IncomingMessage."""
         if event.get("msg") != "changed":
+            log.debug("Ignoring DDP event type: %s", event.get("msg"))
             return None
 
         fields = event.get("fields", {})
         args = fields.get("args", [])
         if not args:
+            log.debug("DDP changed event has no args")
             return None
 
         msg_data = args[0]
         if not isinstance(msg_data, dict):
+            log.debug("DDP changed event args[0] is not a dict: %s", type(msg_data))
             return None
 
         if msg_data.get("t"):
+            log.debug("Skipping system message type: %s", msg_data.get("t"))
             return None
 
         # Check if this is a notification that needs full message fetch

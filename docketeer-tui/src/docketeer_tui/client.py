@@ -115,9 +115,6 @@ class TUIClient(ChatClient):
             self._stdout_ctx.close()
             self._stdout_ctx = None
 
-    async def subscribe_to_my_messages(self) -> None:
-        pass
-
     async def incoming_messages(
         self,
         on_history: OnHistoryCallback | None = None,

@@ -196,6 +196,7 @@ async def stream_message(
     accumulated_tool_calls: dict[str, dict] = {}
     finish_reason = None
     first_text_emitted = False
+    captured_usage: CompletionUsage | None = None
 
     stream_resp = await client.chat.completions.create(  # type: ignore[no-matching-overload]
         model=model_id,
@@ -203,9 +204,13 @@ async def stream_message(
         tools=serialized_tools,
         max_tokens=model.max_output_tokens,
         stream=True,
+        stream_options={"include_usage": True},
     )
 
     async for chunk in stream_resp:
+        if chunk.usage is not None:
+            captured_usage = chunk.usage
+
         choice = chunk.choices[0] if chunk.choices else None
         if not choice:
             continue
@@ -288,7 +293,8 @@ async def stream_message(
             Choice(index=0, message=message, finish_reason=finish_reason or "stop")
         ],
         model=model_id or "unknown",
-        usage=CompletionUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0),
+        usage=captured_usage
+        or CompletionUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0),
         object="chat.completion",
         created=int(time.time()),
     )

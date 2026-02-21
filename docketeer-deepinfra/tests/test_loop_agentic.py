@@ -53,6 +53,7 @@ async def test_truncated_response_appends_length_warning(
     chunk.choices[0].delta.content = "Hello"
     chunk.choices[0].delta.tool_calls = None
     chunk.choices[0].finish_reason = "length"
+    chunk.usage = None
 
     mock_client = MagicMock()
     mock_client.chat.completions.create = make_stream_mock([chunk])
@@ -86,6 +87,7 @@ async def test_empty_response_returns_no_response(
     chunk.choices[0].delta.content = None
     chunk.choices[0].delta.tool_calls = None
     chunk.choices[0].finish_reason = "stop"
+    chunk.usage = None
 
     mock_client = MagicMock()
     mock_client.chat.completions.create = make_stream_mock([chunk])
@@ -116,6 +118,7 @@ async def test_normal_stop_returns_content(tool_context: ToolContext, tmp_path: 
     chunk.choices[0].delta.content = "Final response"
     chunk.choices[0].delta.tool_calls = None
     chunk.choices[0].finish_reason = "stop"
+    chunk.usage = None
 
     mock_client = MagicMock()
     mock_client.chat.completions.create = make_stream_mock([chunk])
@@ -159,6 +162,7 @@ async def test_tool_round_limit_triggers_summary(
     tool_chunk.choices[0].delta.content = None
     tool_chunk.choices[0].delta.tool_calls = [tc]
     tool_chunk.choices[0].finish_reason = "tool_calls"
+    tool_chunk.usage = None
 
     summary_chunk = MagicMock()
     summary_chunk.choices = [MagicMock()]
@@ -166,6 +170,7 @@ async def test_tool_round_limit_triggers_summary(
     summary_chunk.choices[0].delta.content = "Here is a summary"
     summary_chunk.choices[0].delta.tool_calls = None
     summary_chunk.choices[0].finish_reason = "stop"
+    summary_chunk.usage = None
 
     call_count = [0]
 

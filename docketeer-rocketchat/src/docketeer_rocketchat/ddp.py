@@ -5,12 +5,15 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any
 
 import websockets
 from websockets import ClientConnection
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -72,10 +75,15 @@ class DDPClient:
                     if msg_id in self._pending:
                         self._pending[msg_id].set_result(msg)
                         del self._pending[msg_id]
+                elif msg_type == "ready":
+                    log.info("DDP subscription ready: %s", msg.get("subs"))
+                elif msg_type == "nosub":
+                    log.warning("DDP subscription rejected: %s", msg)
                 else:
+                    log.debug("DDP event queued: %s", msg_type)
                     await self._events.put(msg)
         except websockets.ConnectionClosed:
-            pass
+            log.warning("DDP websocket closed")
         finally:
             await self._events.put({"msg": "disconnected"})
 

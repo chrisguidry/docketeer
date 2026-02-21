@@ -38,11 +38,6 @@ async def test_context_manager(tmp_path: Path):
         assert client._closed
 
 
-async def test_subscribe_is_noop():
-    client = TUIClient()
-    await client.subscribe_to_my_messages()
-
-
 async def test_send_message_stores_history():
     client = TUIClient()
     await client.send_message("room1", "hello world")

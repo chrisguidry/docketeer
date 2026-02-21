@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -17,7 +18,7 @@ from docketeer.brain.backend import (
 )
 from docketeer.brain.core import InferenceModel
 from docketeer_deepinfra import TIER_MAX_TOKENS
-from docketeer_deepinfra.loop import agentic_loop
+from docketeer_deepinfra.loop import _serialize_messages, agentic_loop
 
 if TYPE_CHECKING:
     from docketeer.brain.core import ProcessCallbacks
@@ -91,7 +92,8 @@ class DeepInfraAPIBackend(InferenceBackend):
         except AuthenticationError as exc:
             raise BackendAuthError(str(exc)) from exc
         except APIError as exc:
-            if "413" in str(exc) or "payload too large" in str(exc).lower():
+            msg = str(exc).lower()
+            if "413" in msg or "payload too large" in msg or "context length" in msg:
                 raise ContextTooLargeError(str(exc)) from exc
             raise BackendError(str(exc)) from exc
 
@@ -102,8 +104,8 @@ class DeepInfraAPIBackend(InferenceBackend):
         tools: list[ToolDefinition],
         messages: list[MessageParam],
     ) -> int:
-        # DeepInfra doesn't provide a token counting API, fallback to -1
-        return -1
+        serialized = _serialize_messages(system, messages)
+        return len(json.dumps(serialized)) // 4
 
     async def utility_complete(
         self,

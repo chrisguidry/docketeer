@@ -38,6 +38,7 @@ async def test_basic_content_accumulation():
     chunk1.choices[0].delta.content = "Hello "
     chunk1.choices[0].delta.tool_calls = None
     chunk1.choices[0].finish_reason = None
+    chunk1.usage = None
 
     chunk2 = MagicMock()
     chunk2.choices = [MagicMock()]
@@ -45,6 +46,7 @@ async def test_basic_content_accumulation():
     chunk2.choices[0].delta.content = "world"
     chunk2.choices[0].delta.tool_calls = None
     chunk2.choices[0].finish_reason = "stop"
+    chunk2.usage = None
 
     mock_client = MagicMock()
     mock_client.chat.completions.create = make_stream_mock([chunk1, chunk2])
@@ -75,6 +77,7 @@ async def test_tool_calls_accumulated_across_chunks():
     tc1.function.arguments = '{"path":'
     chunk1.choices[0].delta.tool_calls = [tc1]
     chunk1.choices[0].finish_reason = None
+    chunk1.usage = None
 
     chunk2 = MagicMock()
     chunk2.choices = [MagicMock()]
@@ -88,6 +91,7 @@ async def test_tool_calls_accumulated_across_chunks():
     tc2.function.arguments = ' "/"}'
     chunk2.choices[0].delta.tool_calls = [tc2]
     chunk2.choices[0].finish_reason = "tool_calls"
+    chunk2.usage = None
 
     mock_client = MagicMock()
     mock_client.chat.completions.create = make_stream_mock([chunk1, chunk2])
@@ -115,6 +119,7 @@ async def test_multiple_tool_calls_in_one_chunk():
     chunk.choices = [MagicMock()]
     chunk.choices[0].delta = MagicMock()
     chunk.choices[0].delta.content = None
+    chunk.usage = None
 
     tc1 = MagicMock()
     tc1.index = 0
@@ -167,6 +172,7 @@ async def test_on_first_text_callback_fires_once():
     chunk1.choices[0].delta.content = "Hello"
     chunk1.choices[0].delta.tool_calls = None
     chunk1.choices[0].finish_reason = None
+    chunk1.usage = None
 
     chunk2 = MagicMock()
     chunk2.choices = [MagicMock()]
@@ -174,6 +180,7 @@ async def test_on_first_text_callback_fires_once():
     chunk2.choices[0].delta.content = " world"
     chunk2.choices[0].delta.tool_calls = None
     chunk2.choices[0].finish_reason = "stop"
+    chunk2.usage = None
 
     mock_client = MagicMock()
     mock_client.chat.completions.create = make_stream_mock([chunk1, chunk2])
@@ -194,6 +201,7 @@ async def test_on_first_text_callback_fires_once():
 async def test_empty_choices_skipped():
     empty_chunk = MagicMock()
     empty_chunk.choices = []
+    empty_chunk.usage = None
 
     real_chunk = MagicMock()
     real_chunk.choices = [MagicMock()]
@@ -201,6 +209,7 @@ async def test_empty_choices_skipped():
     real_chunk.choices[0].delta.content = "Hello"
     real_chunk.choices[0].delta.tool_calls = None
     real_chunk.choices[0].finish_reason = "stop"
+    real_chunk.usage = None
 
     mock_client = MagicMock()
     mock_client.chat.completions.create = make_stream_mock([empty_chunk, real_chunk])
@@ -221,6 +230,7 @@ async def test_none_delta_skipped():
     no_delta = MagicMock()
     no_delta.choices = [MagicMock()]
     no_delta.choices[0].delta = None
+    no_delta.usage = None
 
     real_chunk = MagicMock()
     real_chunk.choices = [MagicMock()]
@@ -228,6 +238,7 @@ async def test_none_delta_skipped():
     real_chunk.choices[0].delta.content = "Hello"
     real_chunk.choices[0].delta.tool_calls = None
     real_chunk.choices[0].finish_reason = "stop"
+    real_chunk.usage = None
 
     mock_client = MagicMock()
     mock_client.chat.completions.create = make_stream_mock([no_delta, real_chunk])
@@ -249,6 +260,7 @@ async def test_empty_tool_arguments_default_to_empty_object():
     chunk.choices = [MagicMock()]
     chunk.choices[0].delta = MagicMock()
     chunk.choices[0].delta.content = None
+    chunk.usage = None
     tc = MagicMock()
     tc.index = 0
     tc.id = "call_123"
@@ -278,6 +290,7 @@ async def test_invalid_json_arguments_default_to_empty_object():
     chunk.choices = [MagicMock()]
     chunk.choices[0].delta = MagicMock()
     chunk.choices[0].delta.content = None
+    chunk.usage = None
     tc = MagicMock()
     tc.index = 0
     tc.id = "call_123"
@@ -309,6 +322,7 @@ async def test_tools_passed_to_api():
     chunk.choices[0].delta.content = "Hello"
     chunk.choices[0].delta.tool_calls = None
     chunk.choices[0].finish_reason = "stop"
+    chunk.usage = None
 
     mock_client = MagicMock()
     mock_client.chat.completions.create = make_stream_mock([chunk])
@@ -343,6 +357,7 @@ async def test_model_id_fallback_to_default():
     chunk.choices[0].delta.content = "Hello"
     chunk.choices[0].delta.tool_calls = None
     chunk.choices[0].finish_reason = "stop"
+    chunk.usage = None
 
     mock_client = MagicMock()
     mock_client.chat.completions.create = make_stream_mock([chunk])
@@ -363,11 +378,85 @@ async def test_model_id_fallback_to_default():
     )
 
 
+async def test_stream_captures_usage_from_final_chunk():
+    chunk1 = MagicMock()
+    chunk1.choices = [MagicMock()]
+    chunk1.choices[0].delta = MagicMock()
+    chunk1.choices[0].delta.content = "Hello"
+    chunk1.choices[0].delta.tool_calls = None
+    chunk1.choices[0].finish_reason = None
+    chunk1.usage = None
+
+    chunk2 = MagicMock()
+    chunk2.choices = [MagicMock()]
+    chunk2.choices[0].delta = MagicMock()
+    chunk2.choices[0].delta.content = " world"
+    chunk2.choices[0].delta.tool_calls = None
+    chunk2.choices[0].finish_reason = "stop"
+    chunk2.usage = None
+
+    # Final chunk with usage and empty choices
+    from openai.types import CompletionUsage
+
+    usage_chunk = MagicMock()
+    usage_chunk.choices = []
+    usage_chunk.usage = CompletionUsage(
+        prompt_tokens=42, completion_tokens=7, total_tokens=49
+    )
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = make_stream_mock(
+        [chunk1, chunk2, usage_chunk]
+    )
+
+    result = await stream_message(
+        client=mock_client,
+        model=MODEL,
+        system=[],
+        messages=[MessageParam(role="user", content="test")],
+        tools=[],
+        on_first_text=None,
+        default_model="test-model",
+    )
+    assert result.choices[0].message.content == "Hello world"
+    assert result.usage is not None
+    assert result.usage.prompt_tokens == 42
+    assert result.usage.completion_tokens == 7
+    assert result.usage.total_tokens == 49
+
+
+async def test_stream_falls_back_to_zero_usage_without_usage_chunk():
+    chunk = MagicMock()
+    chunk.choices = [MagicMock()]
+    chunk.choices[0].delta = MagicMock()
+    chunk.choices[0].delta.content = "Hello"
+    chunk.choices[0].delta.tool_calls = None
+    chunk.choices[0].finish_reason = "stop"
+    chunk.usage = None
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = make_stream_mock([chunk])
+
+    result = await stream_message(
+        client=mock_client,
+        model=MODEL,
+        system=[],
+        messages=[MessageParam(role="user", content="test")],
+        tools=[],
+        on_first_text=None,
+        default_model="test-model",
+    )
+    assert result.usage is not None
+    assert result.usage.prompt_tokens == 0
+    assert result.usage.completion_tokens == 0
+
+
 async def test_tool_call_with_none_index_skipped():
     chunk = MagicMock()
     chunk.choices = [MagicMock()]
     chunk.choices[0].delta = MagicMock()
     chunk.choices[0].delta.content = None
+    chunk.usage = None
     tc = MagicMock()
     tc.index = None
     tc.id = "call_123"

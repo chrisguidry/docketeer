@@ -54,7 +54,6 @@ class MemoryChat(ChatClient):
         self.user_id = user_id
         self.connected = False
         self.closed = False
-        self.subscribed = False
         self.sent_messages: list[SentMessage] = []
         self.uploaded_files: list[UploadedFile] = []
         self.status_changes: list[tuple[str, str]] = []
@@ -73,9 +72,6 @@ class MemoryChat(ChatClient):
 
     async def __aexit__(self, *exc: object) -> None:
         self.closed = True
-
-    async def subscribe_to_my_messages(self) -> None:
-        self.subscribed = True
 
     async def incoming_messages(
         self,
