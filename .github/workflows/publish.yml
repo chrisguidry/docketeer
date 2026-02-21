@@ -12,35 +12,34 @@ jobs:
     name: Run CI
     uses: ./.github/workflows/ci.yml
 
+  prepare-matrix:
+    name: Discover packages
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.discover.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build publish matrix from workspace members
+        id: discover
+        run: |
+          python3 -c "
+          import json, tomllib
+          with open('pyproject.toml', 'rb') as f:
+              members = tomllib.load(f)['tool']['uv']['workspace']['members']
+          matrix = [{'package': m, 'environment': f'pypi-{m}'} for m in members]
+          print(f'matrix={json.dumps(matrix)}')
+          " >> "$GITHUB_OUTPUT"
+
   publish:
     name: "Publish ${{ matrix.package }}"
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: ci
+    needs: [ci, prepare-matrix]
     strategy:
       fail-fast: true
       matrix:
-        include:
-          - package: docketeer
-            environment: pypi-docketeer
-          - package: docketeer-1password
-            environment: pypi-docketeer-1password
-          - package: docketeer-agentskills
-            environment: pypi-docketeer-agentskills
-          - package: docketeer-bubblewrap
-            environment: pypi-docketeer-bubblewrap
-          - package: docketeer-git
-            environment: pypi-docketeer-git
-          - package: docketeer-mcp
-            environment: pypi-docketeer-mcp
-          - package: docketeer-monty
-            environment: pypi-docketeer-monty
-          - package: docketeer-rocketchat
-            environment: pypi-docketeer-rocketchat
-          - package: docketeer-tui
-            environment: pypi-docketeer-tui
-          - package: docketeer-web
-            environment: pypi-docketeer-web
+        include: ${{ fromJson(needs.prepare-matrix.outputs.matrix) }}
     environment:
       name: ${{ matrix.environment }}
       url: https://pypi.org/p/${{ matrix.package }}

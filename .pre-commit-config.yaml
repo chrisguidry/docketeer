@@ -66,6 +66,33 @@ repos:
         pass_filenames: false
         require_serial: true
 
+      - id: pytest-docketeer-anthropic
+        name: pytest (docketeer-anthropic)
+        entry: uv run --no-sync --directory docketeer-anthropic pytest
+        language: system
+        types: [python]
+        files: ^docketeer/src/|^docketeer-anthropic/
+        pass_filenames: false
+        require_serial: true
+
+      - id: pytest-docketeer-bubblewrap
+        name: pytest (docketeer-bubblewrap)
+        entry: uv run --no-sync --directory docketeer-bubblewrap pytest
+        language: system
+        types: [python]
+        files: ^docketeer/src/|^docketeer-bubblewrap/
+        pass_filenames: false
+        require_serial: true
+
+      - id: pytest-docketeer-deepinfra
+        name: pytest (docketeer-deepinfra)
+        entry: uv run --no-sync --directory docketeer-deepinfra pytest
+        language: system
+        types: [python]
+        files: ^docketeer/src/|^docketeer-deepinfra/
+        pass_filenames: false
+        require_serial: true
+
       - id: pytest-docketeer-git
         name: pytest (docketeer-git)
         entry: uv run --no-sync --directory docketeer-git pytest
