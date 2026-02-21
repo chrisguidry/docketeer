@@ -1,0 +1,62 @@
+[project]
+name = "docketeer-deepinfra"
+dynamic = ["version"]
+description = "DeepInfra inference backend plugin for Docketeer"
+readme = "README.md"
+authors = [
+    { name = "Chris Guidry", email = "guid@omg.lol" }
+]
+license = "MIT"
+requires-python = ">=3.12"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "openai",
+    "docketeer",
+]
+
+[project.urls]
+Homepage = "https://github.com/chrisguidry/docketeer"
+Repository = "https://github.com/chrisguidry/docketeer"
+Issues = "https://github.com/chrisguidry/docketeer/issues"
+
+[project.entry-points."docketeer.inference"]
+deepinfra = "docketeer_deepinfra:create_backend"
+
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+raw-options.root = ".."
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/docketeer_deepinfra"]
+
+[tool.uv.sources]
+docketeer = { workspace = true }
+
+[tool.pytest_env]
+DOCKETEER_DEEPINFRA_API_KEY = "test-key"
+DOCKETEER_DEEPINFRA_BASE_URL = "https://api.deepinfra.com/v1"
+
+[tool.pytest.ini_options]
+minversion = "9.0"
+timeout = 1
+addopts = [
+    "--import-mode=importlib",
+    "--cov=docketeer_deepinfra",
+    "--cov=tests",
+    "--cov-branch",
+    "--cov-report=term-missing",
+    "--cov-fail-under=100",
+]
+asyncio_mode = "auto"
+filterwarnings = [
+    "error",
+]

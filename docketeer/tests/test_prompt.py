@@ -293,3 +293,39 @@ def test_message_param_to_dict_fallback():
     msg = MessageParam(role="user", content=b"bytes")  # type: ignore[arg-type]
     result = msg.to_dict()
     assert result == {"role": "user", "content": b"bytes"}
+
+
+def test_message_param_to_dict_with_tool_call_id():
+    """Test tool_call_id field is serialized correctly."""
+    msg = MessageParam(role="tool", content="tool result", tool_call_id="call_123")
+    result = msg.to_dict()
+    assert result == {
+        "role": "tool",
+        "content": "tool result",
+        "tool_call_id": "call_123",
+    }
+
+
+def test_message_param_to_dict_with_tool_calls():
+    """Test tool_calls field is serialized correctly."""
+    tool_calls = [
+        {
+            "id": "call_1",
+            "type": "function",
+            "function": {"name": "test", "arguments": "{}"},
+        }
+    ]
+    msg = MessageParam(role="assistant", content="", tool_calls=tool_calls)
+    result = msg.to_dict()
+    assert result["role"] == "assistant"
+    assert result["content"] == ""
+    assert result["tool_calls"] == tool_calls
+
+
+def test_message_param_to_dict_with_tool_and_tool_call_id():
+    """Test tool role with tool_call_id."""
+    msg = MessageParam(role="tool", content="result", tool_call_id="call_abc")
+    result = msg.to_dict()
+    assert result["role"] == "tool"
+    assert result["tool_call_id"] == "call_abc"
+    assert result["content"] == "result"

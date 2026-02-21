@@ -5,6 +5,7 @@ members = [
     "docketeer-agentskills",
     "docketeer-anthropic",
     "docketeer-bubblewrap",
+    "docketeer-deepinfra",
     "docketeer-git",
     "docketeer-mcp",
     "docketeer-monty",
@@ -20,6 +21,7 @@ dev = [
     "docketeer-agentskills",
     "docketeer-anthropic",
     "docketeer-bubblewrap",
+    "docketeer-deepinfra",
     "docketeer-git",
     "docketeer-mcp",
     "docketeer-monty",
@@ -46,6 +48,7 @@ docketeer-1password = { workspace = true }
 docketeer-agentskills = { workspace = true }
 docketeer-anthropic = { workspace = true }
 docketeer-bubblewrap = { workspace = true }
+docketeer-deepinfra = { workspace = true }
 docketeer-git = { workspace = true }
 docketeer-mcp = { workspace = true }
 docketeer-monty = { workspace = true }
@@ -96,7 +99,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["docketeer", "docketeer_1password", "docketeer_agentskills", "docketeer_bubblewrap", "docketeer_git", "docketeer_mcp", "docketeer_monty", "docketeer_rocketchat", "docketeer_tui", "docketeer_web"]
+known-first-party = ["docketeer", "docketeer_1password", "docketeer_agentskills", "docketeer_bubblewrap", "docketeer_deepinfra", "docketeer_git", "docketeer_mcp", "docketeer_monty", "docketeer_rocketchat", "docketeer_tui", "docketeer_web"]
 
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**/*.py" = ["ANN201"]

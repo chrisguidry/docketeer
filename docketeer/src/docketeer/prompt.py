@@ -231,13 +231,20 @@ ContentBlockParam = TextBlockParam | ImageBlockParam
 class MessageParam:
     """A message parameter for Chat API."""
 
-    role: Literal["user", "assistant", "system"]
+    role: Literal["user", "assistant", "system", "tool"]
     content: str | list[Any]
+    tool_call_id: str | None = None
+    tool_calls: list[dict] | None = None
 
     def to_dict(self) -> dict:
         """Convert to a dictionary for API usage."""
+        result: dict = {"role": self.role}
+        if self.tool_call_id:
+            result["tool_call_id"] = self.tool_call_id
+        if self.tool_calls:
+            result["tool_calls"] = self.tool_calls
         if isinstance(self.content, str):
-            return {"role": self.role, "content": self.content}
+            result["content"] = self.content
         elif isinstance(self.content, list):
             serialized_content = []
             for block in self.content:
@@ -249,5 +256,7 @@ class MessageParam:
                     serialized_content.append(block)
                 else:
                     serialized_content.append({"type": "text", "text": str(block)})
-            return {"role": self.role, "content": serialized_content}
-        return {"role": self.role, "content": self.content}
+            result["content"] = serialized_content
+        else:
+            result["content"] = self.content
+        return result

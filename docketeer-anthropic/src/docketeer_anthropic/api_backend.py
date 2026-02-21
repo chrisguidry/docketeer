@@ -11,12 +11,15 @@ from anthropic import APIError, AuthenticationError, PermissionDeniedError
 from anthropic._exceptions import RequestTooLargeError
 from anthropic.types import TextBlock
 
+from docketeer import environment
 from docketeer.brain.backend import (
     BackendAuthError,
     BackendError,
     ContextTooLargeError,
     InferenceBackend,
 )
+from docketeer.brain.core import InferenceModel
+from docketeer_anthropic import TIER_MAX_TOKENS
 from docketeer_anthropic.loop import agentic_loop
 
 if TYPE_CHECKING:
@@ -33,7 +36,7 @@ class AnthropicAPIBackend(InferenceBackend):
 
     async def run_agentic_loop(
         self,
-        model: InferenceModel,
+        tier: str,
         system: list[SystemBlock],
         messages: list,
         tools: list[ToolDefinition],
@@ -44,6 +47,21 @@ class AnthropicAPIBackend(InferenceBackend):
         *,
         thinking: bool = False,
     ) -> str:
+        # Map tier to Anthropic model
+        model_map = {
+            "smart": environment.get_str("MODEL_OPUS", "claude-opus-4-6"),
+            "balanced": environment.get_str("MODEL_SONNET", "claude-sonnet-4-6"),
+            "fast": environment.get_str("MODEL_HAIKU", "claude-haiku-4-5-20251001"),
+        }
+        model_id = model_map.get(tier, "claude-sonnet-4-6")
+        max_tokens = TIER_MAX_TOKENS.get(tier, 64_000)
+        thinking_budget = 10_000 if tier == "balanced" else None
+        model = InferenceModel(
+            model_id=model_id,
+            max_output_tokens=max_tokens,
+            thinking_budget=thinking_budget,
+        )
+
         try:
             return await agentic_loop(
                 self._client,
@@ -96,12 +114,11 @@ class AnthropicAPIBackend(InferenceBackend):
         *,
         max_tokens: int = 1024,
     ) -> str:
-        from docketeer.brain.core import MODELS
         from docketeer.prompt import MessageParam as DocketeerMessageParam
 
         try:
             response = await self._client.messages.create(
-                model=MODELS["haiku"].model_id,
+                model=environment.get_str("MODEL_HAIKU", "claude-haiku-4-5-20251001"),
                 max_tokens=max_tokens,
                 messages=[DocketeerMessageParam(role="user", content=prompt).to_dict()],  # type: ignore[arg-type]
             )

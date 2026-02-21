@@ -112,7 +112,7 @@ class TestRunAgenticLoop:
         with patch("docketeer_anthropic.api_backend.agentic_loop") as mock_loop:
             mock_loop.return_value = "result"
             result = await backend.run_agentic_loop(
-                model=MODEL,
+                tier="balanced",
                 system=[],
                 messages=[],
                 tools=[],
@@ -140,7 +140,7 @@ class TestRunAgenticLoop:
             )
             with pytest.raises(ContextTooLargeError):
                 await backend.run_agentic_loop(
-                    model=MODEL,
+                    tier="balanced",
                     system=[],
                     messages=[],
                     tools=[],
@@ -166,7 +166,7 @@ class TestRunAgenticLoop:
             )
             with pytest.raises(BackendAuthError):
                 await backend.run_agentic_loop(
-                    model=MODEL,
+                    tier="balanced",
                     system=[],
                     messages=[],
                     tools=[],
@@ -192,7 +192,7 @@ class TestRunAgenticLoop:
             )
             with pytest.raises(BackendAuthError):
                 await backend.run_agentic_loop(
-                    model=MODEL,
+                    tier="balanced",
                     system=[],
                     messages=[],
                     tools=[],
@@ -218,7 +218,7 @@ class TestRunAgenticLoop:
             mock_loop.side_effect = APIError("api error", _FAKE_REQUEST, body=None)
             with pytest.raises(BackendError):
                 await backend.run_agentic_loop(
-                    model=MODEL,
+                    tier="balanced",
                     system=[],
                     messages=[],
                     tools=[],

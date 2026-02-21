@@ -8,9 +8,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from docketeer_anthropic.claude_code_backend import ClaudeCodeBackend
 
-from docketeer.brain.core import InferenceModel
-
-MODEL = InferenceModel(model_id="claude-opus-4-6", max_output_tokens=128_000)
+TIER = "smart"
 
 
 def _mock_executor() -> AsyncMock:
@@ -123,7 +121,7 @@ async def test_count_tokens_returns_context_after_invocation(
     messages = [{"role": "user", "content": "hello"}]
     with _patch_invoke(("reply", "sess-1", result_event)):
         await backend.run_agentic_loop(
-            MODEL,
+            TIER,
             [],
             messages,
             [],

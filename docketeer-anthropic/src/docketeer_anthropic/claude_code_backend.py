@@ -22,7 +22,7 @@ from docketeer_anthropic.claude_code_output import (
 )
 
 if TYPE_CHECKING:
-    from docketeer.brain.core import InferenceModel, ProcessCallbacks
+    from docketeer.brain.core import ProcessCallbacks
     from docketeer.brain.mcp_transport import MCPSocketServer
     from docketeer.prompt import SystemBlock
     from docketeer.tools import ToolContext, ToolDefinition
@@ -72,7 +72,7 @@ class ClaudeCodeBackend(InferenceBackend):
 
     async def run_agentic_loop(
         self,
-        model: InferenceModel,
+        tier: str,
         system: list[SystemBlock],
         messages: list,
         tools: list[ToolDefinition],
@@ -83,6 +83,13 @@ class ClaudeCodeBackend(InferenceBackend):
         *,
         thinking: bool = False,
     ) -> str:
+        model_map = {
+            "smart": environment.get_str("MODEL_OPUS", "claude-opus-4-6"),
+            "balanced": environment.get_str("MODEL_SONNET", "claude-sonnet-4-6"),
+            "fast": environment.get_str("MODEL_HAIKU", "claude-haiku-4-5-20251001"),
+        }
+        model_id = model_map.get(tier, "claude-sonnet-4-6")
+
         system_text = "\n\n".join(block.text for block in system)
         room_id = tool_context.room_id
         session = self._sessions.get(room_id) if room_id else None
@@ -90,7 +97,7 @@ class ClaudeCodeBackend(InferenceBackend):
         log.info(
             "run_agentic_loop: room=%s, model=%s, messages=%d, session=%s",
             room_id or "(none)",
-            model.model_id,
+            model_id,
             len(messages),
             session.session_id if session else "(new)",
         )
@@ -128,7 +135,7 @@ class ClaudeCodeBackend(InferenceBackend):
         use_mcp = bool(tools and tool_context and self._mcp_socket)
         text, _, result_event = await _invoke_claude(
             self.executor,
-            model.model_id,
+            model_id,
             system_text,
             prompt,
             self.oauth_token,
@@ -207,8 +214,6 @@ class ClaudeCodeBackend(InferenceBackend):
         *,
         max_tokens: int = 1024,
     ) -> str:
-        from docketeer.brain.core import MODELS
-
         scratch = self.claude_dir / "scratch"
         scratch.mkdir(exist_ok=True)
         audit = self.claude_dir / "audit"
@@ -217,7 +222,7 @@ class ClaudeCodeBackend(InferenceBackend):
         log.info("utility_complete: prompt (%d chars): %.200s", len(prompt), prompt)
         text, _, _ = await _invoke_claude(
             self.executor,
-            MODELS["haiku"].model_id,
+            "claude-haiku-4-5-20251001",
             "You are a helpful assistant. Be concise.",
             prompt,
             self.oauth_token,

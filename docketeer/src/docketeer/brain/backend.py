@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from docketeer.brain.core import InferenceModel, ProcessCallbacks
+    from docketeer.brain.core import ProcessCallbacks
     from docketeer.prompt import SystemBlock
     from docketeer.tools import ToolContext, ToolDefinition
 
@@ -35,7 +35,7 @@ class InferenceBackend(ABC):
     @abstractmethod
     async def run_agentic_loop(
         self,
-        model: InferenceModel,
+        tier: str,
         system: list[SystemBlock],
         messages: list,
         tools: list[ToolDefinition],

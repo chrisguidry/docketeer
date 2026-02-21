@@ -13,6 +13,13 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
+# Tier to max tokens mapping for Anthropic
+TIER_MAX_TOKENS = {
+    "smart": 128_000,
+    "balanced": 64_000,
+    "fast": 16_000,
+}
+
 
 def create_backend(executor: CommandExecutor | None) -> InferenceBackend:
     """Factory function to create an Anthropic backend.

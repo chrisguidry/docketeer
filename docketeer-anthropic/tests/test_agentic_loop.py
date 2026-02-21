@@ -9,9 +9,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from docketeer_anthropic.claude_code_backend import ClaudeCodeBackend
 
-from docketeer.brain.core import InferenceModel
-
-MODEL = InferenceModel(model_id="claude-opus-4-6", max_output_tokens=128_000)
+TIER = "smart"
 
 
 def _mock_executor() -> AsyncMock:
@@ -51,7 +49,7 @@ async def test_first_call_sends_latest_message(backend: ClaudeCodeBackend):
     messages = [{"role": "user", "content": "@chris: hello"}]
     with _patch_invoke(("Hi Chris!", "sess-1", None)) as mock:
         result = await backend.run_agentic_loop(
-            MODEL,
+            TIER,
             [],
             messages,
             [],
@@ -74,7 +72,7 @@ async def test_first_call_includes_history_in_prompt(backend: ClaudeCodeBackend)
     ]
     with _patch_invoke(("reply", "sess-1", None)) as mock:
         await backend.run_agentic_loop(
-            MODEL,
+            TIER,
             [],
             messages,
             [],
@@ -97,7 +95,7 @@ async def test_first_call_passes_workspace_from_tool_context(
     tool_context = _mock_tool_context(workspace=workspace)
     with _patch_invoke(("reply", "sess-1", None)) as mock:
         await backend.run_agentic_loop(
-            MODEL,
+            TIER,
             [],
             messages,
             [],
@@ -115,7 +113,7 @@ async def test_first_call_passes_audit_path(backend: ClaudeCodeBackend):
     audit_path = Path("/audit/dir")
     with _patch_invoke(("reply", "sess-1", None)) as mock:
         await backend.run_agentic_loop(
-            MODEL,
+            TIER,
             [],
             messages,
             [],
@@ -133,7 +131,7 @@ async def test_first_call_no_mcp_without_tools(backend: ClaudeCodeBackend):
     messages = [{"role": "user", "content": "hello"}]
     with _patch_invoke(("reply", "sess-1", None)) as mock:
         await backend.run_agentic_loop(
-            MODEL,
+            TIER,
             [],
             messages,
             [],
@@ -151,7 +149,7 @@ async def test_subsequent_call_uses_resume(backend: ClaudeCodeBackend):
     tool_context = _mock_tool_context()
     with _patch_invoke(("Hi!", "sess-1", None)) as first_mock:
         await backend.run_agentic_loop(
-            MODEL,
+            TIER,
             [],
             messages,
             [],
@@ -166,7 +164,7 @@ async def test_subsequent_call_uses_resume(backend: ClaudeCodeBackend):
     messages.append({"role": "user", "content": "@chris: how are you?"})
     with _patch_invoke(("Great!", "sess-1", None)) as mock:
         await backend.run_agentic_loop(
-            MODEL,
+            TIER,
             [],
             messages,
             [],
@@ -184,7 +182,7 @@ async def test_compaction_resets_session(backend: ClaudeCodeBackend):
     tool_context = _mock_tool_context()
     with _patch_invoke(("reply 1", "sess-1", None)):
         await backend.run_agentic_loop(
-            MODEL,
+            TIER,
             [],
             messages,
             [],
@@ -197,7 +195,7 @@ async def test_compaction_resets_session(backend: ClaudeCodeBackend):
     messages.append({"role": "user", "content": "msg 2"})
     with _patch_invoke(("reply 2", "sess-1", None)):
         await backend.run_agentic_loop(
-            MODEL,
+            TIER,
             [],
             messages,
             [],
@@ -211,7 +209,7 @@ async def test_compaction_resets_session(backend: ClaudeCodeBackend):
     messages.append({"role": "user", "content": "compacted summary"})
     with _patch_invoke(("fresh reply", "sess-2", None)) as mock:
         await backend.run_agentic_loop(
-            MODEL,
+            TIER,
             [],
             messages,
             [],
@@ -228,7 +226,7 @@ async def test_no_session_tracking_without_room_id(backend: ClaudeCodeBackend):
     messages = [{"role": "user", "content": "internal task"}]
     with _patch_invoke(("done", "sess-99", None)):
         await backend.run_agentic_loop(
-            MODEL,
+            TIER,
             [],
             messages,
             [],
@@ -248,7 +246,7 @@ async def test_run_agentic_loop_passes_callbacks(backend: ClaudeCodeBackend):
     callbacks = AsyncMock()
     with _patch_invoke(("reply", "sess-1", None)) as mock:
         await backend.run_agentic_loop(
-            MODEL,
+            TIER,
             [],
             messages,
             [],
@@ -287,7 +285,7 @@ async def test_run_agentic_loop_records_model_usage(
     usage_path = tmp_path / "usage"
     with _patch_invoke(("reply", "sess-1", result_event)):
         await backend.run_agentic_loop(
-            MODEL,
+            TIER,
             [],
             messages,
             [],
@@ -314,7 +312,7 @@ async def test_run_agentic_loop_skips_usage_without_model_usage(
     usage_path = tmp_path / "usage"
     with _patch_invoke(("reply", "sess-1", result_event)):
         await backend.run_agentic_loop(
-            MODEL,
+            TIER,
             [],
             messages,
             [],
@@ -334,7 +332,7 @@ async def test_new_session_gets_pre_assigned_session_id(backend: ClaudeCodeBacke
     messages = [{"role": "user", "content": "hello"}]
     with _patch_invoke(("reply", "sess-1", None)) as mock:
         await backend.run_agentic_loop(
-            MODEL,
+            TIER,
             [],
             messages,
             [],
@@ -354,7 +352,7 @@ async def test_pre_assigned_session_id_stored_immediately(backend: ClaudeCodeBac
     messages = [{"role": "user", "content": "hello"}]
     with _patch_invoke(("reply", "sess-from-result", None)) as mock:
         await backend.run_agentic_loop(
-            MODEL,
+            TIER,
             [],
             messages,
             [],
@@ -375,7 +373,7 @@ async def test_resumed_session_passes_resume_session_id(backend: ClaudeCodeBacke
     messages: list[dict] = [{"role": "user", "content": "hello"}]
     with _patch_invoke(("Hi!", "sess-1", None)) as mock:
         await backend.run_agentic_loop(
-            MODEL,
+            TIER,
             [],
             messages,
             [],
@@ -390,7 +388,7 @@ async def test_resumed_session_passes_resume_session_id(backend: ClaudeCodeBacke
     messages.append({"role": "user", "content": "follow up"})
     with _patch_invoke(("Great!", "sess-1", None)) as mock:
         await backend.run_agentic_loop(
-            MODEL,
+            TIER,
             [],
             messages,
             [],

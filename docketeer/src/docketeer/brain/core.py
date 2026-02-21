@@ -45,35 +45,18 @@ log = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class InferenceModel:
+    """Represents a model configuration for inference backends."""
+
     model_id: str
     max_output_tokens: int
     thinking_budget: int | None = None
 
 
-MODELS: dict[str, InferenceModel] = {
-    "opus": InferenceModel(
-        model_id=environment.get_str("MODEL_OPUS", "claude-opus-4-6"),
-        max_output_tokens=128_000,
-    ),
-    "sonnet": InferenceModel(
-        model_id=environment.get_str("MODEL_SONNET", "claude-sonnet-4-6"),
-        max_output_tokens=64_000,
-        thinking_budget=10_000,
-    ),
-    "haiku": InferenceModel(
-        model_id=environment.get_str("MODEL_HAIKU", "claude-haiku-4-5-20251001"),
-        max_output_tokens=16_000,
-    ),
-}
-
-CHAT_MODEL = environment.get_str("CHAT_MODEL", "sonnet")
-REVERIE_MODEL = environment.get_str("REVERIE_MODEL", "sonnet")
-CONSOLIDATION_MODEL = environment.get_str("CONSOLIDATION_MODEL", "opus")
-
-
-def resolve_model(tier: str) -> InferenceModel:
-    """Resolve a tier name like 'opus' to its InferenceModel."""
-    return MODELS[tier]
+# Note: Core doesn't define model mappings. Each backend registers its own
+# models via environment variables or internal defaults.
+CHAT_MODEL = environment.get_str("CHAT_MODEL", "balanced")
+REVERIE_MODEL = environment.get_str("REVERIE_MODEL", "balanced")
+CONSOLIDATION_MODEL = environment.get_str("CONSOLIDATION_MODEL", "balanced")
 
 
 CONTEXT_BUDGET = 180_000
@@ -177,8 +160,7 @@ class Brain:
         room_context: str = "",
     ) -> BrainResponse:
         """Process a message and return a response with tool call info."""
-        model = model or CHAT_MODEL
-        resolved = resolve_model(model)
+        tier = model or CHAT_MODEL
 
         current_time = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M %Z")
         system = build_system_blocks(self._workspace)
@@ -200,7 +182,7 @@ class Brain:
 
         async with self._conversation_locks[room_id]:
             if self._room_token_counts.get(room_id, 0) > COMPACT_THRESHOLD:
-                await self._compact_history(room_id, system, tools, resolved.model_id)
+                await self._compact_history(room_id, system, tools, tier)
 
             user_content = self._build_content(content, dynamic_context, room_id)
             self._conversations[room_id].append(
@@ -213,7 +195,7 @@ class Brain:
 
             try:
                 reply = await self._backend.run_agentic_loop(
-                    resolved,
+                    tier,
                     system,
                     messages,
                     tools,
@@ -225,10 +207,10 @@ class Brain:
                 )
             except ContextTooLargeError:
                 log.warning("Request too large, compacting and retrying", exc_info=True)
-                await self._compact_history(room_id, system, tools, resolved.model_id)
+                await self._compact_history(room_id, system, tools, tier)
                 try:
                     reply = await self._backend.run_agentic_loop(
-                        resolved,
+                        tier,
                         system,
                         messages,
                         tools,
@@ -252,9 +234,7 @@ class Brain:
                     MessageParam(role="assistant", content=reply)
                 )
 
-            tokens = await self._measure_context(
-                room_id, system, tools, resolved.model_id
-            )
+            tokens = await self._measure_context(room_id, system, tools, tier)
             log.info(
                 "Context: %d / %d tokens for room %s",
                 tokens,
@@ -270,11 +250,11 @@ class Brain:
         room_id: str,
         system: list[SystemBlock],
         tools: list[ToolDefinition],
-        model_id: str,
+        tier: str,
     ) -> int:
         """Count tokens for the current conversation state."""
         count = await self._backend.count_tokens(
-            model_id, system, tools, self._conversations[room_id]
+            tier, system, tools, self._conversations[room_id]
         )
         if count < 0:
             log.warning(
@@ -289,13 +269,13 @@ class Brain:
         room_id: str,
         system: list[SystemBlock],
         tools: list[ToolDefinition],
-        model_id: str,
+        tier: str,
     ) -> None:
         old_count = len(self._conversations[room_id])
         await compact_history(self._backend, self._conversations, room_id)
         new_count = len(self._conversations[room_id])
         if new_count < old_count:
-            tokens = await self._measure_context(room_id, system, tools, model_id)
+            tokens = await self._measure_context(room_id, system, tools, tier)
             log.info(
                 "Compacted room %s: %d → %d messages (%d tokens)",
                 room_id,

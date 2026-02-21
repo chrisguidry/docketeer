@@ -4,6 +4,8 @@ from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from docketeer.brain import Brain, ProcessCallbacks
 from docketeer.chat import RoomMessage
 from docketeer.prompt import (
@@ -439,3 +441,30 @@ async def test_process_with_no_callbacks(brain: Brain, fake_messages: Any):
     content = MessageContent(username="chris", text="hello")
     response = await brain.process("room1", content, callbacks=None)
     assert response.text == "Hi!"
+
+
+@pytest.fixture()
+def clean_inference_env(monkeypatch: pytest.MonkeyPatch):
+    """Fixture that provides clean inference env vars and restores them after."""
+    monkeypatch.delenv("DOCKETEER_ANTHROPIC_BACKEND", raising=False)
+    monkeypatch.delenv("DOCKETEER_ANTHROPIC_API_KEY", raising=False)
+    return monkeypatch
+
+
+def test_create_backend_loads_inference_plugin(clean_inference_env: pytest.MonkeyPatch):
+    """Test that _create_backend loads the inference backend plugin."""
+    from docketeer.brain.core import _create_backend
+
+    clean_inference_env.setenv("DOCKETEER_ANTHROPIC_BACKEND", "api")
+    clean_inference_env.setenv("DOCKETEER_ANTHROPIC_API_KEY", "test-key")
+    backend = _create_backend()
+    assert backend is not None
+
+
+def test_create_backend_raises_when_no_plugin(clean_inference_env: pytest.MonkeyPatch):
+    """Test that _create_backend raises RuntimeError when no plugin is installed."""
+    from docketeer.brain.core import _create_backend
+
+    with patch("docketeer.brain.core.discover_one", return_value=None):
+        with pytest.raises(RuntimeError, match="No inference backend plugin"):
+            _create_backend()
