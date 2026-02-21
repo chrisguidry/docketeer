@@ -1,7 +1,7 @@
 """Rocket Chat backend for Docketeer."""
 
 from docketeer.chat import ChatClient
-from docketeer.tools import ToolContext, _safe_path, registry
+from docketeer.tools import ToolContext, registry, safe_path
 from docketeer_rocketchat.client import RocketChatClient
 
 
@@ -20,7 +20,7 @@ def register_tools(client: ChatClient, tool_context: ToolContext) -> None:
         path: relative path to the file in workspace
         message: optional message to include with the file
         """
-        target = _safe_path(ctx.workspace, path)
+        target = safe_path(ctx.workspace, path)
         if not target.exists():
             return f"File not found: {path}"
         if target.is_dir():

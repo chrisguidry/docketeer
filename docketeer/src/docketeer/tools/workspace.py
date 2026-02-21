@@ -2,7 +2,7 @@
 
 import os
 
-from . import ToolContext, _safe_path, registry
+from . import ToolContext, registry, safe_path
 
 
 @registry.tool(emoji=":open_file_folder:")
@@ -11,7 +11,7 @@ async def list_files(ctx: ToolContext, path: str = "") -> str:
 
     path: relative path within workspace (empty string for root)
     """
-    target = _safe_path(ctx.workspace, path)
+    target = safe_path(ctx.workspace, path)
     if not target.exists():
         return f"Directory not found: {path}"
     if not target.is_dir():
@@ -37,7 +37,7 @@ async def read_file(ctx: ToolContext, path: str) -> str:
 
     path: relative path to the file
     """
-    target = _safe_path(ctx.workspace, path)
+    target = safe_path(ctx.workspace, path)
     if not target.exists():
         return f"File not found: {path}"
     if target.is_dir():
@@ -55,7 +55,7 @@ async def write_file(ctx: ToolContext, path: str, content: str) -> str:
     path: relative path to the file
     content: text content to write
     """
-    target = _safe_path(ctx.workspace, path)
+    target = safe_path(ctx.workspace, path)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(content)
     return f"Wrote {len(content)} bytes to {path}"
@@ -67,7 +67,7 @@ async def delete_file(ctx: ToolContext, path: str) -> str:
 
     path: relative path to the file
     """
-    target = _safe_path(ctx.workspace, path)
+    target = safe_path(ctx.workspace, path)
     if not target.exists():
         return f"File not found: {path}"
     if target.is_dir():
@@ -83,8 +83,8 @@ async def create_link(ctx: ToolContext, path: str, target: str) -> str:
     path: relative path for the new symlink
     target: relative path the symlink should point to (must exist)
     """
-    link_path = _safe_path(ctx.workspace, path)
-    target_path = _safe_path(ctx.workspace, target)
+    link_path = safe_path(ctx.workspace, path)
+    target_path = safe_path(ctx.workspace, target)
     if not target_path.exists():
         return f"Target does not exist: {target}"
     # Check the unresolved path for existing symlinks
@@ -104,7 +104,7 @@ async def read_link(ctx: ToolContext, path: str) -> str:
     path: relative path to the symlink
     """
     # Validate path is within workspace, but check the unresolved path for symlink status
-    _safe_path(ctx.workspace, path)
+    safe_path(ctx.workspace, path)
     unresolved = ctx.workspace / path
     if not unresolved.is_symlink():
         return f"Not a symlink: {path}"
@@ -118,7 +118,7 @@ async def search_files(ctx: ToolContext, query: str, path: str = "") -> str:
     query: text to search for (case-insensitive)
     path: relative path to search within (empty string for all)
     """
-    target = _safe_path(ctx.workspace, path)
+    target = safe_path(ctx.workspace, path)
     if not target.exists():
         return f"Directory not found: {path}"
 

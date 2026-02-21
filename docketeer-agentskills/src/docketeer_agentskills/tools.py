@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from docketeer.tools import ToolContext, _safe_path, registry
+from docketeer.tools import ToolContext, registry, safe_path
 
 from .discovery import discover_skills, parse_skill
 
@@ -28,7 +28,7 @@ async def activate_skill(ctx: ToolContext, name: str) -> str:
 
     name: skill name to activate
     """
-    skill_dir = _safe_path(ctx.workspace, f"skills/{name}")
+    skill_dir = safe_path(ctx.workspace, f"skills/{name}")
     if not skill_dir.is_dir():
         return f"Skill not found: {name}"
     try:
@@ -45,7 +45,7 @@ async def read_skill_file(ctx: ToolContext, name: str, path: str) -> str:
     name: skill name
     path: relative path within the skill directory
     """
-    skill_dir = _safe_path(ctx.workspace, f"skills/{name}")
+    skill_dir = safe_path(ctx.workspace, f"skills/{name}")
     if not skill_dir.is_dir():
         return f"Skill not found: {name}"
     target = (skill_dir / path).resolve()
@@ -122,7 +122,7 @@ async def uninstall_skill(ctx: ToolContext, name: str) -> str:
 
     name: skill name to remove
     """
-    skill_dir = _safe_path(ctx.workspace, f"skills/{name}")
+    skill_dir = safe_path(ctx.workspace, f"skills/{name}")
     if not skill_dir.is_dir():
         return f"Skill not found: {name}"
     shutil.rmtree(skill_dir)

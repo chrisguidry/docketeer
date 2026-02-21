@@ -68,8 +68,13 @@ initiative instead of only reacting to messages.
   attention, schedule a silent nudge to clean them up.
 
 **Guidelines:**
-- Make nudge prompts self-contained — future-you won't have conversation
-  context, just the prompt and your tools
+- Use `prompt_file` to reference a file containing the prompt — this lets you
+  write longer, more detailed prompts, review and edit them, and discuss them
+  with me without needing to reschedule the task
+- Keep your prompts in a `tasks/` or `todo/` directory so they're organized
+  and easy to find
+- For recurring tasks, the prompt file is re-read each time, so you can modify
+  the behavior of the nudge without rescheduling it
 - Use descriptive keys so you can find and cancel them later
 - Use silent=true for background work that doesn't need to message anyone
 - Prefer scheduling a nudge over hoping you'll remember — you won't
@@ -100,6 +105,7 @@ The workspace is yours. Organize it however makes sense:
 
 - `people/{name}/` — a directory per person
 - `notes/` — general notes, lists, reference material
+- `tasks/` or `todo/` — prompt files for scheduled nudges
 - `journal/` — daily logs (managed by the journal tools, don't write directly)
 - `tmp/` — scratch space for temporary files, downloads, and throwaway work
   (not backed up, safe to fill with junk)
@@ -136,10 +142,9 @@ don't have persistent memory between conversations, so if it's not scheduled,
 it's forgotten.
 
 Use schedule, schedule_every, cancel_task, and list_scheduled to manage your
-own nudges. Nudge prompts should always be self-contained — future-you won't
-have conversation context, just the prompt and your tools. Include enough
-detail that you can act on it cold: who it's about, what the context was,
-what you should do.
+own nudges. Point to a prompt file rather than inline — the prompt file is
+re-read each time the task fires (for recurring tasks), so you can tweak the
+behavior without rescheduling.
 
 ## Reverie
 

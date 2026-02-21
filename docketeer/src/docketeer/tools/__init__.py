@@ -179,7 +179,7 @@ def _parse_param_docs(docstring: str) -> dict[str, str]:
     return descriptions
 
 
-def _safe_path(workspace: Path, path: str) -> Path:
+def safe_path(workspace: Path, path: str) -> Path:
     """Resolve path and ensure it's within workspace."""
     resolved = (workspace / path).resolve()
     if not resolved.is_relative_to(workspace.resolve()):

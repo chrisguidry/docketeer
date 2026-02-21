@@ -9,7 +9,7 @@ from importlib.metadata import version
 import httpx
 
 from docketeer import environment
-from docketeer.tools import ToolContext, _safe_path, registry
+from docketeer.tools import ToolContext, registry, safe_path
 
 log = logging.getLogger(__name__)
 
@@ -247,7 +247,7 @@ async def download_file(ctx: ToolContext, url: str, path: str) -> str:
     url: the URL to download
     path: relative path in workspace to save the file
     """
-    target = _safe_path(ctx.workspace, path)
+    target = safe_path(ctx.workspace, path)
     target.parent.mkdir(parents=True, exist_ok=True)
 
     async with httpx.AsyncClient(

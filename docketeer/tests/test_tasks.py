@@ -1,6 +1,7 @@
 """Tests for docket task handlers."""
 
 from datetime import timedelta
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 from zoneinfo import ZoneInfo
 
@@ -57,12 +58,20 @@ def test_parse_every_non_durations_return_none(value: str):
     assert parse_every(value) is None
 
 
-async def test_nudge_with_room_sends_message():
+# --- nudge tests with real prompt files ---
+
+
+async def test_nudge_with_room_sends_message(workspace: Path, task_files: dict):
     brain = AsyncMock()
     brain.process.return_value = BrainResponse(text="reminder sent")
     client = AsyncMock()
 
-    await nudge(prompt="hey there", room_id="room123", brain=brain, client=client)
+    await nudge(
+        prompt_file=task_files["hey_there"],
+        room_id="room123",
+        brain=brain,
+        client=client,
+    )
 
     brain.process.assert_called_once()
     call_args = brain.process.call_args
@@ -76,70 +85,91 @@ async def test_nudge_with_room_sends_message():
     )
 
 
-async def test_nudge_silent_uses_tasks_room():
+async def test_nudge_silent_uses_tasks_room(workspace: Path, task_files: dict):
     brain = AsyncMock()
     brain.process.return_value = BrainResponse(text="done")
     client = AsyncMock()
 
-    await nudge(prompt="do reflection", room_id="", brain=brain, client=client)
+    await nudge(
+        prompt_file=task_files["do_reflection"], room_id="", brain=brain, client=client
+    )
 
     brain.process.assert_called_once()
     assert brain.process.call_args[0][0] == "__tasks__"
     client.send_message.assert_not_called()
 
 
-async def test_nudge_no_send_on_empty_response():
+async def test_nudge_no_send_on_empty_response(workspace: Path, task_files: dict):
     brain = AsyncMock()
     brain.process.return_value = BrainResponse(text="")
     client = AsyncMock()
 
-    await nudge(prompt="silent work", room_id="room123", brain=brain, client=client)
+    await nudge(
+        prompt_file=task_files["silent_work"],
+        room_id="room123",
+        brain=brain,
+        client=client,
+    )
     client.send_message.assert_not_called()
 
 
 # --- Error handling tests ---
 
 
-async def test_nudge_brain_error_sends_apology_to_room():
+async def test_nudge_brain_error_sends_apology_to_room(
+    workspace: Path, task_files: dict
+):
     """When brain.process raises, nudge sends an apology if room_id is set."""
     brain = AsyncMock()
     brain.process.side_effect = make_api_connection_error()
     client = AsyncMock()
 
-    await nudge(prompt="do stuff", room_id="room123", brain=brain, client=client)
+    await nudge(
+        prompt_file=task_files["do_stuff"],
+        room_id="room123",
+        brain=brain,
+        client=client,
+    )
     client.send_message.assert_called_once_with("room123", APOLOGY, thread_id="")
 
 
-async def test_nudge_silent_error_logged_only():
+async def test_nudge_silent_error_logged_only(workspace: Path, task_files: dict):
     """When brain.process raises and there's no room_id, no message is sent."""
     brain = AsyncMock()
     brain.process.side_effect = make_api_connection_error()
     client = AsyncMock()
 
-    await nudge(prompt="do stuff", room_id="", brain=brain, client=client)
+    await nudge(
+        prompt_file=task_files["do_stuff"], room_id="", brain=brain, client=client
+    )
     client.send_message.assert_not_called()
 
 
-async def test_nudge_auth_error_propagates():
+async def test_nudge_auth_error_propagates(workspace: Path, task_files: dict):
     """BackendAuthError propagates from nudge."""
     brain = AsyncMock()
     brain.process.side_effect = make_backend_auth_error()
     client = AsyncMock()
 
     with pytest.raises(BackendAuthError):
-        await nudge(prompt="do stuff", room_id="room123", brain=brain, client=client)
+        await nudge(
+            prompt_file=task_files["do_stuff"],
+            room_id="room123",
+            brain=brain,
+            client=client,
+        )
 
 
 # --- Thread support ---
 
 
-async def test_nudge_with_thread_sends_to_thread():
+async def test_nudge_with_thread_sends_to_thread(workspace: Path, task_files: dict):
     brain = AsyncMock()
     brain.process.return_value = BrainResponse(text="thread reply")
     client = AsyncMock()
 
     await nudge(
-        prompt="reply here",
+        prompt_file=task_files["reply_here"],
         room_id="room123",
         thread_id="parent_1",
         brain=brain,
@@ -154,12 +184,17 @@ async def test_nudge_with_thread_sends_to_thread():
     )
 
 
-async def test_nudge_without_thread_sends_to_channel():
+async def test_nudge_without_thread_sends_to_channel(workspace: Path, task_files: dict):
     brain = AsyncMock()
     brain.process.return_value = BrainResponse(text="channel reply")
     client = AsyncMock()
 
-    await nudge(prompt="reply here", room_id="room123", brain=brain, client=client)
+    await nudge(
+        prompt_file=task_files["reply_here"],
+        room_id="room123",
+        brain=brain,
+        client=client,
+    )
 
     content: MessageContent = brain.process.call_args[0][1]
     assert content.thread_id == ""
@@ -169,13 +204,15 @@ async def test_nudge_without_thread_sends_to_channel():
     )
 
 
-async def test_nudge_thread_error_sends_apology_to_thread():
+async def test_nudge_thread_error_sends_apology_to_thread(
+    workspace: Path, task_files: dict
+):
     brain = AsyncMock()
     brain.process.side_effect = make_api_connection_error()
     client = AsyncMock()
 
     await nudge(
-        prompt="do stuff",
+        prompt_file=task_files["do_stuff"],
         room_id="room123",
         thread_id="parent_1",
         brain=brain,
@@ -189,14 +226,14 @@ async def test_nudge_thread_error_sends_apology_to_thread():
 # --- nudge_every tests ---
 
 
-async def test_nudge_every_with_room_sends_message():
+async def test_nudge_every_with_room_sends_message(workspace: Path, task_files: dict):
     brain = AsyncMock()
     brain.process.return_value = BrainResponse(text="recurring reply")
     client = AsyncMock()
     perpetual = MagicMock()
 
     await nudge_every(
-        prompt="check status",
+        prompt_file=task_files["check_status"],
         every="PT30M",
         room_id="room123",
         brain=brain,
@@ -212,14 +249,16 @@ async def test_nudge_every_with_room_sends_message():
     )
 
 
-async def test_nudge_every_duration_calls_perpetual_after():
+async def test_nudge_every_duration_calls_perpetual_after(
+    workspace: Path, task_files: dict
+):
     brain = AsyncMock()
     brain.process.return_value = BrainResponse(text="ok")
     client = AsyncMock()
     perpetual = MagicMock()
 
     await nudge_every(
-        prompt="check",
+        prompt_file=task_files["check"],
         every="PT30M",
         room_id="room123",
         brain=brain,
@@ -230,14 +269,14 @@ async def test_nudge_every_duration_calls_perpetual_after():
     perpetual.after.assert_called_once_with(timedelta(minutes=30))
 
 
-async def test_nudge_every_cron_calls_perpetual_at():
+async def test_nudge_every_cron_calls_perpetual_at(workspace: Path, task_files: dict):
     brain = AsyncMock()
     brain.process.return_value = BrainResponse(text="ok")
     client = AsyncMock()
     perpetual = MagicMock()
 
     await nudge_every(
-        prompt="morning check",
+        prompt_file=task_files["morning_check"],
         every="0 9 * * *",
         room_id="room123",
         brain=brain,
@@ -251,14 +290,14 @@ async def test_nudge_every_cron_calls_perpetual_at():
     assert next_time.hour == 9
 
 
-async def test_nudge_every_cron_with_timezone():
+async def test_nudge_every_cron_with_timezone(workspace: Path, task_files: dict):
     brain = AsyncMock()
     brain.process.return_value = BrainResponse(text="ok")
     client = AsyncMock()
     perpetual = MagicMock()
 
     await nudge_every(
-        prompt="morning check",
+        prompt_file=task_files["morning_check"],
         every="0 9 * * *",
         timezone="America/New_York",
         room_id="room123",
@@ -272,14 +311,14 @@ async def test_nudge_every_cron_with_timezone():
     assert next_time.hour == 9
 
 
-async def test_nudge_every_silent_no_message():
+async def test_nudge_every_silent_no_message(workspace: Path, task_files: dict):
     brain = AsyncMock()
     brain.process.return_value = BrainResponse(text="done")
     client = AsyncMock()
     perpetual = MagicMock()
 
     await nudge_every(
-        prompt="silent work",
+        prompt_file=task_files["silent_work"],
         every="PT1H",
         room_id="",
         brain=brain,
@@ -292,14 +331,14 @@ async def test_nudge_every_silent_no_message():
     client.send_message.assert_not_called()
 
 
-async def test_nudge_every_error_sends_apology():
+async def test_nudge_every_error_sends_apology(workspace: Path, task_files: dict):
     brain = AsyncMock()
     brain.process.side_effect = make_api_connection_error()
     client = AsyncMock()
     perpetual = MagicMock()
 
     await nudge_every(
-        prompt="check",
+        prompt_file=task_files["check"],
         every="PT30M",
         room_id="room123",
         brain=brain,
@@ -311,14 +350,16 @@ async def test_nudge_every_error_sends_apology():
     perpetual.after.assert_called_once()
 
 
-async def test_nudge_every_error_silent_still_reschedules():
+async def test_nudge_every_error_silent_still_reschedules(
+    workspace: Path, task_files: dict
+):
     brain = AsyncMock()
     brain.process.side_effect = make_api_connection_error()
     client = AsyncMock()
     perpetual = MagicMock()
 
     await nudge_every(
-        prompt="check",
+        prompt_file=task_files["check"],
         every="PT30M",
         room_id="",
         brain=brain,
@@ -330,7 +371,7 @@ async def test_nudge_every_error_silent_still_reschedules():
     perpetual.after.assert_called_once()
 
 
-async def test_nudge_every_auth_error_propagates():
+async def test_nudge_every_auth_error_propagates(workspace: Path, task_files: dict):
     brain = AsyncMock()
     brain.process.side_effect = make_backend_auth_error()
     client = AsyncMock()
@@ -338,7 +379,7 @@ async def test_nudge_every_auth_error_propagates():
 
     with pytest.raises(BackendAuthError):
         await nudge_every(
-            prompt="check",
+            prompt_file=task_files["check"],
             every="PT30M",
             room_id="room123",
             brain=brain,
@@ -347,14 +388,14 @@ async def test_nudge_every_auth_error_propagates():
         )
 
 
-async def test_nudge_every_with_thread():
+async def test_nudge_every_with_thread(workspace: Path, task_files: dict):
     brain = AsyncMock()
     brain.process.return_value = BrainResponse(text="thread reply")
     client = AsyncMock()
     perpetual = MagicMock()
 
     await nudge_every(
-        prompt="check",
+        prompt_file=task_files["check"],
         every="PT30M",
         room_id="room123",
         thread_id="parent_1",
@@ -373,7 +414,9 @@ async def test_nudge_every_with_thread():
 # --- timezone default tests ---
 
 
-async def test_nudge_every_cron_defaults_to_local_timezone():
+async def test_nudge_every_cron_defaults_to_local_timezone(
+    workspace: Path, task_files: dict
+):
     brain = AsyncMock()
     brain.process.return_value = BrainResponse(text="ok")
     client = AsyncMock()
@@ -385,7 +428,7 @@ async def test_nudge_every_cron_defaults_to_local_timezone():
         "docketeer.tasks.environment.local_timezone", return_value=local_tz
     ) as mock_tz:
         await nudge_every(
-            prompt="morning check",
+            prompt_file=task_files["morning_check"],
             every="0 9 * * *",
             timezone="",
             room_id="room123",
@@ -398,14 +441,16 @@ async def test_nudge_every_cron_defaults_to_local_timezone():
     perpetual.at.assert_called_once()
 
 
-async def test_nudge_every_cron_explicit_timezone_honored():
+async def test_nudge_every_cron_explicit_timezone_honored(
+    workspace: Path, task_files: dict
+):
     brain = AsyncMock()
     brain.process.return_value = BrainResponse(text="ok")
     client = AsyncMock()
     perpetual = MagicMock()
 
     await nudge_every(
-        prompt="morning check",
+        prompt_file=task_files["morning_check"],
         every="0 9 * * *",
         timezone="America/New_York",
         room_id="room123",

@@ -10,8 +10,8 @@ from docketeer.tools import (
     ToolRegistry,
     _load_tool_plugins,
     _parse_param_docs,
-    _safe_path,
     _schema_from_hints,
+    safe_path,
 )
 
 
@@ -209,7 +209,7 @@ def test_parse_param_docs_skips_invalid_identifier():
 def test_safe_path_within_workspace(tmp_path: Path):
     workspace = tmp_path / "ws"
     workspace.mkdir()
-    result = _safe_path(workspace, "sub/file.txt")
+    result = safe_path(workspace, "sub/file.txt")
     assert str(result).startswith(str(workspace.resolve()))
 
 
@@ -217,7 +217,7 @@ def test_safe_path_traversal_blocked(tmp_path: Path):
     workspace = tmp_path / "ws"
     workspace.mkdir()
     with pytest.raises(ValueError, match="outside workspace"):
-        _safe_path(workspace, "../../../etc/passwd")
+        safe_path(workspace, "../../../etc/passwd")
 
 
 def test_tool_registration_with_emoji():

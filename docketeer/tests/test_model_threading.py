@@ -23,29 +23,39 @@ async def test_consolidation_uses_consolidation_model(workspace: Path):
     assert brain.process.call_args[1]["model"] == CONSOLIDATION_MODEL
 
 
-async def test_nudge_uses_chat_model_by_default():
+async def test_nudge_uses_chat_model_by_default(workspace: Path, task_files: dict):
     brain = AsyncMock()
     brain.process.return_value = BrainResponse(text="nudged")
     client = AsyncMock()
-    await nudge(prompt="hey", room_id="room1", brain=brain, client=client)
+    await nudge(
+        prompt_file=task_files["hey_there"], room_id="room1", brain=brain, client=client
+    )
     assert brain.process.call_args[1]["model"] == CHAT_MODEL
 
 
-async def test_nudge_passes_explicit_model():
+async def test_nudge_passes_explicit_model(workspace: Path, task_files: dict):
     brain = AsyncMock()
     brain.process.return_value = BrainResponse(text="nudged")
     client = AsyncMock()
-    await nudge(prompt="hey", room_id="room1", model="opus", brain=brain, client=client)
+    await nudge(
+        prompt_file=task_files["hey_there"],
+        room_id="room1",
+        model="opus",
+        brain=brain,
+        client=client,
+    )
     assert brain.process.call_args[1]["model"] == "opus"
 
 
-async def test_nudge_every_uses_chat_model_by_default():
+async def test_nudge_every_uses_chat_model_by_default(
+    workspace: Path, task_files: dict
+):
     brain = AsyncMock()
     brain.process.return_value = BrainResponse(text="ok")
     client = AsyncMock()
     perpetual = MagicMock()
     await nudge_every(
-        prompt="check",
+        prompt_file=task_files["check"],
         every="PT30M",
         room_id="room1",
         brain=brain,
@@ -55,13 +65,13 @@ async def test_nudge_every_uses_chat_model_by_default():
     assert brain.process.call_args[1]["model"] == CHAT_MODEL
 
 
-async def test_nudge_every_passes_explicit_model():
+async def test_nudge_every_passes_explicit_model(workspace: Path, task_files: dict):
     brain = AsyncMock()
     brain.process.return_value = BrainResponse(text="ok")
     client = AsyncMock()
     perpetual = MagicMock()
     await nudge_every(
-        prompt="check",
+        prompt_file=task_files["check"],
         every="PT30M",
         room_id="room1",
         model="sonnet",

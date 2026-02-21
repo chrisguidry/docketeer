@@ -29,7 +29,11 @@ async def test_schedule_every_with_duration(
     _register_docket_tools(mock_docket, tool_context)
     result = await registry.execute(
         "schedule_every",
-        {"prompt": "check status", "every": "PT30M", "key": "status-check"},
+        {
+            "prompt_file": "tasks/check-status.md",
+            "every": "PT30M",
+            "key": "status-check",
+        },
         tool_context,
     )
     assert "status-check" in result
@@ -43,7 +47,7 @@ async def test_schedule_every_with_cron(
     _register_docket_tools(mock_docket, tool_context)
     result = await registry.execute(
         "schedule_every",
-        {"prompt": "morning standup", "every": "0 9 * * 1-5", "key": "standup"},
+        {"prompt_file": "tasks/standup.md", "every": "0 9 * * 1-5", "key": "standup"},
         tool_context,
     )
     assert "standup" in result
@@ -57,7 +61,7 @@ async def test_schedule_every_invalid_expression(
     _register_docket_tools(mock_docket, tool_context)
     result = await registry.execute(
         "schedule_every",
-        {"prompt": "test", "every": "not-valid", "key": "bad"},
+        {"prompt_file": "tasks/test.md", "every": "not-valid", "key": "bad"},
         tool_context,
     )
     assert "error" in result.lower()
@@ -70,7 +74,7 @@ async def test_schedule_every_invalid_timezone(
     result = await registry.execute(
         "schedule_every",
         {
-            "prompt": "test",
+            "prompt_file": "tasks/test.md",
             "every": "0 9 * * *",
             "key": "tz-bad",
             "timezone": "Fake/Zone",
@@ -87,7 +91,7 @@ async def test_schedule_every_silent_clears_room(
     result = await registry.execute(
         "schedule_every",
         {
-            "prompt": "quiet work",
+            "prompt_file": "tasks/quiet-work.md",
             "every": "PT1H",
             "key": "quiet",
             "silent": True,
@@ -106,7 +110,7 @@ async def test_schedule_every_thread_passthrough(
     _register_docket_tools(mock_docket, tool_context)
     await registry.execute(
         "schedule_every",
-        {"prompt": "thread work", "every": "PT30M", "key": "threaded"},
+        {"prompt_file": "tasks/thread-work.md", "every": "PT30M", "key": "threaded"},
         tool_context,
     )
     call_kwargs = mock_docket.replace.return_value.call_args[1]
@@ -119,7 +123,7 @@ async def test_list_scheduled_shows_every_for_recurring(
     future_task = MagicMock()
     future_task.key = "recurring-1"
     future_task.when = datetime(2026, 12, 25, 10, 0, tzinfo=UTC)
-    future_task.kwargs = {"prompt": "check in", "every": "PT30M"}
+    future_task.kwargs = {"prompt_file": "tasks/check-in.md", "every": "PT30M"}
 
     snapshot = MagicMock()
     snapshot.future = [future_task]
@@ -138,7 +142,11 @@ async def test_schedule_every_with_cron_shorthand(
     _register_docket_tools(mock_docket, tool_context)
     result = await registry.execute(
         "schedule_every",
-        {"prompt": "daily check", "every": "@daily", "key": "daily-check"},
+        {
+            "prompt_file": "tasks/daily-check.md",
+            "every": "@daily",
+            "key": "daily-check",
+        },
         tool_context,
     )
     assert "daily-check" in result
@@ -240,7 +248,7 @@ async def test_register_docket_tools_schedule_with_key(
     result = await registry.execute(
         "schedule",
         {
-            "prompt": "remind chris",
+            "prompt_file": "tasks/remind-chris.md",
             "when": "2026-12-25T10:00:00-05:00",
             "key": "xmas-reminder",
         },
@@ -256,7 +264,7 @@ async def test_register_docket_tools_schedule_without_key(
     _register_docket_tools(mock_docket, tool_context)
     result = await registry.execute(
         "schedule",
-        {"prompt": "do thing", "when": "2026-12-25T10:00:00-05:00"},
+        {"prompt_file": "tasks/do-thing.md", "when": "2026-12-25T10:00:00-05:00"},
         tool_context,
     )
     assert "task-" in result
@@ -269,7 +277,7 @@ async def test_register_docket_tools_schedule_bad_datetime(
     _register_docket_tools(mock_docket, tool_context)
     result = await registry.execute(
         "schedule",
-        {"prompt": "test", "when": "not-a-date"},
+        {"prompt_file": "tasks/test.md", "when": "not-a-date"},
         tool_context,
     )
     assert "invalid datetime" in result
@@ -281,7 +289,11 @@ async def test_register_docket_tools_schedule_silent(
     _register_docket_tools(mock_docket, tool_context)
     result = await registry.execute(
         "schedule",
-        {"prompt": "quiet", "when": "2026-12-25T10:00:00-05:00", "silent": True},
+        {
+            "prompt_file": "tasks/quiet.md",
+            "when": "2026-12-25T10:00:00-05:00",
+            "silent": True,
+        },
         tool_context,
     )
     assert "silently" in result
@@ -295,7 +307,7 @@ async def test_register_docket_tools_schedule_passes_thread_id(
     await registry.execute(
         "schedule",
         {
-            "prompt": "reply in thread",
+            "prompt_file": "tasks/reply-in-thread.md",
             "when": "2026-12-25T10:00:00-05:00",
             "key": "thread-task",
         },
@@ -312,7 +324,11 @@ async def test_register_docket_tools_schedule_no_thread_by_default(
     _register_docket_tools(mock_docket, tool_context)
     await registry.execute(
         "schedule",
-        {"prompt": "do thing", "when": "2026-12-25T10:00:00-05:00", "key": "no-thread"},
+        {
+            "prompt_file": "tasks/do-thing.md",
+            "when": "2026-12-25T10:00:00-05:00",
+            "key": "no-thread",
+        },
         tool_context,
     )
     call_kwargs = mock_docket.replace.return_value.call_args[1]
@@ -347,11 +363,11 @@ async def test_register_docket_tools_list_scheduled_with_tasks(
     future_task = MagicMock()
     future_task.key = "task-1"
     future_task.when = datetime(2026, 12, 25, 10, 0, tzinfo=UTC)
-    future_task.kwargs = {"prompt": "do thing"}
+    future_task.kwargs = {"prompt_file": "tasks/do-thing.md"}
 
     running_task = MagicMock()
     running_task.key = "task-2"
-    running_task.kwargs = {"prompt": "running now"}
+    running_task.kwargs = {"prompt_file": "tasks/running-now.md"}
 
     snapshot = MagicMock()
     snapshot.future = [future_task]
@@ -372,7 +388,7 @@ async def test_register_docket_tools_list_scheduled_long_prompt(
     task = MagicMock()
     task.key = "task-1"
     task.when = datetime(2026, 12, 25, 10, 0, tzinfo=UTC)
-    task.kwargs = {"prompt": "x" * 100}
+    task.kwargs = {"prompt_file": "tasks/reminder.md"}
 
     snapshot = MagicMock()
     snapshot.future = [task]
@@ -381,7 +397,7 @@ async def test_register_docket_tools_list_scheduled_long_prompt(
 
     _register_docket_tools(mock_docket, tool_context)
     result = await registry.execute("list_scheduled", {}, tool_context)
-    assert "..." in result
+    assert "tasks/reminder.md" in result
 
 
 async def test_register_docket_tools_list_scheduled_long_running_prompt(
@@ -389,7 +405,7 @@ async def test_register_docket_tools_list_scheduled_long_running_prompt(
 ):
     task = MagicMock()
     task.key = "task-r"
-    task.kwargs = {"prompt": "y" * 100}
+    task.kwargs = {"prompt_file": "tasks/reminder.md"}
 
     snapshot = MagicMock()
     snapshot.future = []
@@ -398,7 +414,7 @@ async def test_register_docket_tools_list_scheduled_long_running_prompt(
 
     _register_docket_tools(mock_docket, tool_context)
     result = await registry.execute("list_scheduled", {}, tool_context)
-    assert "..." in result
+    assert "tasks/reminder.md" in result
     assert "RUNNING" in result
 
 

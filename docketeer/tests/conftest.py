@@ -44,9 +44,10 @@ def make_api_connection_error() -> APIConnectionError:
 def _isolated_data_dir(tmp_path: Path) -> Iterator[None]:
     """Isolate tests from the real data directory."""
     data_dir = tmp_path / "data"
+    ws_dir = data_dir / "memory"
     with (
         patch.object(environment, "DATA_DIR", data_dir),
-        patch.object(environment, "WORKSPACE_PATH", data_dir / "memory"),
+        patch.object(environment, "WORKSPACE_PATH", ws_dir),
         patch.object(environment, "AUDIT_PATH", data_dir / "audit"),
         patch.object(environment, "USAGE_PATH", data_dir / "token-usage"),
     ):
@@ -55,14 +56,42 @@ def _isolated_data_dir(tmp_path: Path) -> Iterator[None]:
 
 @pytest.fixture()
 def workspace(tmp_path: Path) -> Path:
-    ws = tmp_path / "memory"
-    ws.mkdir()
+    """The workspace directory (same as environment.WORKSPACE_PATH for tests)."""
+    ws = tmp_path / "data" / "memory"
+    ws.mkdir(parents=True)
     return ws
 
 
 @pytest.fixture()
 def tool_context(workspace: Path) -> ToolContext:
     return ToolContext(workspace=workspace, room_id="room1")
+
+
+@pytest.fixture()
+def task_files(workspace: Path) -> dict[str, Path]:
+    """Create prompt files in the workspace for testing scheduled tasks."""
+    tasks_dir = workspace / "tasks"
+    tasks_dir.mkdir()
+
+    files = {
+        "hey_there": "hey there",
+        "do_reflection": "do reflection",
+        "silent_work": "silent work",
+        "do_stuff": "do stuff",
+        "reply_here": "reply here",
+        "check_status": "check status",
+        "check": "check",
+        "morning_check": "morning check",
+        "empty": "",
+    }
+
+    result = {}
+    for name, content in files.items():
+        path = tasks_dir / f"{name}.md"
+        path.write_text(content)
+        result[name] = str(path.relative_to(workspace))
+
+    return result
 
 
 def make_text_block(text: str = "Hello!") -> TextBlock:

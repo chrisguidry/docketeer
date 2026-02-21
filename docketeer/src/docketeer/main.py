@@ -213,7 +213,7 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
     @registry.tool(emoji=":alarm_clock:")
     async def schedule(
         ctx: ToolContext,
-        prompt: str,
+        prompt_file: str,
         when: str,
         key: str = "",
         silent: bool = False,
@@ -222,7 +222,8 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
         """Schedule a future task — reminder, follow-up, or background work. The time
         must be in the future — add the delay to the current time shown in your context.
 
-        prompt: what to do when the task fires (be specific — future-you needs context)
+        prompt_file: path to a file in your workspace containing the prompt (e.g. "tasks/remind-chris.md").
+            This lets you write longer prompts, review and edit them, and discuss them with the user.
         when: ISO 8601 datetime in the future (e.g. 2026-02-07T15:00:00-05:00)
         key: unique identifier for cancellation/rescheduling (e.g. "remind-chris-dentist")
         silent: if true, work silently without sending a message (default: false)
@@ -238,7 +239,7 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
 
         if key:
             await docket.replace(tasks.nudge, when=fire_at, key=key)(
-                prompt=prompt,
+                prompt_file=prompt_file,
                 room_id=room_id,
                 thread_id=thread_id,
                 model=model,
@@ -246,7 +247,7 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
         else:
             key = f"task-{fire_at.strftime('%Y%m%d-%H%M%S')}"
             await docket.add(tasks.nudge, when=fire_at, key=key)(
-                prompt=prompt,
+                prompt_file=prompt_file,
                 room_id=room_id,
                 thread_id=thread_id,
                 model=model,
@@ -259,7 +260,7 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
     @registry.tool(emoji=":alarm_clock:")
     async def schedule_every(
         ctx: ToolContext,
-        prompt: str,
+        prompt_file: str,
         every: str,
         key: str,
         timezone: str = "",
@@ -268,7 +269,9 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
     ) -> str:
         """Schedule a recurring task on a fixed interval or cron schedule.
 
-        prompt: what to do each time (be specific — future-you needs context)
+        prompt_file: path to a file in your workspace containing the prompt (e.g. "tasks/daily-checkin.md").
+            This lets you write longer prompts, review and edit them, discuss them with the user,
+            and modify the behavior of the recurring task without rescheduling it.
         every: ISO 8601 duration (PT30M, PT2H, P1D) or cron expression (0 9 * * 1-5, @daily)
         key: required — stable identifier for cancellation (e.g. "daily-standup")
         timezone: timezone for cron expressions (default: system timezone, ignored for durations)
@@ -301,7 +304,7 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
         thread_id = "" if silent else ctx.thread_id
 
         await docket.replace(tasks.nudge_every, when=first_fire, key=key)(
-            prompt=prompt,
+            prompt_file=prompt_file,
             every=every,
             timezone=timezone,
             room_id=room_id,
@@ -331,20 +334,16 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
 
         for ex in snap.future:
             local = ex.when.astimezone().strftime("%Y-%m-%d %H:%M %Z")
-            prompt = ex.kwargs.get("prompt", "")
-            if len(prompt) > 80:
-                prompt = prompt[:77] + "..."
+            prompt_file = ex.kwargs.get("prompt_file", "(inline prompt)")
             every = ex.kwargs.get("every", "")
             recur = f" (every {every})" if every else ""
-            lines.append(f"  [{ex.key}] {local}{recur} — {prompt}")
+            lines.append(f"  [{ex.key}] {local}{recur} — {prompt_file}")
 
         for ex in snap.running:
-            prompt = ex.kwargs.get("prompt", "")
-            if len(prompt) > 80:
-                prompt = prompt[:77] + "..."
+            prompt_file = ex.kwargs.get("prompt_file", "(inline prompt)")
             every = ex.kwargs.get("every", "")
             recur = f" (every {every})" if every else ""
-            lines.append(f"  [{ex.key}] RUNNING{recur} — {prompt}")
+            lines.append(f"  [{ex.key}] RUNNING{recur} — {prompt_file}")
 
         if not lines:
             return "No scheduled tasks"

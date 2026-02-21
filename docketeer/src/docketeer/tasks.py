@@ -3,9 +3,11 @@
 import logging
 import re
 from datetime import datetime, timedelta
+from typing import Annotated
 from zoneinfo import ZoneInfo
 
 from croniter import croniter
+from docket import Logged
 from docket.dependencies import Perpetual
 
 from docketeer import environment
@@ -15,6 +17,7 @@ from docketeer.chat import ChatClient
 from docketeer.cycles import consolidation, reverie
 from docketeer.dependencies import CurrentBrain, CurrentChatClient
 from docketeer.prompt import BrainResponse, MessageContent
+from docketeer.tools import safe_path
 
 log = logging.getLogger(__name__)
 
@@ -43,14 +46,26 @@ def parse_every(every: str) -> timedelta | None:
 
 
 async def nudge(
-    prompt: str,
-    room_id: str = "",
-    thread_id: str = "",
-    model: str = "",
+    prompt_file: Annotated[str, Logged],
+    room_id: Annotated[str, Logged] = "",
+    thread_id: Annotated[str, Logged] = "",
+    model: Annotated[str, Logged] = "",
     brain: Brain = CurrentBrain(),
     client: ChatClient = CurrentChatClient(),
 ) -> None:
-    """Nudge the brain with a prompt, optionally sending the response to a room."""
+    """Nudge the brain with a prompt from a file.
+
+    The prompt is read from the workspace at prompt_file (relative to workspace root).
+    This allows you to write longer prompts, review and edit them, and discuss them
+    with the user without needing to modify the scheduled task.
+    """
+    resolved = safe_path(environment.WORKSPACE_PATH, prompt_file)
+    prompt = resolved.read_text()
+
+    if not prompt:
+        log.warning("Prompt file is empty: %s", prompt_file)
+        return
+
     now = datetime.now().astimezone()
     content = MessageContent(
         username="system", timestamp=now, text=prompt, thread_id=thread_id
@@ -83,17 +98,30 @@ async def nudge(
 
 
 async def nudge_every(
-    prompt: str,
-    every: str,
-    timezone: str = "",
-    room_id: str = "",
-    thread_id: str = "",
-    model: str = "",
+    prompt_file: Annotated[str, Logged],
+    every: Annotated[str, Logged] = "",
+    timezone: Annotated[str, Logged] = "",
+    room_id: Annotated[str, Logged] = "",
+    thread_id: Annotated[str, Logged] = "",
+    model: Annotated[str, Logged] = "",
     perpetual: Perpetual = Perpetual(),
     brain: Brain = CurrentBrain(),
     client: ChatClient = CurrentChatClient(),
 ) -> None:
-    """Recurring nudge — fires on a fixed interval or cron schedule."""
+    """Recurring nudge — fires on a fixed interval or cron schedule.
+
+    The prompt is read from the workspace at prompt_file (relative to workspace root).
+    This allows you to write longer prompts, review and edit them, and discuss them
+    with the user without needing to modify the scheduled task. The prompt file is
+    re-read each time the task fires, so you can modify it between runs.
+    """
+    resolved = safe_path(environment.WORKSPACE_PATH, prompt_file)
+    prompt = resolved.read_text()
+
+    if not prompt:
+        log.warning("Prompt file is empty: %s", prompt_file)
+        return
+
     duration = parse_every(every)
 
     now = datetime.now().astimezone()
