@@ -24,5 +24,7 @@ larger plugins — it registers `docketeer.tools`, `docketeer.prompt`, and
 Tests are split by concern: config parsing, manager lifecycle, OAuth flows,
 tool invocation, transport, and prompt generation.
 
-The `conftest.py` provides workspace fixtures with sample `mcp.json` configs.
-OAuth tests use `MemoryVault` from `docketeer.testing` for token storage.
+The `conftest.py` provides shared fixtures: `data_dir`, `mcp_dir`,
+`fresh_manager`, `tool_context`, and the `_write_server` helper. Use these
+rather than redefining them in individual test files. OAuth tests use
+`MemoryVault` from `docketeer.testing` for token storage.

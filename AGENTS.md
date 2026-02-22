@@ -119,6 +119,31 @@ means test files themselves must have no dead branches. Concretely:
 Push all setup and teardown complexity into fixtures. Tests should be short,
 flat sequences: arrange with fixtures, act, assert.
 
+### Fixtures over mocks
+
+If you find yourself writing the same `MagicMock()` construction in more
+than one test, stop and make it a fixture or a factory function in
+`conftest.py`. Common smells:
+
+- **Duplicated helpers across test files.** If two test files define the
+  same helper, it belongs in conftest. Don't copy-paste between files.
+- **Deep `MagicMock()` chains.** Building `mock.choices[0].delta.content`
+  by hand in every test is noisy and fragile. Write a small builder
+  function (`make_chunk(content="Hello", finish_reason="stop")`) and put
+  it in conftest.
+- **Repeated `with patch(...)` blocks.** If every test in a file patches
+  the same thing, that's a fixture. Use `@pytest.fixture(autouse=True)`
+  or a yielding fixture that provides the mock.
+- **`# pragma: no cover` on test helpers.** This means the helper is dead
+  code. Every conftest helper must be exercised by at least one test. If
+  coverage can't reach it, something is wrong — either the helper is
+  unused or tests are importing local copies instead of the conftest one.
+
+Prefer the narrowest mock that works. If a protocol has a test double in
+`docketeer.testing`, use that instead of `MagicMock`. If you're mocking a
+dataclass, construct the real dataclass. Only reach for `MagicMock` when
+you genuinely need a stand-in for something you can't easily construct.
+
 ### Use the test doubles in `docketeer.testing`
 
 The core package provides `MemoryChat`, `MemoryVault`, and related test

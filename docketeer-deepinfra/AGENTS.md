@@ -17,5 +17,10 @@ Tests are split by concern: serialization, streaming, tool execution, usage
 tracking, callbacks, and the full agentic loop. All OpenAI API calls are
 faked.
 
+Shared test infrastructure (streaming helpers, chunk/response builders,
+the `MODEL` constant, `tool_context` fixture) lives in `conftest.py`. When
+adding new tests, use the existing builders rather than constructing
+MagicMock chains by hand.
+
 The `DOCKETEER_DEEPINFRA_API_KEY` and `DOCKETEER_DEEPINFRA_BASE_URL` env vars
 are set to test values via `pytest-env` in `pyproject.toml`.
