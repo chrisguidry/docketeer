@@ -1,26 +1,13 @@
 """Tests for execute_tools function."""
 
 from pathlib import Path
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
-from anthropic.types import ToolUseBlock
 from docketeer_anthropic.loop import execute_tools
 
 from docketeer.tools import ToolContext
 
-
-def make_tool_block(
-    name: str = "test_tool",
-    tool_id: str = "tool_1",
-    input_data: dict[str, Any] | None = None,
-) -> MagicMock:
-    """Create a mock tool use block."""
-    block = MagicMock(spec=ToolUseBlock)
-    block.name = name
-    block.id = tool_id
-    block.input = input_data or {}
-    return block
+from .conftest import make_tool_block
 
 
 async def test_execute_tools_success(tmp_path: Path) -> None:

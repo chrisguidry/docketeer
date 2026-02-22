@@ -1,37 +1,8 @@
 """Tests for build_reply function."""
 
-from typing import Any
-from unittest.mock import MagicMock
-
-from anthropic.types import TextBlock
 from docketeer_anthropic.loop import build_reply
 
-from docketeer.brain.core import InferenceModel
-
-MODEL = InferenceModel(model_id="claude-sonnet-4-5-20251001", max_output_tokens=64_000)
-
-
-def make_text_block(text: str = "Hello!") -> MagicMock:
-    """Create a mock text block."""
-    block = MagicMock(spec=TextBlock)
-    block.text = text
-    return block
-
-
-def make_response(
-    content: Any, stop_reason: str = "end_turn", usage: Any = None
-) -> MagicMock:
-    """Create a mock response."""
-    response = MagicMock()
-    response.content = content if isinstance(content, list) else [content]
-    response.stop_reason = stop_reason
-    response.usage = usage or MagicMock(
-        input_tokens=100,
-        output_tokens=50,
-        cache_read_input_tokens=0,
-        cache_creation_input_tokens=0,
-    )
-    return response
+from .conftest import make_response, make_text_block
 
 
 def test_build_reply_with_text() -> None:

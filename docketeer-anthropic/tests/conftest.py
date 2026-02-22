@@ -17,7 +17,7 @@ MAX_TOOL_ROUNDS = 10
 
 
 @pytest.fixture()
-def mock_client() -> MagicMock:  # pragma: no cover
+def mock_client() -> MagicMock:
     """Create a mock Anthropic client."""
     client = MagicMock()
     client.messages = MagicMock()
@@ -25,14 +25,14 @@ def mock_client() -> MagicMock:  # pragma: no cover
 
 
 @pytest.fixture()
-def tool_context(tmp_path: Path) -> ToolContext:  # pragma: no cover
+def tool_context(tmp_path: Path) -> ToolContext:
     """Create a test tool context."""
     return ToolContext(workspace=tmp_path, username="test-user")
 
 
 def make_response(
     content: Any, stop_reason: str = "end_turn", usage: Any = None
-) -> MagicMock:  # pragma: no cover
+) -> MagicMock:
     """Create a mock response."""
     response = MagicMock()
     response.content = content if isinstance(content, list) else [content]
@@ -46,7 +46,7 @@ def make_response(
     return response
 
 
-def make_text_block(text: str = "Hello!") -> MagicMock:  # pragma: no cover
+def make_text_block(text: str = "Hello!") -> MagicMock:
     """Create a mock text block."""
     block = MagicMock(spec=TextBlock)
     block.text = text
@@ -57,7 +57,7 @@ def make_tool_block(
     name: str = "test_tool",
     tool_id: str = "tool_1",
     input_data: dict[str, Any] | None = None,
-) -> MagicMock:  # pragma: no cover
+) -> MagicMock:
     """Create a mock tool use block."""
     block = MagicMock(spec=ToolUseBlock)
     block.name = name
@@ -66,7 +66,7 @@ def make_tool_block(
     return block
 
 
-class FakeStream:  # pragma: no cover
+class FakeStream:
     """Fake stream context manager for testing."""
 
     def __init__(self, response: MagicMock) -> None:
