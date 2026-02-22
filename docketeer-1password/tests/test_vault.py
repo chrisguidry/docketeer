@@ -1,11 +1,12 @@
 """Tests for the 1Password vault implementation."""
 
 import json
-from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from docketeer_1password.vault import OnePasswordVault
+
+from .conftest import OpCLI, OpResponse
 
 
 @pytest.fixture()
@@ -13,39 +14,29 @@ def vault() -> OnePasswordVault:
     return OnePasswordVault(token="test-sa-token")
 
 
-def _mock_op(stdout: str = "", returncode: int = 0) -> AsyncMock:
-    """Create a mock for asyncio.create_subprocess_exec."""
-    proc = AsyncMock()
-    proc.communicate.return_value = (stdout.encode(), b"")
-    proc.returncode = returncode
-    return proc
-
-
-# --- env ---
-
-
-async def test_op_receives_service_account_token(vault: OnePasswordVault):
-    vaults_json = json.dumps([])
-
-    async def fake_exec(*args: object, **kwargs: object) -> AsyncMock:
-        env: dict[str, str] = kwargs.get("env", {})  # type: ignore[assignment]
-        assert env["OP_SERVICE_ACCOUNT_TOKEN"] == "test-sa-token"
-        assert "PATH" in env
-        return _mock_op(vaults_json)
-
-    with patch("asyncio.create_subprocess_exec", side_effect=fake_exec):
-        await vault.list_secrets()
-
-
-# --- list ---
-
-
 def _item_detail(fields: list[dict[str, str]]) -> str:
     """Build a JSON item detail response with the given fields."""
     return json.dumps({"fields": fields})
 
 
-async def test_list_secrets(vault: OnePasswordVault):
+# --- env ---
+
+
+async def test_op_receives_service_account_token(
+    vault: OnePasswordVault, op_cli: OpCLI
+):
+    op_cli(json.dumps([]))
+    await vault.list_secrets()
+
+    env: dict[str, str] = op_cli.calls[0].kwargs.get("env", {})  # type: ignore[assignment]
+    assert env["OP_SERVICE_ACCOUNT_TOKEN"] == "test-sa-token"
+    assert "PATH" in env
+
+
+# --- list ---
+
+
+async def test_list_secrets(vault: OnePasswordVault, op_cli: OpCLI):
     vaults_json = json.dumps([{"id": "abc", "name": "Agent"}])
     items_json = json.dumps(
         [
@@ -61,16 +52,8 @@ async def test_list_secrets(vault: OnePasswordVault):
         ]
     )
 
-    responses = [vaults_json, items_json, detail1, detail2]
-    call_count = 0
-
-    async def fake_exec(*args: object, **_kwargs: object) -> AsyncMock:
-        nonlocal call_count
-        call_count += 1
-        return _mock_op(responses[call_count - 1])
-
-    with patch("asyncio.create_subprocess_exec", side_effect=fake_exec):
-        refs = await vault.list_secrets()
+    op_cli(vaults_json, items_json, detail1, detail2)
+    refs = await vault.list_secrets()
 
     names = [r.name for r in refs]
     assert "Agent/api-key/password" in names
@@ -78,7 +61,7 @@ async def test_list_secrets(vault: OnePasswordVault):
     assert "Agent/db-cred/password" in names
 
 
-async def test_list_multiple_vaults(vault: OnePasswordVault):
+async def test_list_multiple_vaults(vault: OnePasswordVault, op_cli: OpCLI):
     vaults_json = json.dumps(
         [
             {"id": "v1", "name": "Vault1"},
@@ -90,47 +73,26 @@ async def test_list_multiple_vaults(vault: OnePasswordVault):
     detail_a = _item_detail([{"label": "password", "id": "pw"}])
     detail_b = _item_detail([{"label": "token", "id": "tk"}])
 
-    responses = [vaults_json, items_v1, detail_a, items_v2, detail_b]
-    call_count = 0
-
-    async def fake_exec(*args: object, **_kwargs: object) -> AsyncMock:
-        nonlocal call_count
-        call_count += 1
-        return _mock_op(responses[call_count - 1])
-
-    with patch("asyncio.create_subprocess_exec", side_effect=fake_exec):
-        refs = await vault.list_secrets()
+    op_cli(vaults_json, items_v1, detail_a, items_v2, detail_b)
+    refs = await vault.list_secrets()
 
     names = {r.name for r in refs}
     assert names == {"Vault1/secret-a/password", "Vault2/secret-b/token"}
 
 
-async def test_list_empty(vault: OnePasswordVault):
+async def test_list_empty(vault: OnePasswordVault, op_cli: OpCLI):
     vaults_json = json.dumps([{"id": "v1", "name": "Agent"}])
     items_json = json.dumps([])
 
-    responses = [vaults_json, items_json]
-    call_count = 0
-
-    async def fake_exec(*args: object, **_kwargs: object) -> AsyncMock:
-        nonlocal call_count
-        call_count += 1
-        return _mock_op(responses[call_count - 1])
-
-    with patch("asyncio.create_subprocess_exec", side_effect=fake_exec):
-        refs = await vault.list_secrets()
+    op_cli(vaults_json, items_json)
+    refs = await vault.list_secrets()
 
     assert refs == []
 
 
-async def test_list_no_vaults(vault: OnePasswordVault):
-    vaults_json = json.dumps([])
-
-    async def fake_exec(*args: object, **_kwargs: object) -> AsyncMock:
-        return _mock_op(vaults_json)
-
-    with patch("asyncio.create_subprocess_exec", side_effect=fake_exec):
-        refs = await vault.list_secrets()
+async def test_list_no_vaults(vault: OnePasswordVault, op_cli: OpCLI):
+    op_cli(json.dumps([]))
+    refs = await vault.list_secrets()
 
     assert refs == []
 
@@ -138,29 +100,23 @@ async def test_list_no_vaults(vault: OnePasswordVault):
 # --- resolve ---
 
 
-async def test_resolve(vault: OnePasswordVault):
-    async def fake_exec(*args: object, **_kwargs: object) -> AsyncMock:
-        return _mock_op("sk-abc123\n")
-
-    with patch("asyncio.create_subprocess_exec", side_effect=fake_exec) as mock:
-        value = await vault.resolve("Agent/api-key/password")
+async def test_resolve(vault: OnePasswordVault, op_cli: OpCLI):
+    op_cli("sk-abc123\n")
+    value = await vault.resolve("Agent/api-key/password")
 
     assert value == "sk-abc123"
-    cmd = list(mock.call_args.args)
+    cmd = list(op_cli.calls[0].args)
     assert "--fields" in cmd
     field_idx = cmd.index("--fields")
     assert cmd[field_idx + 1] == "password"
 
 
-async def test_resolve_custom_field(vault: OnePasswordVault):
-    async def fake_exec(*args: object, **_kwargs: object) -> AsyncMock:
-        return _mock_op("admin")
-
-    with patch("asyncio.create_subprocess_exec", side_effect=fake_exec) as mock:
-        value = await vault.resolve("Agent/db-cred/username")
+async def test_resolve_custom_field(vault: OnePasswordVault, op_cli: OpCLI):
+    op_cli("admin")
+    value = await vault.resolve("Agent/db-cred/username")
 
     assert value == "admin"
-    cmd = list(mock.call_args.args)
+    cmd = list(op_cli.calls[0].args)
     field_idx = cmd.index("--fields")
     assert cmd[field_idx + 1] == "username"
 
@@ -175,28 +131,20 @@ async def test_resolve_two_parts(vault: OnePasswordVault):
         await vault.resolve("Agent/api-key")
 
 
-async def test_resolve_op_failure(vault: OnePasswordVault):
-    async def fake_exec(*args: object, **_kwargs: object) -> AsyncMock:
-        proc = _mock_op("", returncode=1)
-        proc.communicate.return_value = (b"", b"not found")
-        return proc
-
-    with patch("asyncio.create_subprocess_exec", side_effect=fake_exec):
-        with pytest.raises(RuntimeError, match="not found"):
-            await vault.resolve("Agent/missing/password")
+async def test_resolve_op_failure(vault: OnePasswordVault, op_cli: OpCLI):
+    op_cli(OpResponse(stderr="not found", returncode=1))
+    with pytest.raises(RuntimeError, match="not found"):
+        await vault.resolve("Agent/missing/password")
 
 
 # --- store ---
 
 
-async def test_store_edits_existing_item(vault: OnePasswordVault):
-    async def fake_exec(*args: object, **_kwargs: object) -> AsyncMock:
-        return _mock_op()
+async def test_store_edits_existing_item(vault: OnePasswordVault, op_cli: OpCLI):
+    op_cli("")
+    await vault.store("Agent/new-secret/password", "my-value")
 
-    with patch("asyncio.create_subprocess_exec", side_effect=fake_exec) as mock:
-        await vault.store("Agent/new-secret/password", "my-value")
-
-    cmd = list(mock.call_args.args)
+    cmd = list(op_cli.calls[0].args)
     assert cmd[1] == "item"
     assert cmd[2] == "edit"
     assert "new-secret" in cmd
@@ -205,26 +153,15 @@ async def test_store_edits_existing_item(vault: OnePasswordVault):
     assert "password=my-value" in cmd
 
 
-async def test_store_creates_when_item_missing(vault: OnePasswordVault):
-    call_count = 0
+async def test_store_creates_when_item_missing(vault: OnePasswordVault, op_cli: OpCLI):
+    op_cli(OpResponse(stderr="not found", returncode=1), "")
+    await vault.store("Agent/new-secret/password", "my-value")
 
-    async def fake_exec(*args: object, **_kwargs: object) -> AsyncMock:
-        nonlocal call_count
-        call_count += 1
-        if call_count == 1:
-            proc = _mock_op("", returncode=1)
-            proc.communicate.return_value = (b"", b"not found")
-            return proc
-        return _mock_op()
-
-    with patch("asyncio.create_subprocess_exec", side_effect=fake_exec) as mock:
-        await vault.store("Agent/new-secret/password", "my-value")
-
-    assert call_count == 2
-    first_cmd = list(mock.call_args_list[0].args)
+    assert len(op_cli.calls) == 2
+    first_cmd = list(op_cli.calls[0].args)
     assert first_cmd[2] == "edit"
 
-    second_cmd = list(mock.call_args_list[1].args)
+    second_cmd = list(op_cli.calls[1].args)
     assert second_cmd[2] == "create"
     assert "--vault" in second_cmd
     assert "Agent" in second_cmd
@@ -233,14 +170,11 @@ async def test_store_creates_when_item_missing(vault: OnePasswordVault):
     assert "password=my-value" in second_cmd
 
 
-async def test_store_custom_field(vault: OnePasswordVault):
-    async def fake_exec(*args: object, **_kwargs: object) -> AsyncMock:
-        return _mock_op()
+async def test_store_custom_field(vault: OnePasswordVault, op_cli: OpCLI):
+    op_cli("")
+    await vault.store("Agent/db-cred/api_token", "tok-123")
 
-    with patch("asyncio.create_subprocess_exec", side_effect=fake_exec) as mock:
-        await vault.store("Agent/db-cred/api_token", "tok-123")
-
-    cmd = list(mock.call_args.args)
+    cmd = list(op_cli.calls[0].args)
     assert "api_token=tok-123" in cmd
 
 
@@ -249,28 +183,21 @@ async def test_store_bad_path(vault: OnePasswordVault):
         await vault.store("no-slash", "value")
 
 
-async def test_store_op_failure(vault: OnePasswordVault):
-    async def fake_exec(*args: object, **_kwargs: object) -> AsyncMock:
-        proc = _mock_op("", returncode=1)
-        proc.communicate.return_value = (b"", b"permission denied")
-        return proc
-
-    with patch("asyncio.create_subprocess_exec", side_effect=fake_exec):
-        with pytest.raises(RuntimeError, match="permission denied"):
-            await vault.store("Agent/secret/password", "value")
+async def test_store_op_failure(vault: OnePasswordVault, op_cli: OpCLI):
+    failure = OpResponse(stderr="permission denied", returncode=1)
+    op_cli(failure, failure)
+    with pytest.raises(RuntimeError, match="permission denied"):
+        await vault.store("Agent/secret/password", "value")
 
 
 # --- generate ---
 
 
-async def test_generate_edits_existing_item(vault: OnePasswordVault):
-    async def fake_exec(*args: object, **_kwargs: object) -> AsyncMock:
-        return _mock_op()
+async def test_generate_edits_existing_item(vault: OnePasswordVault, op_cli: OpCLI):
+    op_cli("")
+    await vault.generate("Agent/random-key/password", length=24)
 
-    with patch("asyncio.create_subprocess_exec", side_effect=fake_exec) as mock:
-        await vault.generate("Agent/random-key/password", length=24)
-
-    cmd = list(mock.call_args.args)
+    cmd = list(op_cli.calls[0].args)
     assert cmd[1] == "item"
     assert cmd[2] == "edit"
     assert "random-key" in cmd
@@ -279,40 +206,28 @@ async def test_generate_edits_existing_item(vault: OnePasswordVault):
     assert any("24" in str(a) for a in cmd)
 
 
-async def test_generate_creates_when_item_missing(vault: OnePasswordVault):
-    call_count = 0
+async def test_generate_creates_when_item_missing(
+    vault: OnePasswordVault, op_cli: OpCLI
+):
+    op_cli(OpResponse(stderr="not found", returncode=1), "")
+    await vault.generate("Agent/random-key/password", length=24)
 
-    async def fake_exec(*args: object, **_kwargs: object) -> AsyncMock:
-        nonlocal call_count
-        call_count += 1
-        if call_count == 1:
-            proc = _mock_op("", returncode=1)
-            proc.communicate.return_value = (b"", b"not found")
-            return proc
-        return _mock_op()
-
-    with patch("asyncio.create_subprocess_exec", side_effect=fake_exec) as mock:
-        await vault.generate("Agent/random-key/password", length=24)
-
-    assert call_count == 2
-    first_cmd = list(mock.call_args_list[0].args)
+    assert len(op_cli.calls) == 2
+    first_cmd = list(op_cli.calls[0].args)
     assert first_cmd[2] == "edit"
 
-    second_cmd = list(mock.call_args_list[1].args)
+    second_cmd = list(op_cli.calls[1].args)
     assert second_cmd[2] == "create"
     assert "--vault" in second_cmd
     assert "Agent" in second_cmd
     assert any("24" in str(a) for a in second_cmd)
 
 
-async def test_generate_default_length(vault: OnePasswordVault):
-    async def fake_exec(*args: object, **_kwargs: object) -> AsyncMock:
-        return _mock_op()
+async def test_generate_default_length(vault: OnePasswordVault, op_cli: OpCLI):
+    op_cli("")
+    await vault.generate("Agent/random-key/password")
 
-    with patch("asyncio.create_subprocess_exec", side_effect=fake_exec) as mock:
-        await vault.generate("Agent/random-key/password")
-
-    cmd = list(mock.call_args.args)
+    cmd = list(op_cli.calls[0].args)
     assert any("32" in str(a) for a in cmd)
 
 
@@ -321,28 +236,21 @@ async def test_generate_bad_path(vault: OnePasswordVault):
         await vault.generate("no-slash")
 
 
-async def test_generate_op_failure(vault: OnePasswordVault):
-    async def fake_exec(*args: object, **_kwargs: object) -> AsyncMock:
-        proc = _mock_op("", returncode=1)
-        proc.communicate.return_value = (b"", b"error")
-        return proc
-
-    with patch("asyncio.create_subprocess_exec", side_effect=fake_exec):
-        with pytest.raises(RuntimeError, match="error"):
-            await vault.generate("Agent/secret/password")
+async def test_generate_op_failure(vault: OnePasswordVault, op_cli: OpCLI):
+    failure = OpResponse(stderr="error", returncode=1)
+    op_cli(failure, failure)
+    with pytest.raises(RuntimeError, match="error"):
+        await vault.generate("Agent/secret/password")
 
 
 # --- delete ---
 
 
-async def test_delete(vault: OnePasswordVault):
-    async def fake_exec(*args: object, **_kwargs: object) -> AsyncMock:
-        return _mock_op()
+async def test_delete(vault: OnePasswordVault, op_cli: OpCLI):
+    op_cli("")
+    await vault.delete("Agent/old-secret/password")
 
-    with patch("asyncio.create_subprocess_exec", side_effect=fake_exec) as mock:
-        await vault.delete("Agent/old-secret/password")
-
-    cmd = list(mock.call_args.args)
+    cmd = list(op_cli.calls[0].args)
     assert "delete" in cmd
     assert "old-secret" in cmd
     assert "--vault" in cmd
@@ -354,12 +262,7 @@ async def test_delete_bad_path(vault: OnePasswordVault):
         await vault.delete("no-slash")
 
 
-async def test_delete_op_failure(vault: OnePasswordVault):
-    async def fake_exec(*args: object, **_kwargs: object) -> AsyncMock:
-        proc = _mock_op("", returncode=1)
-        proc.communicate.return_value = (b"", b"not found")
-        return proc
-
-    with patch("asyncio.create_subprocess_exec", side_effect=fake_exec):
-        with pytest.raises(RuntimeError, match="not found"):
-            await vault.delete("Agent/missing/password")
+async def test_delete_op_failure(vault: OnePasswordVault, op_cli: OpCLI):
+    op_cli(OpResponse(stderr="not found", returncode=1))
+    with pytest.raises(RuntimeError, match="not found"):
+        await vault.delete("Agent/missing/password")
