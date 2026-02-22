@@ -21,18 +21,20 @@ from ..conftest import (
 async def test_process_request_too_large_compacts_and_retries(
     brain: Brain, fake_messages: Any
 ):
-    """413 triggers compaction and a successful retry."""
+    """413 triggers compaction and a successful retry with compacted messages."""
     for i in range(10):
         brain._conversations["room1"].append(
             MessageParam(role="user" if i % 2 == 0 else "assistant", content=f"msg {i}")
         )
 
     call_count = 0
+    captured_message_counts: list[int] = []
     original_stream = fake_messages.stream
 
     def stream_with_413(**kwargs: Any) -> FakeStream:
         nonlocal call_count
         call_count += 1
+        captured_message_counts.append(len(kwargs.get("messages", [])))
         if call_count == 1:
             raise make_request_too_large_error()
         return original_stream(**kwargs)
@@ -45,6 +47,8 @@ async def test_process_request_too_large_compacts_and_retries(
     content = MessageContent(username="chris", text="hello")
     response = await brain.process("room1", content)
     assert response.text == "Recovered!"
+    assert len(captured_message_counts) == 2
+    assert captured_message_counts[1] < captured_message_counts[0]
 
 
 async def test_process_request_too_large_persistent(brain: Brain, fake_messages: Any):

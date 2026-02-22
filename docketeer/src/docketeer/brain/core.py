@@ -267,6 +267,7 @@ class Brain:
             except ContextTooLargeError:
                 log.warning("Request too large, compacting and retrying", exc_info=True)
                 await self._compact_history(room_id, system, tools, tier)
+                messages = self._conversations[room_id]
                 try:
                     reply = await self._backend.run_agentic_loop(
                         tier,
