@@ -1,42 +1,12 @@
 """Tests for the MCP agent-facing tools."""
 
 import json
-from collections.abc import Generator
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
-
-import pytest
 
 from docketeer.testing import MemoryVault
 from docketeer.tools import ToolContext, registry
 from docketeer_mcp.manager import MCPClientManager, MCPToolInfo
-
-
-@pytest.fixture(autouse=True)
-def fresh_manager() -> Generator[MCPClientManager]:
-    """Replace the module-level manager with a fresh instance for each test."""
-    fresh = MCPClientManager()
-    with (
-        patch("docketeer_mcp.tools.manager", fresh),
-        patch("docketeer_mcp.prompt.manager", fresh),
-    ):
-        yield fresh
-
-
-@pytest.fixture()
-def data_dir(tmp_path: Path) -> Generator[Path]:
-    d = tmp_path / "data"
-    d.mkdir()
-    with patch("docketeer_mcp.config.environment") as mock_env:
-        mock_env.DATA_DIR = d
-        yield d
-
-
-@pytest.fixture()
-def mcp_dir(data_dir: Path) -> Path:
-    d = data_dir / "mcp"
-    d.mkdir()
-    return d
 
 
 def _write_server(mcp_dir: Path, name: str, data: dict) -> None:

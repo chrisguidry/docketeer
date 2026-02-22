@@ -1,9 +1,7 @@
 """Tests for MCP server configuration."""
 
 import json
-from collections.abc import Generator
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -15,22 +13,6 @@ from docketeer_mcp.config import (
     remove_server,
     save_server,
 )
-
-
-@pytest.fixture()
-def data_dir(tmp_path: Path) -> Generator[Path]:
-    d = tmp_path / "data"
-    d.mkdir()
-    with patch("docketeer_mcp.config.environment") as mock_env:
-        mock_env.DATA_DIR = d
-        yield d
-
-
-@pytest.fixture()
-def mcp_dir(data_dir: Path) -> Path:
-    d = data_dir / "mcp"
-    d.mkdir()
-    return d
 
 
 def test_config_is_stdio():

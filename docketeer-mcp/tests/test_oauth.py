@@ -1,7 +1,7 @@
 """Tests for MCP OAuth helpers."""
 
 import json
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -29,7 +29,7 @@ def _mock_response(
     )
 
 
-async def test_discover_with_prm_and_oasm():
+async def test_discover_with_prm_and_oasm(mock_http: AsyncMock):
     prm_response = _mock_response(
         json_data={
             "resource": "https://mcp.example.com/mcp",
@@ -51,15 +51,11 @@ async def test_discover_with_prm_and_oasm():
     async def mock_get(url: str, **kwargs: object) -> httpx.Response:
         return next(responses)
 
-    mock_client = AsyncMock()
-    mock_client.get = mock_get
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=None)
+    mock_http.get = mock_get
 
-    with patch("docketeer_mcp.oauth.httpx.AsyncClient", return_value=mock_client):
-        auth_ep, token_ep, reg_ep, scopes = await discover_oauth_metadata(
-            "https://mcp.example.com/mcp"
-        )
+    auth_ep, token_ep, reg_ep, scopes = await discover_oauth_metadata(
+        "https://mcp.example.com/mcp"
+    )
 
     assert auth_ep == "https://auth.example.com/authorize"
     assert token_ep == "https://auth.example.com/token"
@@ -67,7 +63,7 @@ async def test_discover_with_prm_and_oasm():
     assert scopes == "read write"
 
 
-async def test_discover_prm_no_scopes():
+async def test_discover_prm_no_scopes(mock_http: AsyncMock):
     """PRM without scopes_supported still works, scopes come from OASM."""
     prm_response = _mock_response(
         json_data={
@@ -89,20 +85,16 @@ async def test_discover_prm_no_scopes():
     async def mock_get(url: str, **kwargs: object) -> httpx.Response:
         return next(responses)
 
-    mock_client = AsyncMock()
-    mock_client.get = mock_get
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=None)
+    mock_http.get = mock_get
 
-    with patch("docketeer_mcp.oauth.httpx.AsyncClient", return_value=mock_client):
-        auth_ep, token_ep, reg_ep, scopes = await discover_oauth_metadata(
-            "https://mcp.example.com/mcp"
-        )
+    auth_ep, token_ep, reg_ep, scopes = await discover_oauth_metadata(
+        "https://mcp.example.com/mcp"
+    )
 
     assert scopes == "api"
 
 
-async def test_discover_with_pathed_auth_server():
+async def test_discover_with_pathed_auth_server(mock_http: AsyncMock):
     """Auth server URL with a path uses path-aware OASM discovery."""
     prm_response = _mock_response(
         json_data={
@@ -123,21 +115,17 @@ async def test_discover_with_pathed_auth_server():
     async def mock_get(url: str, **kwargs: object) -> httpx.Response:
         return next(responses)
 
-    mock_client = AsyncMock()
-    mock_client.get = mock_get
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=None)
+    mock_http.get = mock_get
 
-    with patch("docketeer_mcp.oauth.httpx.AsyncClient", return_value=mock_client):
-        auth_ep, token_ep, reg_ep, scopes = await discover_oauth_metadata(
-            "https://mcp.example.com/mcp"
-        )
+    auth_ep, token_ep, reg_ep, scopes = await discover_oauth_metadata(
+        "https://mcp.example.com/mcp"
+    )
 
     assert auth_ep == "https://auth.example.com/tenant/abc/authorize"
     assert token_ep == "https://auth.example.com/tenant/abc/token"
 
 
-async def test_discover_root_url_no_path():
+async def test_discover_root_url_no_path(mock_http: AsyncMock):
     """Server at root URL (no path) only tries root PRM."""
     prm_response = _mock_response(
         json_data={
@@ -158,20 +146,16 @@ async def test_discover_root_url_no_path():
     async def mock_get(url: str, **kwargs: object) -> httpx.Response:
         return next(responses)
 
-    mock_client = AsyncMock()
-    mock_client.get = mock_get
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=None)
+    mock_http.get = mock_get
 
-    with patch("docketeer_mcp.oauth.httpx.AsyncClient", return_value=mock_client):
-        auth_ep, token_ep, reg_ep, scopes = await discover_oauth_metadata(
-            "https://mcp.example.com/"
-        )
+    auth_ep, token_ep, reg_ep, scopes = await discover_oauth_metadata(
+        "https://mcp.example.com/"
+    )
 
     assert auth_ep == "https://auth.example.com/authorize"
 
 
-async def test_discover_legacy_no_prm():
+async def test_discover_legacy_no_prm(mock_http: AsyncMock):
     """When PRM returns 404, fall back to legacy OASM discovery."""
     prm_404_a = _mock_response(status_code=404)
     prm_404_b = _mock_response(status_code=404)
@@ -188,15 +172,11 @@ async def test_discover_legacy_no_prm():
     async def mock_get(url: str, **kwargs: object) -> httpx.Response:
         return next(responses)
 
-    mock_client = AsyncMock()
-    mock_client.get = mock_get
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=None)
+    mock_http.get = mock_get
 
-    with patch("docketeer_mcp.oauth.httpx.AsyncClient", return_value=mock_client):
-        auth_ep, token_ep, reg_ep, scopes = await discover_oauth_metadata(
-            "https://mcp.example.com/mcp"
-        )
+    auth_ep, token_ep, reg_ep, scopes = await discover_oauth_metadata(
+        "https://mcp.example.com/mcp"
+    )
 
     assert auth_ep == "https://mcp.example.com/authorize"
     assert token_ep == "https://mcp.example.com/token"
@@ -204,7 +184,7 @@ async def test_discover_legacy_no_prm():
     assert scopes is None
 
 
-async def test_discover_prm_with_scopes():
+async def test_discover_prm_with_scopes(mock_http: AsyncMock):
     """PRM includes scopes_supported — scopes come from PRM."""
     prm_response = _mock_response(
         json_data={
@@ -226,21 +206,17 @@ async def test_discover_prm_with_scopes():
     async def mock_get(url: str, **kwargs: object) -> httpx.Response:
         return next(responses)
 
-    mock_client = AsyncMock()
-    mock_client.get = mock_get
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=None)
+    mock_http.get = mock_get
 
-    with patch("docketeer_mcp.oauth.httpx.AsyncClient", return_value=mock_client):
-        auth_ep, token_ep, reg_ep, scopes = await discover_oauth_metadata(
-            "https://mcp.example.com/mcp"
-        )
+    auth_ep, token_ep, reg_ep, scopes = await discover_oauth_metadata(
+        "https://mcp.example.com/mcp"
+    )
 
     assert scopes == "read write admin"
     assert auth_ep == "https://auth.example.com/authorize"
 
 
-async def test_discover_oasm_fails():
+async def test_discover_oasm_fails(mock_http: AsyncMock):
     """When both PRM and OASM return 404, raise."""
     prm_404_a = _mock_response(status_code=404)
     prm_404_b = _mock_response(status_code=404)
@@ -251,17 +227,13 @@ async def test_discover_oasm_fails():
     async def mock_get(url: str, **kwargs: object) -> httpx.Response:
         return next(responses)
 
-    mock_client = AsyncMock()
-    mock_client.get = mock_get
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=None)
+    mock_http.get = mock_get
 
-    with patch("docketeer_mcp.oauth.httpx.AsyncClient", return_value=mock_client):
-        with pytest.raises(RuntimeError, match="Could not discover"):
-            await discover_oauth_metadata("https://mcp.example.com/mcp")
+    with pytest.raises(RuntimeError, match="Could not discover"):
+        await discover_oauth_metadata("https://mcp.example.com/mcp")
 
 
-async def test_register_client():
+async def test_register_client(mock_http: AsyncMock):
     response = _mock_response(
         json_data={
             "client_id": "abc123",
@@ -272,24 +244,20 @@ async def test_register_client():
     async def mock_post(url: str, **kwargs: object) -> httpx.Response:
         return response
 
-    mock_client = AsyncMock()
-    mock_client.post = mock_post
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=None)
+    mock_http.post = mock_post
 
-    with patch("docketeer_mcp.oauth.httpx.AsyncClient", return_value=mock_client):
-        client_id, client_secret = await register_client(
-            "https://auth.example.com/register",
-            "http://127.0.0.1:3141/callback",
-            "docketeer",
-            "read write",
-        )
+    client_id, client_secret = await register_client(
+        "https://auth.example.com/register",
+        "http://127.0.0.1:3141/callback",
+        "docketeer",
+        "read write",
+    )
 
     assert client_id == "abc123"
     assert client_secret == "secret456"
 
 
-async def test_register_client_no_secret():
+async def test_register_client_no_secret(mock_http: AsyncMock):
     response = _mock_response(
         json_data={
             "client_id": "abc123",
@@ -299,23 +267,19 @@ async def test_register_client_no_secret():
     async def mock_post(url: str, **kwargs: object) -> httpx.Response:
         return response
 
-    mock_client = AsyncMock()
-    mock_client.post = mock_post
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=None)
+    mock_http.post = mock_post
 
-    with patch("docketeer_mcp.oauth.httpx.AsyncClient", return_value=mock_client):
-        client_id, client_secret = await register_client(
-            "https://auth.example.com/register",
-            "http://127.0.0.1:3141/callback",
-            "docketeer",
-        )
+    client_id, client_secret = await register_client(
+        "https://auth.example.com/register",
+        "http://127.0.0.1:3141/callback",
+        "docketeer",
+    )
 
     assert client_id == "abc123"
     assert client_secret == ""
 
 
-async def test_register_client_failure():
+async def test_register_client_failure(mock_http: AsyncMock):
     response = _mock_response(
         status_code=400, json_data={"error": "invalid_client_metadata"}
     )
@@ -323,18 +287,14 @@ async def test_register_client_failure():
     async def mock_post(url: str, **kwargs: object) -> httpx.Response:
         return response
 
-    mock_client = AsyncMock()
-    mock_client.post = mock_post
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=None)
+    mock_http.post = mock_post
 
-    with patch("docketeer_mcp.oauth.httpx.AsyncClient", return_value=mock_client):
-        with pytest.raises(RuntimeError, match="Client registration failed"):
-            await register_client(
-                "https://auth.example.com/register",
-                "http://127.0.0.1:3141/callback",
-                "docketeer",
-            )
+    with pytest.raises(RuntimeError, match="Client registration failed"):
+        await register_client(
+            "https://auth.example.com/register",
+            "http://127.0.0.1:3141/callback",
+            "docketeer",
+        )
 
 
 def test_build_authorization_url():
@@ -377,7 +337,7 @@ def test_build_authorization_url_no_scopes():
     assert "scope=" not in url
 
 
-async def test_exchange_code():
+async def test_exchange_code(mock_http: AsyncMock):
     response = _mock_response(
         json_data={
             "access_token": "at_123",
@@ -390,10 +350,7 @@ async def test_exchange_code():
     async def mock_post(url: str, **kwargs: object) -> httpx.Response:
         return response
 
-    mock_client = AsyncMock()
-    mock_client.post = mock_post
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=None)
+    mock_http.post = mock_post
 
     pending = PendingOAuth(
         server_url="https://mcp.example.com/mcp",
@@ -407,24 +364,20 @@ async def test_exchange_code():
         client_secret="secret",
     )
 
-    with patch("docketeer_mcp.oauth.httpx.AsyncClient", return_value=mock_client):
-        tokens = await exchange_code(pending, "auth_code_xyz")
+    tokens = await exchange_code(pending, "auth_code_xyz")
 
     assert tokens["access_token"] == "at_123"
     assert tokens["refresh_token"] == "rt_456"
     assert tokens["expires_in"] == 3600
 
 
-async def test_exchange_code_failure():
+async def test_exchange_code_failure(mock_http: AsyncMock):
     response = _mock_response(status_code=400, json_data={"error": "invalid_grant"})
 
     async def mock_post(url: str, **kwargs: object) -> httpx.Response:
         return response
 
-    mock_client = AsyncMock()
-    mock_client.post = mock_post
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=None)
+    mock_http.post = mock_post
 
     pending = PendingOAuth(
         server_url="https://mcp.example.com/mcp",
@@ -437,12 +390,11 @@ async def test_exchange_code_failure():
         client_id="abc123",
     )
 
-    with patch("docketeer_mcp.oauth.httpx.AsyncClient", return_value=mock_client):
-        with pytest.raises(RuntimeError, match="Token exchange failed"):
-            await exchange_code(pending, "bad_code")
+    with pytest.raises(RuntimeError, match="Token exchange failed"):
+        await exchange_code(pending, "bad_code")
 
 
-async def test_refresh_access_token():
+async def test_refresh_access_token(mock_http: AsyncMock):
     response = _mock_response(
         json_data={
             "access_token": "new_at",
@@ -455,38 +407,30 @@ async def test_refresh_access_token():
     async def mock_post(url: str, **kwargs: object) -> httpx.Response:
         return response
 
-    mock_client = AsyncMock()
-    mock_client.post = mock_post
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=None)
+    mock_http.post = mock_post
 
-    with patch("docketeer_mcp.oauth.httpx.AsyncClient", return_value=mock_client):
-        tokens = await refresh_access_token(
-            "https://auth.example.com/token",
-            "old_refresh_token",
-            "abc123",
-            "secret",
-        )
+    tokens = await refresh_access_token(
+        "https://auth.example.com/token",
+        "old_refresh_token",
+        "abc123",
+        "secret",
+    )
 
     assert tokens["access_token"] == "new_at"
     assert tokens["refresh_token"] == "new_rt"
 
 
-async def test_refresh_access_token_failure():
+async def test_refresh_access_token_failure(mock_http: AsyncMock):
     response = _mock_response(status_code=400, json_data={"error": "invalid_grant"})
 
     async def mock_post(url: str, **kwargs: object) -> httpx.Response:
         return response
 
-    mock_client = AsyncMock()
-    mock_client.post = mock_post
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=None)
+    mock_http.post = mock_post
 
-    with patch("docketeer_mcp.oauth.httpx.AsyncClient", return_value=mock_client):
-        with pytest.raises(RuntimeError, match="Token refresh failed"):
-            await refresh_access_token(
-                "https://auth.example.com/token",
-                "bad_refresh",
-                "abc123",
-            )
+    with pytest.raises(RuntimeError, match="Token refresh failed"):
+        await refresh_access_token(
+            "https://auth.example.com/token",
+            "bad_refresh",
+            "abc123",
+        )
