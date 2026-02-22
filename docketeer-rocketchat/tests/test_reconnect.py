@@ -30,33 +30,36 @@ def _make_event(
     }
 
 
-async def test_incoming_messages_reconnects_on_disconnect():
-    """After connection loss, reconnects and continues yielding messages."""
+def _make_ddp(events: list[dict[str, Any]]) -> AsyncMock:
+    """Build a DDP mock that yields events from the given list."""
+    ddp = AsyncMock()
+
+    async def fake_events() -> AsyncGenerator[dict[str, Any], None]:
+        for e in events:
+            yield e
+
+    ddp.events = fake_events
+    return ddp
+
+
+def _wired_client() -> RocketChatClient:
+    """RocketChatClient pre-wired with fake DDP and common method patches."""
     client = RocketChatClient()
     client._user_id = "bot_uid"
+    client._subscribe_to_messages = AsyncMock()  # type: ignore[assignment]
+    client.set_status = AsyncMock()  # type: ignore[assignment]
+    return client
+
+
+async def test_incoming_messages_reconnects_on_disconnect():
+    """After connection loss, reconnects and continues yielding messages."""
+    client = _wired_client()
 
     first_events = [_make_event("m1", "before disconnect")]
     second_events = [_make_event("m2", "after reconnect")]
 
-    ddp1 = AsyncMock()
-
-    async def fake_events_1() -> AsyncGenerator[
-        dict[str, Any], None
-    ]:  # pragma: no branch
-        for e in first_events:  # pragma: no branch
-            yield e
-
-    ddp1.events = fake_events_1
-
-    ddp2 = AsyncMock()
-
-    async def fake_events_2() -> AsyncGenerator[
-        dict[str, Any], None
-    ]:  # pragma: no branch
-        for e in second_events:  # pragma: no branch
-            yield e
-
-    ddp2.events = fake_events_2
+    ddp1 = _make_ddp(first_events)
+    ddp2 = _make_ddp(second_events)
 
     client._ddp = ddp1
 
@@ -66,8 +69,6 @@ async def test_incoming_messages_reconnects_on_disconnect():
         client._user_id = "bot_uid"
 
     client._open_connections = fake_open_connections  # type: ignore[assignment]
-    client._subscribe_to_messages = AsyncMock()  # type: ignore[assignment]
-    client.set_status = AsyncMock()  # type: ignore[assignment]
 
     results = []
     with patch("asyncio.sleep", new_callable=AsyncMock):
@@ -83,17 +84,8 @@ async def test_incoming_messages_reconnects_on_disconnect():
 
 async def test_incoming_messages_backoff_on_reconnect_failure():
     """Backoff doubles on each failed reconnect, capped at 60s."""
-    client = RocketChatClient()
-    client._user_id = "bot_uid"
-
-    ddp = AsyncMock()
-
-    async def fake_events() -> AsyncGenerator[
-        dict[str, Any], None
-    ]:  # pragma: no branch
-        yield _make_event("m1", "hello")
-
-    ddp.events = fake_events
+    client = _wired_client()
+    ddp = _make_ddp([_make_event("m1", "hello")])
     client._ddp = ddp
 
     connect_attempts = 0
@@ -106,8 +98,6 @@ async def test_incoming_messages_backoff_on_reconnect_failure():
         raise ConnectionError("refused")
 
     client._open_connections = failing_open_connections  # type: ignore[assignment]
-    client._subscribe_to_messages = AsyncMock()  # type: ignore[assignment]
-    client.set_status = AsyncMock()  # type: ignore[assignment]
 
     sleep_values: list[float] = []
 
@@ -128,17 +118,8 @@ async def test_incoming_messages_backoff_on_reconnect_failure():
 
 async def test_incoming_messages_calls_on_history():
     """The on_history callback is called with room history on connect."""
-    client = RocketChatClient()
-    client._user_id = "bot_uid"
-
-    ddp = AsyncMock()
-
-    async def fake_events() -> AsyncGenerator[
-        dict[str, Any], None
-    ]:  # pragma: no branch
-        yield _make_event("m1", "hello")
-
-    ddp.events = fake_events
+    client = _wired_client()
+    ddp = _make_ddp([_make_event("m1", "hello")])
     client._ddp = ddp
     client._http = httpx.AsyncClient(base_url="http://localhost:3000/api/v1", timeout=5)
 
@@ -176,31 +157,24 @@ async def test_incoming_messages_calls_on_history():
 
 async def test_incoming_messages_updates_high_water():
     """Messages with timestamps update the high water mark."""
-    client = RocketChatClient()
-    client._user_id = "bot_uid"
+    client = _wired_client()
 
     ts = {"$date": int(datetime(2026, 2, 10, 12, 0, tzinfo=UTC).timestamp() * 1000)}
-    ddp = AsyncMock()
-
-    async def fake_events() -> AsyncGenerator[
-        dict[str, Any], None
-    ]:  # pragma: no branch
-        yield {
-            "msg": "changed",
-            "fields": {
-                "args": [
-                    {
-                        "_id": "m1",
-                        "msg": "hello",
-                        "rid": "r1",
-                        "u": {"_id": "user1", "username": "alice"},
-                        "ts": ts,
-                    }
-                ]
-            },
-        }
-
-    ddp.events = fake_events
+    event = {
+        "msg": "changed",
+        "fields": {
+            "args": [
+                {
+                    "_id": "m1",
+                    "msg": "hello",
+                    "rid": "r1",
+                    "u": {"_id": "user1", "username": "alice"},
+                    "ts": ts,
+                }
+            ]
+        },
+    }
+    ddp = _make_ddp([event])
     client._ddp = ddp
 
     assert client._high_water is None

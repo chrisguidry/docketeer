@@ -86,13 +86,19 @@ prek run pytest-docketeer     # run tests for just the core package
 prek run pytest-docketeer-web # run tests for a specific plugin
 ```
 
-Each package's tests can also be run directly with `uv run`:
+Each package's tests can also be run directly — `cd` into the package
+directory and run the tool:
 
 ```sh
-uv run --directory docketeer-web pytest        # from anywhere in the repo
-uv run --directory docketeer-web pytest -x     # stop on first failure
-uv run --directory docketeer-web pytest -k test_search
+cd docketeer-web && pytest              # run all tests for a package
+cd docketeer-web && pytest -x           # stop on first failure
+cd docketeer-web && pytest -k test_search
+cd docketeer-web && ty check            # type-check a single package
 ```
+
+**Do not use `uv run` to run tools.** It can destroy and recreate the
+venv, breaking every other tool in the session and conflicting with
+other agents working concurrently.
 
 The `./run-tests` script at the repo root is a shortcut that runs pytest
 across all workspace packages sequentially.
