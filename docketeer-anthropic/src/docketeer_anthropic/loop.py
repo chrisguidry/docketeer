@@ -19,7 +19,7 @@ from anthropic.types import (
 from docketeer.audit import audit_log, log_usage, record_usage
 from docketeer.brain.backend import Usage
 from docketeer.prompt import CacheControl, MessageParam, SystemBlock
-from docketeer.tools import ToolContext, ToolDefinition, registry
+from docketeer.tools import WRAP_UP_TOOL_NAME, ToolContext, ToolDefinition, registry
 
 if TYPE_CHECKING:
     from docketeer.brain.core import InferenceModel
@@ -86,6 +86,8 @@ async def agentic_loop(
             update_cache_breakpoints(messages, tool_results)
             messages.append(MessageParam(role="assistant", content=response.content))
             messages.append(MessageParam(role="user", content=tool_results))
+            if any(b.name == WRAP_UP_TOOL_NAME for b in tool_blocks):
+                return ""
         elif response.stop_reason == "max_tokens":
             log.warning("Response truncated at %d tokens", model.max_output_tokens)
             exhausted = False

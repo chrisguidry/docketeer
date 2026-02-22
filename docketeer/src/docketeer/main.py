@@ -205,6 +205,18 @@ def _register_core_chat_tools(client: ChatClient) -> None:
             await client.react(message_id, emoji)
             return f"Added {emoji} to {message_id}"
 
+    @registry.tool
+    async def wrap_up_silently(ctx: ToolContext, emoji: str = "") -> str:
+        """End your turn without sending a text message. Optionally react to
+        the message you're responding to with an emoji.
+
+        emoji: react with this emoji before going silent (e.g. :thumbsup:, :white_check_mark:)
+        """
+        if emoji and ctx.message_id:
+            await client.react(ctx.message_id, emoji)
+            return f"Reacted with {emoji} — no message will be sent."
+        return "Done — no message will be sent."
+
 
 def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
     """Register scheduling tools that need the docket instance."""

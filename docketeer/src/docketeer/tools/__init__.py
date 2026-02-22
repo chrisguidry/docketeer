@@ -40,6 +40,9 @@ class ToolDefinition:
         return d
 
 
+WRAP_UP_TOOL_NAME = "wrap_up_silently"
+
+
 @dataclass
 class ToolContext:
     workspace: Path
@@ -47,6 +50,7 @@ class ToolContext:
     agent_username: str = ""
     room_id: str = ""
     thread_id: str = ""
+    message_id: str = ""
     summarize: Callable[[str, str], Awaitable[str]] | None = None
     classify_response: Callable[[str, int, str], Awaitable[bool]] | None = None
     executor: CommandExecutor | None = None

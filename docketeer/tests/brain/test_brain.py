@@ -443,6 +443,23 @@ async def test_process_with_no_callbacks(brain: Brain, fake_messages: Any):
     assert response.text == "Hi!"
 
 
+async def test_process_sets_message_id_on_tool_context(
+    brain: Brain, fake_messages: Any
+):
+    fake_messages.responses = [FakeMessage(content=[make_text_block(text="Hi!")])]
+    content = MessageContent(username="chris", text="hello", message_id="msg_42")
+    await brain.process("room1", content)
+    assert brain.tool_context.message_id == "msg_42"
+
+
+async def test_process_clears_message_id_when_absent(brain: Brain, fake_messages: Any):
+    brain.tool_context.message_id = "stale"
+    fake_messages.responses = [FakeMessage(content=[make_text_block(text="Hi!")])]
+    content = MessageContent(username="chris", text="hello")
+    await brain.process("room1", content)
+    assert brain.tool_context.message_id == ""
+
+
 @pytest.fixture()
 def clean_inference_env(monkeypatch: pytest.MonkeyPatch):
     """Fixture that provides clean inference env vars and restores them after."""

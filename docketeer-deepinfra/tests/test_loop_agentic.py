@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from docketeer.prompt import MessageParam, SystemBlock
-from docketeer.tools import ToolContext
+from docketeer.tools import WRAP_UP_TOOL_NAME, ToolContext
 from docketeer_deepinfra.loop import agentic_loop
 
 from .conftest import (
@@ -338,3 +338,149 @@ async def test_interrupted_returns_empty(tool_context: ToolContext, tmp_path: Pa
     )
 
     assert result == ""
+
+
+async def test_wrap_up_silently_returns_empty(
+    tool_context: ToolContext, tmp_path: Path
+):
+    """wrap_up_silently tool call causes agentic_loop to return empty string."""
+    tool_call_mock = make_tool_call(
+        call_id="call_1", name=WRAP_UP_TOOL_NAME, arguments="{}"
+    )
+    mock_usage = MagicMock()
+    mock_usage.prompt_tokens = 10
+    mock_usage.completion_tokens = 5
+    mock_usage.prompt_tokens_details = None
+
+    tool_response = make_response(
+        tool_calls=[tool_call_mock], finish_reason="tool_calls", usage=mock_usage
+    )
+
+    with (
+        patch(
+            "docketeer_deepinfra.loop.stream_message", new_callable=AsyncMock
+        ) as mock_stream,
+        patch("docketeer_deepinfra.loop.registry") as mock_registry,
+    ):
+        mock_registry.execute = AsyncMock(return_value="Done — no message.")
+        mock_stream.return_value = tool_response
+
+        result = await agentic_loop(
+            client=MagicMock(),
+            model=MODEL,
+            system=[],
+            messages=[],
+            tools=[],
+            tool_context=tool_context,
+            audit_path=tmp_path / "audit",
+            usage_path=tmp_path / "usage",
+            callbacks_on_first_text=None,
+            callbacks_on_text=None,
+            callbacks_on_tool_start=None,
+            callbacks_on_tool_end=None,
+            interrupted=None,
+        )
+
+    assert result == ""
+    assert mock_stream.call_count == 1
+
+
+async def test_wrap_up_silently_preserves_history(
+    tool_context: ToolContext, tmp_path: Path
+):
+    """Tool calls and results are appended to messages before returning."""
+    tool_call_mock = make_tool_call(
+        call_id="call_1", name=WRAP_UP_TOOL_NAME, arguments="{}"
+    )
+    mock_usage = MagicMock()
+    mock_usage.prompt_tokens = 10
+    mock_usage.completion_tokens = 5
+    mock_usage.prompt_tokens_details = None
+
+    tool_response = make_response(
+        tool_calls=[tool_call_mock], finish_reason="tool_calls", usage=mock_usage
+    )
+
+    messages: list[MessageParam] = []
+    with (
+        patch(
+            "docketeer_deepinfra.loop.stream_message", new_callable=AsyncMock
+        ) as mock_stream,
+        patch("docketeer_deepinfra.loop.registry") as mock_registry,
+    ):
+        mock_registry.execute = AsyncMock(return_value="Done — no message.")
+        mock_stream.return_value = tool_response
+
+        await agentic_loop(
+            client=MagicMock(),
+            model=MODEL,
+            system=[],
+            messages=messages,
+            tools=[],
+            tool_context=tool_context,
+            audit_path=tmp_path / "audit",
+            usage_path=tmp_path / "usage",
+            callbacks_on_first_text=None,
+            callbacks_on_text=None,
+            callbacks_on_tool_start=None,
+            callbacks_on_tool_end=None,
+            interrupted=None,
+        )
+
+    assert len(messages) == 2
+    assert messages[0].role == "assistant"
+    assert messages[1].role == "tool"
+
+
+async def test_wrap_up_silently_with_other_tools(
+    tool_context: ToolContext, tmp_path: Path
+):
+    """Other tools in the same batch execute before wrap_up takes effect."""
+    read_call = make_tool_call(
+        index=0, call_id="call_1", name="read_file", arguments="{}"
+    )
+    wrap_call = make_tool_call(
+        index=1, call_id="call_2", name=WRAP_UP_TOOL_NAME, arguments="{}"
+    )
+    mock_usage = MagicMock()
+    mock_usage.prompt_tokens = 10
+    mock_usage.completion_tokens = 5
+    mock_usage.prompt_tokens_details = None
+
+    tool_response = make_response(
+        tool_calls=[read_call, wrap_call], finish_reason="tool_calls", usage=mock_usage
+    )
+
+    executed_tools: list[str] = []
+
+    async def track_execute(name: str, args: dict, ctx: ToolContext) -> str:
+        executed_tools.append(name)
+        return "ok"
+
+    with (
+        patch(
+            "docketeer_deepinfra.loop.stream_message", new_callable=AsyncMock
+        ) as mock_stream,
+        patch("docketeer_deepinfra.loop.registry") as mock_registry,
+    ):
+        mock_registry.execute = AsyncMock(side_effect=track_execute)
+        mock_stream.return_value = tool_response
+
+        result = await agentic_loop(
+            client=MagicMock(),
+            model=MODEL,
+            system=[],
+            messages=[],
+            tools=[],
+            tool_context=tool_context,
+            audit_path=tmp_path / "audit",
+            usage_path=tmp_path / "usage",
+            callbacks_on_first_text=None,
+            callbacks_on_text=None,
+            callbacks_on_tool_start=None,
+            callbacks_on_tool_end=None,
+            interrupted=None,
+        )
+
+    assert result == ""
+    assert executed_tools == ["read_file", WRAP_UP_TOOL_NAME]

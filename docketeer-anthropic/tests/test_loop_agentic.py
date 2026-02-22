@@ -6,7 +6,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from docketeer_anthropic.loop import MAX_TOOL_ROUNDS, agentic_loop
 
-from docketeer.tools import ToolContext
+from docketeer.prompt import MessageParam
+from docketeer.tools import WRAP_UP_TOOL_NAME, ToolContext
 
 from .conftest import (
     MODEL,
@@ -262,3 +263,102 @@ async def test_agentic_loop_exhausted_tool_rounds_nudges(
             callbacks_on_tool_end=None,
         )
     assert "Summary" in result
+
+
+async def test_wrap_up_silently_returns_empty(
+    mock_client: MagicMock, tool_context: ToolContext, tmp_path: "Any"
+) -> None:
+    """wrap_up_silently tool call causes agentic_loop to return empty string."""
+    tool_block = make_tool_block(name=WRAP_UP_TOOL_NAME, tool_id="t1")
+    response = make_response([tool_block])
+    mock_client.messages.stream.return_value = FakeStream(response)
+
+    with patch("docketeer_anthropic.loop.registry") as mock_registry:
+        mock_registry.execute = AsyncMock(return_value="Done — no message.")
+
+        result = await agentic_loop(
+            client=mock_client,
+            model=MODEL,
+            system=[],
+            messages=[],
+            tools=[MagicMock()],
+            tool_context=tool_context,
+            audit_path=tmp_path / "audit",
+            usage_path=tmp_path / "usage",
+            callbacks_on_first_text=None,
+            callbacks_on_text=None,
+            callbacks_on_tool_start=None,
+            callbacks_on_tool_end=None,
+        )
+
+    assert result == ""
+    assert mock_client.messages.stream.call_count == 1
+
+
+async def test_wrap_up_silently_preserves_history(
+    mock_client: MagicMock, tool_context: ToolContext, tmp_path: "Any"
+) -> None:
+    """Tool calls and results are appended to messages before returning."""
+    tool_block = make_tool_block(name=WRAP_UP_TOOL_NAME, tool_id="t1")
+    response = make_response([tool_block])
+    mock_client.messages.stream.return_value = FakeStream(response)
+
+    messages: list[MessageParam] = []
+    with patch("docketeer_anthropic.loop.registry") as mock_registry:
+        mock_registry.execute = AsyncMock(return_value="Done — no message.")
+
+        await agentic_loop(
+            client=mock_client,
+            model=MODEL,
+            system=[],
+            messages=messages,
+            tools=[MagicMock()],
+            tool_context=tool_context,
+            audit_path=tmp_path / "audit",
+            usage_path=tmp_path / "usage",
+            callbacks_on_first_text=None,
+            callbacks_on_text=None,
+            callbacks_on_tool_start=None,
+            callbacks_on_tool_end=None,
+        )
+
+    assert len(messages) == 2
+    assert messages[0].role == "assistant"
+    assert messages[1].role == "user"
+
+
+async def test_wrap_up_silently_with_other_tools(
+    mock_client: MagicMock, tool_context: ToolContext, tmp_path: "Any"
+) -> None:
+    """Other tools in the same batch execute before wrap_up takes effect."""
+    read_block = make_tool_block(name="read_file", tool_id="t1")
+    wrap_block = make_tool_block(name=WRAP_UP_TOOL_NAME, tool_id="t2")
+    response = make_response([read_block, wrap_block])
+    mock_client.messages.stream.return_value = FakeStream(response)
+
+    executed_tools: list[str] = []
+
+    async def track_execute(name: str, args: dict, ctx: ToolContext) -> str:
+        executed_tools.append(name)
+        return "ok"
+
+    with patch("docketeer_anthropic.loop.registry") as mock_registry:
+        mock_registry.execute = AsyncMock(side_effect=track_execute)
+
+        result = await agentic_loop(
+            client=mock_client,
+            model=MODEL,
+            system=[],
+            messages=[],
+            tools=[MagicMock()],
+            tool_context=tool_context,
+            audit_path=tmp_path / "audit",
+            usage_path=tmp_path / "usage",
+            callbacks_on_first_text=None,
+            callbacks_on_text=None,
+            callbacks_on_tool_start=None,
+            callbacks_on_tool_end=None,
+        )
+
+    assert result == ""
+    assert executed_tools == ["read_file", WRAP_UP_TOOL_NAME]

@@ -6,6 +6,7 @@ from unittest.mock import patch
 import pytest
 
 from docketeer.tools import (
+    WRAP_UP_TOOL_NAME,
     ToolContext,
     ToolRegistry,
     _load_tool_plugins,
@@ -273,3 +274,17 @@ def test_load_tool_plugins_delegates_to_discover_all():
     with patch("docketeer.tools.discover_all", return_value=[]) as mock:
         _load_tool_plugins()
     mock.assert_called_once_with("docketeer.tools")
+
+
+def test_tool_context_message_id_defaults_empty():
+    ctx = ToolContext(workspace=Path("/tmp"))
+    assert ctx.message_id == ""
+
+
+def test_tool_context_message_id_set():
+    ctx = ToolContext(workspace=Path("/tmp"), message_id="msg_123")
+    assert ctx.message_id == "msg_123"
+
+
+def test_wrap_up_tool_name_constant():
+    assert WRAP_UP_TOOL_NAME == "wrap_up_silently"

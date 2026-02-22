@@ -211,6 +211,7 @@ class Brain:
         self.tool_context.username = content.username
         self.tool_context.room_id = room_id if not room_id.startswith("__") else ""
         self.tool_context.thread_id = content.thread_id
+        self.tool_context.message_id = content.message_id
 
         async with self._conversation_locks[room_id]:
             if self._room_token_counts.get(room_id, 0) > COMPACT_THRESHOLD:
