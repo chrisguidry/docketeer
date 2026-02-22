@@ -3,15 +3,8 @@
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 from docketeer.tools import ToolContext
 from docketeer_deepinfra.loop import execute_tools
-
-
-@pytest.fixture()
-def tool_context(tmp_path: Path) -> ToolContext:
-    return ToolContext(workspace=tmp_path, username="test-user")
 
 
 async def test_execute_tools_returns_results(tool_context: ToolContext, tmp_path: Path):

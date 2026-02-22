@@ -2,14 +2,14 @@
 
 from unittest.mock import MagicMock
 
+from docketeer.brain.core import InferenceModel
 from docketeer.prompt import MessageParam, SystemBlock
 from docketeer_deepinfra.loop import stream_message
 
-from .conftest import MODEL, make_chunk, make_stream_mock
+from .conftest import MODEL, make_chunk, make_stream_mock, make_tool_call
 
 
-async def test_basic_content_accumulation():
-    mock_client = MagicMock()
+async def test_basic_content_accumulation(mock_client: MagicMock):
     mock_client.chat.completions.create = make_stream_mock(
         [
             make_chunk(content="Hello "),
@@ -30,10 +30,7 @@ async def test_basic_content_accumulation():
     assert result.choices[0].finish_reason == "stop"
 
 
-async def test_tool_calls_accumulated_across_chunks():
-    from .conftest import make_tool_call
-
-    mock_client = MagicMock()
+async def test_tool_calls_accumulated_across_chunks(mock_client: MagicMock):
     mock_client.chat.completions.create = make_stream_mock(
         [
             make_chunk(
@@ -78,10 +75,7 @@ async def test_tool_calls_accumulated_across_chunks():
     assert tc[0].function.arguments == '{"path": "/"}'  # type: ignore[possibly-missing-attribute]
 
 
-async def test_multiple_tool_calls_in_one_chunk():
-    from .conftest import make_tool_call
-
-    mock_client = MagicMock()
+async def test_multiple_tool_calls_in_one_chunk(mock_client: MagicMock):
     mock_client.chat.completions.create = make_stream_mock(
         [
             make_chunk(
@@ -117,13 +111,12 @@ async def test_multiple_tool_calls_in_one_chunk():
     assert tc[1].function.name == "tool_b"  # type: ignore[possibly-missing-attribute]
 
 
-async def test_on_first_text_callback_fires_once():
+async def test_on_first_text_callback_fires_once(mock_client: MagicMock):
     calls: list[bool] = []
 
     async def on_first_text() -> None:
         calls.append(True)
 
-    mock_client = MagicMock()
     mock_client.chat.completions.create = make_stream_mock(
         [
             make_chunk(content="Hello"),
@@ -144,12 +137,11 @@ async def test_on_first_text_callback_fires_once():
     assert calls == [True]
 
 
-async def test_empty_choices_skipped():
+async def test_empty_choices_skipped(mock_client: MagicMock):
     empty_chunk = MagicMock()
     empty_chunk.choices = []
     empty_chunk.usage = None
 
-    mock_client = MagicMock()
     mock_client.chat.completions.create = make_stream_mock(
         [
             empty_chunk,
@@ -169,13 +161,12 @@ async def test_empty_choices_skipped():
     assert result.choices[0].message.content == "Hello"
 
 
-async def test_none_delta_skipped():
+async def test_none_delta_skipped(mock_client: MagicMock):
     no_delta = MagicMock()
     no_delta.choices = [MagicMock()]
     no_delta.choices[0].delta = None
     no_delta.usage = None
 
-    mock_client = MagicMock()
     mock_client.chat.completions.create = make_stream_mock(
         [
             no_delta,
@@ -195,19 +186,13 @@ async def test_none_delta_skipped():
     assert result.choices[0].message.content == "Hello"
 
 
-async def test_empty_tool_arguments_default_to_empty_object():
-    from .conftest import make_tool_call
-
-    mock_client = MagicMock()
+async def test_empty_tool_arguments_default_to_empty_object(mock_client: MagicMock):
     mock_client.chat.completions.create = make_stream_mock(
         [
             make_chunk(
                 tool_calls=[
                     make_tool_call(
-                        index=0,
-                        call_id="call_123",
-                        name="no_args",
-                        arguments="",
+                        index=0, call_id="call_123", name="no_args", arguments=""
                     )
                 ],
                 finish_reason="tool_calls",
@@ -227,10 +212,7 @@ async def test_empty_tool_arguments_default_to_empty_object():
     assert result.choices[0].message.tool_calls[0].function.arguments == "{}"  # type: ignore[index, union-attr]
 
 
-async def test_invalid_json_arguments_default_to_empty_object():
-    from .conftest import make_tool_call
-
-    mock_client = MagicMock()
+async def test_invalid_json_arguments_default_to_empty_object(mock_client: MagicMock):
     mock_client.chat.completions.create = make_stream_mock(
         [
             make_chunk(
@@ -259,8 +241,7 @@ async def test_invalid_json_arguments_default_to_empty_object():
     assert result.choices[0].message.tool_calls[0].function.arguments == "{}"  # type: ignore[index, union-attr]
 
 
-async def test_tools_passed_to_api():
-    mock_client = MagicMock()
+async def test_tools_passed_to_api(mock_client: MagicMock):
     mock_client.chat.completions.create = make_stream_mock(
         [
             make_chunk(content="Hello", finish_reason="stop"),
@@ -288,12 +269,9 @@ async def test_tools_passed_to_api():
     assert len(call_kwargs["tools"]) == 1
 
 
-async def test_model_id_fallback_to_default():
-    from docketeer.brain.core import InferenceModel
-
+async def test_model_id_fallback_to_default(mock_client: MagicMock):
     model_empty = InferenceModel(model_id="", max_output_tokens=64_000)
 
-    mock_client = MagicMock()
     mock_client.chat.completions.create = make_stream_mock(
         [
             make_chunk(content="Hello", finish_reason="stop"),

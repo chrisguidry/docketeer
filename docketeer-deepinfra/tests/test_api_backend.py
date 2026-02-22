@@ -29,12 +29,6 @@ def backend(mock_client: MagicMock) -> DeepInfraAPIBackend:
     return backend
 
 
-@pytest.fixture()
-def tool_context(tmp_path: Path) -> ToolContext:
-    """Create a test tool context."""
-    return ToolContext(workspace=tmp_path, username="test-user")
-
-
 class TestInit:
     def test_init_creates_client(self) -> None:
         """__init__ creates an AsyncOpenAI client with the API key."""

@@ -6,40 +6,19 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from docketeer.brain.core import InferenceModel
 from docketeer.prompt import MessageParam, SystemBlock
 from docketeer.tools import ToolContext
 from docketeer_deepinfra.loop import agentic_loop
 
-MODEL = InferenceModel(
-    model_id="meta-llama/Llama-3.3-70B-Instruct", max_output_tokens=64_000
+from .conftest import (
+    MODEL,
+    AsyncStreamWrapper,
+    make_chunk,
+    make_response,
+    make_stream_mock,
+    make_tool_call,
+    make_usage,
 )
-
-
-class AsyncStreamWrapper:
-    def __init__(self, chunks: list[MagicMock]) -> None:
-        self.chunks = list(chunks)
-        self._index = 0
-
-    def __aiter__(self) -> "AsyncStreamWrapper":
-        return self
-
-    async def __anext__(self) -> MagicMock:
-        if self._index >= len(self.chunks):
-            raise StopAsyncIteration
-        chunk = self.chunks[self._index]
-        self._index += 1
-        return chunk
-
-
-def make_stream_mock(chunks: list[MagicMock]) -> AsyncMock:
-    return AsyncMock(return_value=AsyncStreamWrapper(chunks))
-
-
-@pytest.fixture()
-def tool_context(tmp_path: Path) -> ToolContext:
-    return ToolContext(workspace=tmp_path, username="test-user")
-
 
 # -- via real stream_message (integration-ish) --
 
@@ -47,16 +26,10 @@ def tool_context(tmp_path: Path) -> ToolContext:
 async def test_truncated_response_appends_length_warning(
     tool_context: ToolContext, tmp_path: Path
 ):
-    chunk = MagicMock()
-    chunk.choices = [MagicMock()]
-    chunk.choices[0].delta = MagicMock()
-    chunk.choices[0].delta.content = "Hello"
-    chunk.choices[0].delta.tool_calls = None
-    chunk.choices[0].finish_reason = "length"
-    chunk.usage = None
-
     mock_client = MagicMock()
-    mock_client.chat.completions.create = make_stream_mock([chunk])
+    mock_client.chat.completions.create = make_stream_mock(
+        [make_chunk(content="Hello", finish_reason="length")]
+    )
 
     result = await agentic_loop(
         client=mock_client,
@@ -81,16 +54,10 @@ async def test_truncated_response_appends_length_warning(
 async def test_empty_response_returns_no_response(
     tool_context: ToolContext, tmp_path: Path
 ):
-    chunk = MagicMock()
-    chunk.choices = [MagicMock()]
-    chunk.choices[0].delta = MagicMock()
-    chunk.choices[0].delta.content = None
-    chunk.choices[0].delta.tool_calls = None
-    chunk.choices[0].finish_reason = "stop"
-    chunk.usage = None
-
     mock_client = MagicMock()
-    mock_client.chat.completions.create = make_stream_mock([chunk])
+    mock_client.chat.completions.create = make_stream_mock(
+        [make_chunk(finish_reason="stop")]
+    )
 
     result = await agentic_loop(
         client=mock_client,
@@ -112,16 +79,10 @@ async def test_empty_response_returns_no_response(
 
 
 async def test_normal_stop_returns_content(tool_context: ToolContext, tmp_path: Path):
-    chunk = MagicMock()
-    chunk.choices = [MagicMock()]
-    chunk.choices[0].delta = MagicMock()
-    chunk.choices[0].delta.content = "Final response"
-    chunk.choices[0].delta.tool_calls = None
-    chunk.choices[0].finish_reason = "stop"
-    chunk.usage = None
-
     mock_client = MagicMock()
-    mock_client.chat.completions.create = make_stream_mock([chunk])
+    mock_client.chat.completions.create = make_stream_mock(
+        [make_chunk(content="Final response", finish_reason="stop")]
+    )
 
     result = await agentic_loop(
         client=mock_client,
@@ -149,46 +110,18 @@ async def test_tool_round_limit_triggers_summary(
 
     monkeypatch.setattr(loop, "MAX_TOOL_ROUNDS", 2)
 
-    tc = MagicMock()
-    tc.index = 0
-    tc.id = "call_1"
-    tc.function = MagicMock()
-    tc.function.name = "test_tool"
-    tc.function.arguments = "{}"
-
-    tool_chunk = MagicMock()
-    tool_chunk.choices = [MagicMock()]
-    tool_chunk.choices[0].delta = MagicMock()
-    tool_chunk.choices[0].delta.content = None
-    tool_chunk.choices[0].delta.tool_calls = [tc]
-    tool_chunk.choices[0].finish_reason = "tool_calls"
-    # Set up usage for tool response
-    from openai.types import CompletionUsage
-    from openai.types.completion_usage import PromptTokensDetails
-
-    tool_usage = CompletionUsage(
-        prompt_tokens=100,
-        completion_tokens=10,
-        total_tokens=110,
-        prompt_tokens_details=PromptTokensDetails(cached_tokens=50),
+    tool_chunk = make_chunk(
+        tool_calls=[make_tool_call(index=0, call_id="call_1", name="test_tool")],
+        finish_reason="tool_calls",
+        usage=make_usage(cached_tokens=50),
     )
-    tool_chunk.usage = tool_usage
-
-    summary_chunk = MagicMock()
-    summary_chunk.choices = [MagicMock()]
-    summary_chunk.choices[0].delta = MagicMock()
-    summary_chunk.choices[0].delta.content = "Here is a summary"
-    summary_chunk.choices[0].delta.tool_calls = None
-    summary_chunk.choices[0].finish_reason = "stop"
-    # Set up usage for summary response - without prompt_tokens_details to exercise else branch
-    summary_usage = CompletionUsage(
-        prompt_tokens=150,
-        completion_tokens=20,
-        total_tokens=170,
+    summary_chunk = make_chunk(
+        content="Here is a summary",
+        finish_reason="stop",
+        usage=make_usage(prompt_tokens=150, completion_tokens=20, total_tokens=170),
     )
-    # Manually set prompt_tokens_details to None (not set by default)
-    summary_usage.prompt_tokens_details = None
-    summary_chunk.usage = summary_usage
+    # Manually clear prompt_tokens_details to exercise the else branch
+    summary_chunk.usage.prompt_tokens_details = None
 
     call_count = [0]
 
@@ -226,56 +159,25 @@ async def test_tool_round_limit_triggers_summary(
 async def test_tool_round_limit_triggers_summary_without_cached_tokens(
     tool_context: ToolContext, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    """Test summary request when prompt_tokens_details is not available."""
+    """Summary request when prompt_tokens_details has non-int cached_tokens."""
     from docketeer_deepinfra import loop
 
     monkeypatch.setattr(loop, "MAX_TOOL_ROUNDS", 2)
 
-    tc = MagicMock()
-    tc.index = 0
-    tc.id = "call_1"
-    tc.function = MagicMock()
-    tc.function.name = "test_tool"
-    tc.function.arguments = "{}"
-
-    tool_chunk = MagicMock()
-    tool_chunk.choices = [MagicMock()]
-    tool_chunk.choices[0].delta = MagicMock()
-    tool_chunk.choices[0].delta.content = None
-    tool_chunk.choices[0].delta.tool_calls = [tc]
-    tool_chunk.choices[0].finish_reason = "tool_calls"
-    # Usage with cached tokens for first request
-    from openai.types import CompletionUsage
-    from openai.types.completion_usage import PromptTokensDetails
-
-    tool_usage = CompletionUsage(
-        prompt_tokens=100,
-        completion_tokens=10,
-        total_tokens=110,
-        prompt_tokens_details=PromptTokensDetails(cached_tokens=50),
+    tool_chunk = make_chunk(
+        tool_calls=[make_tool_call(index=0, call_id="call_1", name="test_tool")],
+        finish_reason="tool_calls",
+        usage=make_usage(cached_tokens=50),
     )
-    tool_chunk.usage = tool_usage
-
-    summary_chunk = MagicMock()
-    summary_chunk.choices = [MagicMock()]
-    summary_chunk.choices[0].delta = MagicMock()
-    summary_chunk.choices[0].delta.content = "Summary without cache"
-    summary_chunk.choices[0].delta.tool_calls = None
-    summary_chunk.choices[0].finish_reason = "stop"
-    # Usage WITHOUT prompt_tokens_details to exercise the else branch
-    summary_usage = CompletionUsage(
-        prompt_tokens=150,
-        completion_tokens=20,
-        total_tokens=170,
+    summary_chunk = make_chunk(
+        content="Summary without cache",
+        finish_reason="stop",
+        usage=make_usage(prompt_tokens=150, completion_tokens=20, total_tokens=170),
     )
-    # Don't set prompt_tokens_details - it will be a default model object, not None
-    # So we need to explicitly NOT include it or set it to a MagicMock without cached_tokens
-    mock_usage_details = MagicMock()
-    mock_usage_details.cached_tokens = (
-        "not_an_int"  # Not an int to exercise else branch
-    )
-    summary_usage.prompt_tokens_details = mock_usage_details
-    summary_chunk.usage = summary_usage
+    # Override prompt_tokens_details with a mock whose cached_tokens isn't an int
+    mock_details = MagicMock()
+    mock_details.cached_tokens = "not_an_int"
+    summary_chunk.usage.prompt_tokens_details = mock_details
 
     call_count = [0]
 
@@ -313,49 +215,23 @@ async def test_tool_round_limit_triggers_summary_without_cached_tokens(
 async def test_tool_round_limit_triggers_summary_no_usage(
     tool_context: ToolContext, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    """Test summary request when response has no usage data at all."""
+    """Summary request when prompt_tokens_details has int cached_tokens."""
     from docketeer_deepinfra import loop
 
     monkeypatch.setattr(loop, "MAX_TOOL_ROUNDS", 2)
 
-    tc = MagicMock()
-    tc.index = 0
-    tc.id = "call_1"
-    tc.function = MagicMock()
-    tc.function.name = "test_tool"
-    tc.function.arguments = "{}"
-
-    tool_chunk = MagicMock()
-    tool_chunk.choices = [MagicMock()]
-    tool_chunk.choices[0].delta = MagicMock()
-    tool_chunk.choices[0].delta.content = None
-    tool_chunk.choices[0].delta.tool_calls = [tc]
-    tool_chunk.choices[0].finish_reason = "tool_calls"
-    from openai.types import CompletionUsage
-    from openai.types.completion_usage import PromptTokensDetails
-
-    tool_usage = CompletionUsage(
-        prompt_tokens=100,
-        completion_tokens=10,
-        total_tokens=110,
-        prompt_tokens_details=PromptTokensDetails(cached_tokens=50),
+    tool_chunk = make_chunk(
+        tool_calls=[make_tool_call(index=0, call_id="call_1", name="test_tool")],
+        finish_reason="tool_calls",
+        usage=make_usage(cached_tokens=50),
     )
-    tool_chunk.usage = tool_usage
-
-    summary_chunk = MagicMock()
-    summary_chunk.choices = [MagicMock()]
-    summary_chunk.choices[0].delta = MagicMock()
-    summary_chunk.choices[0].delta.content = "Final summary"
-    summary_chunk.choices[0].delta.tool_calls = None
-    summary_chunk.choices[0].finish_reason = "stop"
-    # Usage with prompt_tokens_details but cached_tokens as an int to exercise both branches
-    summary_usage = CompletionUsage(
-        prompt_tokens=150,
-        completion_tokens=20,
-        total_tokens=170,
-        prompt_tokens_details=PromptTokensDetails(cached_tokens=100),  # This is an int!
+    summary_chunk = make_chunk(
+        content="Final summary",
+        finish_reason="stop",
+        usage=make_usage(
+            prompt_tokens=150, completion_tokens=20, total_tokens=170, cached_tokens=100
+        ),
     )
-    summary_chunk.usage = summary_usage
 
     call_count = [0]
 
@@ -394,70 +270,49 @@ async def test_tool_round_limit_triggers_summary_no_usage(
 
 
 async def test_tool_call_then_final_response(tool_context: ToolContext, tmp_path: Path):
-    mock_tool_call = MagicMock()
-    mock_tool_call.id = "call_123"
-    mock_tool_call.function = MagicMock()
-    mock_tool_call.function.name = "list_files"
-    mock_tool_call.function.arguments = '{"path": "/"}'
-
-    mock_message_tool = MagicMock()
-    mock_message_tool.content = None
-    mock_message_tool.tool_calls = [mock_tool_call]
-
-    mock_choice_tool = MagicMock()
-    mock_choice_tool.message = mock_message_tool
-    mock_choice_tool.finish_reason = "tool_calls"
-
+    tool_call_mock = make_tool_call(
+        call_id="call_123", name="list_files", arguments='{"path": "/"}'
+    )
     mock_usage = MagicMock()
     mock_usage.prompt_tokens = 10
     mock_usage.completion_tokens = 5
-    # Set up prompt_tokens_details with cached_tokens as an int
     mock_tokens_details = MagicMock()
     mock_tokens_details.cached_tokens = 5
     mock_usage.prompt_tokens_details = mock_tokens_details
 
-    mock_response_tool = MagicMock()
-    mock_response_tool.choices = [mock_choice_tool]
-    mock_response_tool.usage = mock_usage
+    tool_response = make_response(
+        tool_calls=[tool_call_mock], finish_reason="tool_calls", usage=mock_usage
+    )
+    final_response = make_response(content="Found 2 files", usage=mock_usage)
 
-    mock_message_final = MagicMock()
-    mock_message_final.content = "Found 2 files"
-    mock_message_final.tool_calls = None
-
-    mock_choice_final = MagicMock()
-    mock_choice_final.message = mock_message_final
-    mock_choice_final.finish_reason = "stop"
-
-    mock_response_final = MagicMock()
-    mock_response_final.choices = [mock_choice_final]
-    mock_response_final.usage = mock_usage
-
-    with patch(
-        "docketeer_deepinfra.loop.stream_message", new_callable=AsyncMock
-    ) as mock_stream:
-        with patch(
+    with (
+        patch(
+            "docketeer_deepinfra.loop.stream_message", new_callable=AsyncMock
+        ) as mock_stream,
+        patch(
             "docketeer_deepinfra.loop.execute_tools", new_callable=AsyncMock
-        ) as mock_exec:
-            mock_exec.return_value = [
-                {"content": "file1\nfile2", "tool_call_id": "call_123"}
-            ]
-            mock_stream.side_effect = [mock_response_tool, mock_response_final]
+        ) as mock_exec,
+    ):
+        mock_exec.return_value = [
+            {"content": "file1\nfile2", "tool_call_id": "call_123"}
+        ]
+        mock_stream.side_effect = [tool_response, final_response]
 
-            result = await agentic_loop(
-                client=MagicMock(),
-                model=MODEL,
-                system=[SystemBlock(text="You are helpful.")],
-                messages=[MessageParam(role="user", content="list files")],
-                tools=[],
-                tool_context=tool_context,
-                audit_path=tmp_path / "audit",
-                usage_path=tmp_path / "usage",
-                callbacks_on_first_text=None,
-                callbacks_on_text=None,
-                callbacks_on_tool_start=None,
-                callbacks_on_tool_end=None,
-                interrupted=None,
-            )
+        result = await agentic_loop(
+            client=MagicMock(),
+            model=MODEL,
+            system=[SystemBlock(text="You are helpful.")],
+            messages=[MessageParam(role="user", content="list files")],
+            tools=[],
+            tool_context=tool_context,
+            audit_path=tmp_path / "audit",
+            usage_path=tmp_path / "usage",
+            callbacks_on_first_text=None,
+            callbacks_on_text=None,
+            callbacks_on_tool_start=None,
+            callbacks_on_tool_end=None,
+            interrupted=None,
+        )
 
     assert result == "Found 2 files"
 
