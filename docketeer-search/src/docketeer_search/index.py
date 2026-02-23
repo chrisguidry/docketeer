@@ -7,8 +7,8 @@ from docketeer.search import SearchIndex, SearchResult
 from docketeer_search.embedding import Embedder
 from docketeer_search.store import VectorStore
 
-INDEX_TASK = "docketeer_search.tasks:do_index_file"
-REMOVE_TASK = "docketeer_search.tasks:do_remove_file"
+INDEX_TASK = "do_index_file"
+REMOVE_TASK = "do_remove_file"
 
 
 class FastembedSearch(SearchIndex):
