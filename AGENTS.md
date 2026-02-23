@@ -86,10 +86,10 @@ If a protocol has a test double in `docketeer.testing`, use that instead of
 
 ### Test doubles in `docketeer.testing`
 
-The core package provides `MemoryChat`, `MemoryVault`, and related test
-doubles in `docketeer.testing`. These are purpose-built in-memory
-implementations of the `ChatClient` and `Vault` protocols. Use them instead
-of writing your own mocks for these interfaces.
+The core package provides `MemoryChat`, `MemoryVault`, `MemorySearch`, and
+related test doubles in `docketeer.testing`. These are purpose-built in-memory
+implementations of the `ChatClient`, `Vault`, and `SearchIndex` protocols.
+Use them instead of writing your own mocks for these interfaces.
 
 ### Every package is independent
 
@@ -98,16 +98,107 @@ plugin, run that plugin's tests from its directory. The plugin depends on the
 core `docketeer` package, so changes to core types can break downstream — run
 the affected plugin tests too.
 
+## Resource management
+
+Use context managers, not open/close pairs. If a class holds a resource
+(DB connection, file handle, network session), it should implement
+`__enter__`/`__exit__` (or the async equivalents) and be used with `with`.
+Never write code that requires callers to remember to call `.close()`.
+
 ## Plugin patterns
 
 All plugins register via entry points in their `pyproject.toml`. The patterns:
 
 - **Single-select** (`docketeer.chat`, `docketeer.executor`,
-  `docketeer.vault`, `docketeer.inference`): one active at a time, auto-selected
-  if only one is installed.
+  `docketeer.vault`, `docketeer.inference`, `docketeer.search`): one active
+  at a time, auto-selected if only one is installed.
 - **Multi-load** (`docketeer.tools`, `docketeer.prompt`, `docketeer.tasks`):
   everything installed gets loaded.
 
 Tool plugins register by importing their tool-decorated functions in their
 package's `__init__.py`. The `@registry.tool()` decorator on a function is
 what makes it available to the agent.
+
+## Adding a new workspace package
+
+Every new `docketeer-*` package requires updates in several places. Miss one
+and the package won't be discovered by the workspace, tested in CI, or
+type-checked correctly. Here's the full list:
+
+### 1. Create the package directory
+
+```
+docketeer-foo/
+├── pyproject.toml
+├── AGENTS.md
+├── README.md
+├── src/docketeer_foo/
+│   ├── __init__.py
+│   └── ...
+└── tests/
+    ├── __init__.py
+    └── ...
+```
+
+The `pyproject.toml` must follow the conventions of existing packages:
+hatch build system, `hatch-vcs` versioning with `raw-options.root = ".."`,
+`requires-python = ">=3.12"`, and the standard pytest/coverage config
+(`--cov-fail-under=100`, branch coverage, 1-second timeout, asyncio_mode).
+Copy an existing package's `pyproject.toml` as a starting point.
+
+Entry points go in `[project.entry-points."docketeer.<group>"]`. If the
+package depends on docketeer core, add the workspace source:
+
+```toml
+[tool.uv.sources]
+docketeer = { workspace = true }
+```
+
+### 2. Register in the root `pyproject.toml`
+
+Three places need the new package name:
+
+- **`[tool.uv.workspace] members`** — so uv knows about it
+- **`[dependency-groups] dev`** — so `uv sync` installs it
+- **`[tool.uv.sources]`** — so uv resolves it from the workspace
+- **`[tool.ruff.lint.isort] known-first-party`** — add the Python package
+  name (underscores, e.g. `docketeer_foo`) so ruff sorts imports correctly
+
+### 3. Add a pre-commit hook in `.pre-commit-config.yaml`
+
+Add a `pytest-docketeer-foo` hook following the pattern of the other
+packages. The `files` pattern should trigger on changes to both
+`docketeer/src/` (core changes can break plugins) and the package's own
+directory:
+
+```yaml
+- id: pytest-docketeer-foo
+  name: pytest (docketeer-foo)
+  entry: uv run --no-sync --directory docketeer-foo pytest
+  language: system
+  types: [python]
+  files: ^docketeer/src/|^docketeer-foo/
+  pass_filenames: false
+  require_serial: true
+```
+
+### 4. Run `uv sync` and verify
+
+After all registration is done, run `uv sync` from the repo root so the
+new package is installed into the shared venv. Then verify:
+
+```sh
+cd docketeer-foo && pytest       # tests pass with 100% coverage
+prek run ruff --all-files        # linting passes
+prek run ty                      # type checking passes
+```
+
+### Common mistakes
+
+- Forgetting `known-first-party` in ruff config → isort puts your imports
+  in the wrong section
+- Forgetting the `[tool.uv.sources]` entry → uv can't resolve the workspace
+  dependency
+- Missing `__init__.py` in `tests/` → pytest can't discover tests
+- Using `--cov-config` without pointing at the root `pyproject.toml` →
+  coverage exclusions don't apply

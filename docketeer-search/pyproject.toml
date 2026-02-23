@@ -1,0 +1,69 @@
+[project]
+name = "docketeer-search"
+dynamic = ["version"]
+description = "Semantic workspace search plugin for Docketeer"
+readme = "README.md"
+authors = [
+    { name = "Chris Guidry", email = "guid@omg.lol" }
+]
+license = "MIT"
+requires-python = ">=3.12"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Text Processing :: Indexing",
+]
+dependencies = [
+    "docketeer",
+    "fastembed",
+]
+
+[project.urls]
+Homepage = "https://github.com/chrisguidry/docketeer"
+Repository = "https://github.com/chrisguidry/docketeer"
+Issues = "https://github.com/chrisguidry/docketeer/issues"
+
+[project.scripts]
+docketeer-search = "docketeer_search.cli:main"
+
+[project.entry-points."docketeer.search"]
+fastembed = "docketeer_search"
+
+[project.entry-points."docketeer.tools"]
+search = "docketeer_search.tools"
+
+[project.entry-points."docketeer.tasks"]
+search = "docketeer_search:task_collections"
+
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+raw-options.root = ".."
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/docketeer_search"]
+
+[tool.uv.sources]
+docketeer = { workspace = true }
+
+[tool.pytest.ini_options]
+minversion = "9.0"
+timeout = 1
+addopts = [
+    "--import-mode=importlib",
+    "--cov=docketeer_search",
+    "--cov=tests",
+    "--cov-config=../pyproject.toml",
+    "--cov-branch",
+    "--cov-report=term-missing",
+    "--cov-fail-under=100",
+]
+asyncio_mode = "auto"
+filterwarnings = [
+    "error",
+]

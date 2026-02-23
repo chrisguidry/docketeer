@@ -11,6 +11,7 @@ from docketeer.dependencies import (
     CurrentChatClient,
     CurrentDocket,
     CurrentExecutor,
+    CurrentSearch,
     CurrentVault,
     EnvironmentInt,
     EnvironmentStr,
@@ -22,18 +23,21 @@ from docketeer.dependencies import (
     _CurrentChatClient,
     _CurrentDocket,
     _CurrentExecutor,
+    _CurrentSearch,
     _CurrentVault,
     _docket_var,
     _EnvironmentInt,
     _EnvironmentStr,
     _EnvironmentTimedelta,
     _executor_var,
+    _search_var,
     _vault_var,
     _WorkspacePath,
     set_brain,
     set_client,
     set_docket,
     set_executor,
+    set_search,
     set_vault,
 )
 
@@ -223,6 +227,30 @@ def test_set_vault():
     vault = AsyncMock()
     set_vault(vault)
     assert _vault_var.get() is vault
+
+
+# --- CurrentSearch ---
+
+
+async def test_current_search():
+    search = AsyncMock()
+    token = _search_var.set(search)
+    try:
+        dep = _CurrentSearch()
+        assert await dep.__aenter__() is search
+    finally:
+        _search_var.reset(token)
+
+
+async def test_current_search_factory_returns_dependency():
+    result = CurrentSearch()
+    assert isinstance(result, _CurrentSearch)
+
+
+def test_set_search():
+    search = AsyncMock()
+    set_search(search)
+    assert _search_var.get() is search
 
 
 # --- CurrentDocket ---

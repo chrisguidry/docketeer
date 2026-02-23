@@ -16,6 +16,7 @@ from docketeer.chat import (
     RoomInfo,
     RoomMessage,
 )
+from docketeer.search import SearchIndex, SearchResult
 from docketeer.vault import SecretReference, Vault
 
 
@@ -145,6 +146,28 @@ class MemoryChat(ChatClient):
         if room_id in self._room_context:
             return self._room_context[room_id]
         return await super().room_context(room_id, username)
+
+
+class MemorySearch(SearchIndex):
+    """In-memory SearchIndex for tests — no embedding model needed."""
+
+    def __init__(self) -> None:
+        self._documents: dict[str, str] = {}
+
+    async def search(self, query: str, limit: int = 10) -> list[SearchResult]:
+        results = []
+        query_lower = query.lower()
+        for path, content in self._documents.items():
+            if query_lower in content.lower():
+                snippet = content[:200]
+                results.append(SearchResult(path=path, score=1.0, snippet=snippet))
+        return results[:limit]
+
+    async def index_file(self, path: str, content: str) -> None:
+        self._documents[path] = content
+
+    async def remove_file(self, path: str) -> None:
+        self._documents.pop(path, None)
 
 
 class MemoryVault(Vault):

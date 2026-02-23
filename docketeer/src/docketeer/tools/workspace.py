@@ -58,6 +58,7 @@ async def write_file(ctx: ToolContext, path: str, content: str) -> str:
     target = safe_path(ctx.workspace, path)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(content)
+    await ctx.search.index_file(path, content)
     return f"Wrote {len(content)} bytes to {path}"
 
 
@@ -73,6 +74,7 @@ async def delete_file(ctx: ToolContext, path: str) -> str:
     if target.is_dir():
         return f"Cannot delete directories, only files: {path}"
     target.unlink()
+    await ctx.search.remove_file(path)
     return f"Deleted {path}"
 
 

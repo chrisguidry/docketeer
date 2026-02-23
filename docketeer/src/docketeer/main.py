@@ -30,11 +30,13 @@ from docketeer.dependencies import (
     set_client,
     set_docket,
     set_executor,
+    set_search,
     set_vault,
 )
 from docketeer.executor import discover_executor
 from docketeer.handlers import process_messages
 from docketeer.plugins import discover_all
+from docketeer.search import discover_search
 from docketeer.tasks import parse_every
 from docketeer.tools import ToolContext, registry
 from docketeer.vault import discover_vault
@@ -376,9 +378,19 @@ async def main() -> None:  # pragma: no cover
         executor = discover_executor()
         vault = discover_vault()
 
+        docket = await stack.enter_async_context(
+            Docket(name=DOCKET_NAME, url=DOCKET_URL)
+        )
+        set_docket(docket)
+
+        search = discover_search(docket=docket)
+
         # Create tool context
         tool_context = ToolContext(
-            workspace=environment.WORKSPACE_PATH, executor=executor, vault=vault
+            workspace=environment.WORKSPACE_PATH,
+            executor=executor,
+            vault=vault,
+            search=search,
         )
 
         brain = await stack.enter_async_context(Brain(tool_context))
@@ -390,11 +402,7 @@ async def main() -> None:  # pragma: no cover
             set_executor(executor)
         if vault:
             set_vault(vault)
-
-        docket = await stack.enter_async_context(
-            Docket(name=DOCKET_NAME, url=DOCKET_URL)
-        )
-        set_docket(docket)
+        set_search(search)
         docket.register_collection("docketeer.tasks:docketeer_tasks")
         _register_task_plugins(docket)
 

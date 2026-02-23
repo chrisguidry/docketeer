@@ -10,6 +10,7 @@ members = [
     "docketeer-mcp",
     "docketeer-monty",
     "docketeer-rocketchat",
+    "docketeer-search",
     "docketeer-tui",
     "docketeer-web",
 ]
@@ -26,6 +27,7 @@ dev = [
     "docketeer-mcp",
     "docketeer-monty",
     "docketeer-rocketchat",
+    "docketeer-search",
     "docketeer-tui",
     "docketeer-web",
     "codespell",
@@ -53,6 +55,7 @@ docketeer-git = { workspace = true }
 docketeer-mcp = { workspace = true }
 docketeer-monty = { workspace = true }
 docketeer-rocketchat = { workspace = true }
+docketeer-search = { workspace = true }
 docketeer-tui = { workspace = true }
 docketeer-web = { workspace = true }
 
@@ -99,7 +102,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["docketeer", "docketeer_1password", "docketeer_agentskills", "docketeer_bubblewrap", "docketeer_deepinfra", "docketeer_git", "docketeer_mcp", "docketeer_monty", "docketeer_rocketchat", "docketeer_tui", "docketeer_web"]
+known-first-party = ["docketeer", "docketeer_1password", "docketeer_agentskills", "docketeer_bubblewrap", "docketeer_deepinfra", "docketeer_git", "docketeer_mcp", "docketeer_monty", "docketeer_rocketchat", "docketeer_search", "docketeer_tui", "docketeer_web"]
 
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**/*.py" = ["ANN201"]

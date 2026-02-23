@@ -12,6 +12,7 @@ from docketeer import environment
 from docketeer.brain import Brain
 from docketeer.chat import ChatClient
 from docketeer.executor import CommandExecutor
+from docketeer.search import SearchIndex
 from docketeer.vault import Vault
 
 # ContextVars — set in main() before the worker starts
@@ -20,6 +21,7 @@ _brain_var: ContextVar[Brain] = ContextVar("docketeer_brain")
 _client_var: ContextVar[ChatClient] = ContextVar("docketeer_client")
 _executor_var: ContextVar[CommandExecutor] = ContextVar("docketeer_executor")
 _vault_var: ContextVar[Vault] = ContextVar("docketeer_vault")
+_search_var: ContextVar[SearchIndex] = ContextVar("docketeer_search")
 _docket_var: ContextVar[Docket] = ContextVar("docketeer_docket")
 
 
@@ -37,6 +39,10 @@ def set_executor(executor: CommandExecutor) -> None:
 
 def set_vault(vault: Vault) -> None:
     _vault_var.set(vault)
+
+
+def set_search(search: SearchIndex) -> None:
+    _search_var.set(search)
 
 
 def set_docket(docket: Docket) -> None:
@@ -80,6 +86,15 @@ class _CurrentVault(Dependency):
 
 def CurrentVault() -> Vault:
     return cast(Vault, _CurrentVault())
+
+
+class _CurrentSearch(Dependency):
+    async def __aenter__(self) -> SearchIndex:
+        return _search_var.get()
+
+
+def CurrentSearch() -> SearchIndex:
+    return cast(SearchIndex, _CurrentSearch())
 
 
 class _CurrentDocket(Dependency):

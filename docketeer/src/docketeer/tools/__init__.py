@@ -6,7 +6,7 @@ import inspect
 import logging
 import types
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import FunctionType
 from typing import Any, get_args, get_origin, get_type_hints
@@ -14,6 +14,7 @@ from typing import Any, get_args, get_origin, get_type_hints
 from docketeer.executor import CommandExecutor
 from docketeer.plugins import discover_all
 from docketeer.prompt import CacheControl
+from docketeer.search import NullSearch, SearchIndex
 from docketeer.vault import Vault
 
 log = logging.getLogger(__name__)
@@ -55,6 +56,7 @@ class ToolContext:
     classify_response: Callable[[str, int, str], Awaitable[bool]] | None = None
     executor: CommandExecutor | None = None
     vault: Vault | None = None
+    search: SearchIndex = field(default_factory=NullSearch)
 
 
 class ToolRegistry:

@@ -129,6 +129,15 @@ repos:
         pass_filenames: false
         require_serial: true
 
+      - id: pytest-docketeer-search
+        name: pytest (docketeer-search)
+        entry: uv run --no-sync --directory docketeer-search pytest
+        language: system
+        types: [python]
+        files: ^docketeer/src/|^docketeer-search/
+        pass_filenames: false
+        require_serial: true
+
       - id: pytest-docketeer-rocketchat
         name: pytest (docketeer-rocketchat)
         entry: uv run --no-sync --directory docketeer-rocketchat pytest
