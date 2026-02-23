@@ -43,7 +43,7 @@ async def do_index_file(
     with VectorStore(_db_path(workspace)) as store:
         vector = embedder.embed([content])[0]
         store.upsert(path, vector, content[:SNIPPET_LENGTH])
-        log.debug("Indexed: %s", path)
+        log.info("Indexed: %s", path)
 
 
 async def do_remove_file(
@@ -53,7 +53,7 @@ async def do_remove_file(
     """Remove a file from the search index."""
     with VectorStore(_db_path(workspace)) as store:
         store.remove(path)
-        log.debug("Removed from index: %s", path)
+        log.info("Removed from index: %s", path)
 
 
 search_tasks = [do_index_file, do_remove_file]
