@@ -6,18 +6,10 @@ from docketeer.executor import Mount
 
 from . import ToolContext, registry
 
-NO_VAULT = "No vault available — install a vault plugin (e.g. docketeer-1password)"
-NO_EXECUTOR = (
-    "No executor available — install an executor plugin (e.g. docketeer-bubblewrap)"
-)
-
 
 @registry.tool(emoji=":lock:")
 async def list_secrets(ctx: ToolContext) -> str:
     """List available secrets by name. Values are never shown."""
-    if ctx.vault is None:
-        return NO_VAULT
-
     refs = await ctx.vault.list_secrets()
     if not refs:
         return "No secrets available."
@@ -31,9 +23,6 @@ async def store_secret(ctx: ToolContext, name: str, value: str) -> str:
     name: the secret name (e.g. "my-api-key")
     value: the secret value to store
     """
-    if ctx.vault is None:
-        return NO_VAULT
-
     await ctx.vault.store(name, value)
     return f"Stored secret '{name}'."
 
@@ -45,8 +34,6 @@ async def generate_secret(ctx: ToolContext, name: str, length: int = 32) -> str:
     name: the secret name (e.g. "db-password")
     length: number of characters (default 32)
     """
-    if ctx.vault is None:
-        return NO_VAULT
     if length < 1:
         return "length must be at least 1"
 
@@ -60,9 +47,6 @@ async def delete_secret(ctx: ToolContext, name: str) -> str:
 
     name: the secret name to delete
     """
-    if ctx.vault is None:
-        return NO_VAULT
-
     await ctx.vault.delete(name)
     return f"Deleted secret '{name}'."
 
@@ -78,11 +62,6 @@ async def capture_secret(
     command: the shell command to run (e.g. "gh auth token")
     network: allow network access (default: false)
     """
-    if ctx.vault is None:
-        return NO_VAULT
-    if ctx.executor is None:
-        return NO_EXECUTOR
-
     scratch = ctx.workspace / "tmp"
     scratch.mkdir(exist_ok=True)
     mounts = [

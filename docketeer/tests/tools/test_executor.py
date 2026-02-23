@@ -25,9 +25,8 @@ def mock_executor(tool_context: ToolContext) -> AsyncMock:
 
 
 async def test_run_no_executor(tool_context: ToolContext):
-    tool_context.executor = None
     result = await registry.execute("run", {"args": ["echo", "hi"]}, tool_context)
-    assert "No executor" in result
+    assert "PluginUnavailable" in result
 
 
 async def test_run_success(tool_context: ToolContext, mock_executor: AsyncMock):
@@ -99,9 +98,8 @@ async def test_run_no_username_when_agent_username_unset(
 
 
 async def test_shell_no_executor(tool_context: ToolContext):
-    tool_context.executor = None
     result = await registry.execute("shell", {"command": "echo hi"}, tool_context)
-    assert "No executor" in result
+    assert "PluginUnavailable" in result
 
 
 async def test_shell_wraps_in_sh(tool_context: ToolContext, mock_executor: AsyncMock):
@@ -216,15 +214,13 @@ async def test_run_env_missing_secret(
     assert "Could not resolve secret 'nonexistent'" in result
 
 
-async def test_run_env_secrets_no_vault(
-    tool_context: ToolContext, mock_executor: AsyncMock
-):
+async def test_run_env_secrets_no_vault(tool_context: ToolContext):
     result = await registry.execute(
         "run",
         {"args": ["app"], "env": {"KEY": {"secret": "val"}}},
         tool_context,
     )
-    assert "No vault" in result
+    assert "PluginUnavailable" in result
 
 
 async def test_run_without_env_passes_none(
@@ -260,15 +256,13 @@ async def test_shell_env_missing_secret(
     assert "Could not resolve secret 'nonexistent'" in result
 
 
-async def test_shell_env_secrets_no_vault(
-    tool_context: ToolContext, mock_executor: AsyncMock
-):
+async def test_shell_env_secrets_no_vault(tool_context: ToolContext):
     result = await registry.execute(
         "shell",
         {"command": "echo", "env": {"KEY": {"secret": "val"}}},
         tool_context,
     )
-    assert "No vault" in result
+    assert "PluginUnavailable" in result
 
 
 async def test_shell_without_env_passes_none(

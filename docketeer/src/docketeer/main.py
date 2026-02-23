@@ -398,10 +398,8 @@ async def main() -> None:  # pragma: no cover
         # Make brain/client/executor/vault available to docket task handlers
         set_brain(brain)
         set_client(client)
-        if executor:
-            set_executor(executor)
-        if vault:
-            set_vault(vault)
+        set_executor(executor)
+        set_vault(vault)
         set_search(search)
         docket.register_collection("docketeer.tasks:docketeer_tasks")
         _register_task_plugins(docket)

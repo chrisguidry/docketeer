@@ -7,12 +7,6 @@ from docketeer.vault import SecretEnvRef, SecretResolutionError, resolve_env
 
 from . import ToolContext, registry
 
-NO_EXECUTOR = (
-    "No executor available — install an executor plugin (e.g. docketeer-bubblewrap)"
-)
-
-NO_VAULT = "No vault available — env secrets require a vault plugin"
-
 
 def _sandbox_mounts(ctx: ToolContext) -> list[Mount]:
     scratch = ctx.workspace / "tmp"
@@ -38,11 +32,8 @@ async def _resolve_env(
     ctx: ToolContext, env: dict[str, str | SecretEnvRef]
 ) -> dict[str, str] | str:
     """Resolve an env dict, returning the resolved dict or an error string."""
-    has_secrets = any(isinstance(v, SecretEnvRef) for v in env.values())
-    if has_secrets and ctx.vault is None:
-        return NO_VAULT
     try:
-        return await resolve_env(env, ctx.vault)  # type: ignore[arg-type]
+        return await resolve_env(env, ctx.vault)
     except SecretResolutionError as e:
         return str(e)
 
@@ -65,9 +56,6 @@ async def run(
         {"secret": "vault/path"} objects for vault-backed secrets. Example:
         {"HOME": "/tmp", "API_KEY": {"secret": "my-api-key"}}
     """
-    if ctx.executor is None:
-        return NO_EXECUTOR
-
     resolved: dict[str, str] | None = None
     if env:
         parsed = _parse_env_param(env)
@@ -104,9 +92,6 @@ async def shell(
         {"secret": "vault/path"} objects for vault-backed secrets. Example:
         {"HOME": "/tmp", "API_KEY": {"secret": "my-api-key"}}
     """
-    if ctx.executor is None:
-        return NO_EXECUTOR
-
     resolved: dict[str, str] | None = None
     if env:
         parsed = _parse_env_param(env)

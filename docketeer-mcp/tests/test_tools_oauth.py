@@ -8,7 +8,7 @@ import httpx
 from docket import Docket
 
 from docketeer.tools import ToolContext, registry
-from docketeer.vault import Vault
+from docketeer.vault import NullVault, Vault
 from docketeer_mcp.manager import MCPClientManager, MCPToolInfo
 from docketeer_mcp.oauth import PendingOAuth
 
@@ -48,7 +48,7 @@ async def test_connect_with_auth_no_vault(
     _write_server(
         mcp_dir, "api", {"url": "https://api.example.com/mcp", "auth": "mcp/api/token"}
     )
-    tool_context.vault = None
+    tool_context.vault = NullVault()
 
     result = await registry.execute("connect_mcp_server", {"name": "api"}, tool_context)
     assert "vault" in result.lower()
@@ -288,7 +288,7 @@ async def test_mcp_oauth_complete_no_vault(
     tool_context: ToolContext, fresh_manager: MCPClientManager
 ):
     """No vault returns error."""
-    tool_context.vault = None
+    tool_context.vault = NullVault()
 
     result = await registry.execute(
         "mcp_oauth_complete",

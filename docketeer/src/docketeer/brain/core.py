@@ -107,7 +107,7 @@ APOLOGY = (
 
 
 def _create_backend(
-    executor: CommandExecutor | None = None,
+    executor: CommandExecutor,
 ) -> InferenceBackend:
     """Create the inference backend using the plugin discovery system."""
     ep = discover_one("docketeer.inference", "INFERENCE")

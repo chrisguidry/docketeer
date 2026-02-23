@@ -218,9 +218,11 @@ def test_discover_executor_present():
 
 
 def test_discover_executor_absent():
+    from docketeer.executor import NullExecutor
+
     with patch("docketeer.executor.discover_one", return_value=None):
         result = discover_executor()
-    assert result is None
+    assert isinstance(result, NullExecutor)
 
 
 def test_discover_vault_present():
@@ -236,9 +238,11 @@ def test_discover_vault_present():
 
 
 def test_discover_vault_absent():
+    from docketeer.vault import NullVault
+
     with patch("docketeer.vault.discover_one", return_value=None):
         result = discover_vault()
-    assert result is None
+    assert isinstance(result, NullVault)
 
 
 async def test_register_docket_tools_schedule_with_key(

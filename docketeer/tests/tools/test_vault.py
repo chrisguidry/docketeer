@@ -37,7 +37,7 @@ async def test_list_secrets_empty():
 
 async def test_list_secrets_no_vault(tool_context: ToolContext):
     result = await registry.execute("list_secrets", {}, tool_context)
-    assert "No vault" in result
+    assert "PluginUnavailable" in result
 
 
 # --- store_secret ---
@@ -55,7 +55,7 @@ async def test_store_secret_no_vault(tool_context: ToolContext):
     result = await registry.execute(
         "store_secret", {"name": "x", "value": "y"}, tool_context
     )
-    assert "No vault" in result
+    assert "PluginUnavailable" in result
 
 
 # --- generate_secret ---
@@ -82,7 +82,7 @@ async def test_generate_secret_custom_length(
 
 async def test_generate_secret_no_vault(tool_context: ToolContext):
     result = await registry.execute("generate_secret", {"name": "x"}, tool_context)
-    assert "No vault" in result
+    assert "PluginUnavailable" in result
 
 
 @pytest.mark.parametrize("length", [0, -1, -100])
@@ -113,7 +113,7 @@ async def test_delete_secret_missing(vault_context: ToolContext):
 
 async def test_delete_secret_no_vault(tool_context: ToolContext):
     result = await registry.execute("delete_secret", {"name": "x"}, tool_context)
-    assert "No vault" in result
+    assert "PluginUnavailable" in result
 
 
 # --- capture_secret ---
@@ -175,13 +175,12 @@ async def test_capture_secret_nonzero_exit(
 
 
 async def test_capture_secret_no_executor(vault_context: ToolContext):
-    vault_context.executor = None
     result = await registry.execute(
         "capture_secret",
         {"name": "x", "command": "echo hi"},
         vault_context,
     )
-    assert "No executor" in result
+    assert "PluginUnavailable" in result
 
 
 async def test_capture_secret_no_vault(tool_context: ToolContext):
@@ -190,7 +189,7 @@ async def test_capture_secret_no_vault(tool_context: ToolContext):
         {"name": "x", "command": "echo hi"},
         tool_context,
     )
-    assert "No vault" in result
+    assert "PluginUnavailable" in result
 
 
 async def test_capture_secret_with_network(

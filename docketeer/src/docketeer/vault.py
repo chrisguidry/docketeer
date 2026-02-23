@@ -4,9 +4,11 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from docketeer.plugins import discover_one
+from docketeer.plugins import PluginUnavailable, discover_one
 
 log = logging.getLogger(__name__)
+
+_UNAVAILABLE = "No vault plugin installed — install docketeer-1password"
 
 
 @dataclass
@@ -46,6 +48,32 @@ class Vault(ABC):
     async def delete(self, name: str) -> None: ...
 
 
+class NullVault(Vault):
+    """Falsy stand-in when no vault plugin is installed.
+
+    Every method raises PluginUnavailable.  The falsy __bool__ lets
+    callers branch on ``if vault:`` when they need to.
+    """
+
+    def __bool__(self) -> bool:
+        return False
+
+    async def list_secrets(self) -> list[SecretReference]:
+        raise PluginUnavailable(_UNAVAILABLE)
+
+    async def resolve(self, name: str) -> str:
+        raise PluginUnavailable(_UNAVAILABLE)
+
+    async def store(self, name: str, value: str) -> None:
+        raise PluginUnavailable(_UNAVAILABLE)
+
+    async def generate(self, name: str, length: int = 32) -> None:
+        raise PluginUnavailable(_UNAVAILABLE)
+
+    async def delete(self, name: str) -> None:
+        raise PluginUnavailable(_UNAVAILABLE)
+
+
 async def resolve_env(
     env: dict[str, str | SecretEnvRef], vault: Vault
 ) -> dict[str, str]:
@@ -60,6 +88,8 @@ async def resolve_env(
         if isinstance(value, SecretEnvRef):
             try:
                 resolved[key] = await vault.resolve(value.secret)
+            except PluginUnavailable:
+                raise
             except Exception:
                 raise SecretResolutionError(
                     f"Could not resolve secret '{value.secret}' for ${key}"
@@ -69,11 +99,15 @@ async def resolve_env(
     return resolved
 
 
-def discover_vault() -> Vault | None:
-    """Discover the vault via entry_points (optional)."""
+def discover_vault() -> Vault:
+    """Discover the vault via entry_points.
+
+    Returns NullVault when no plugin is installed, so callers always
+    get a usable Vault without null checks.
+    """
     ep = discover_one("docketeer.vault", "VAULT")
     if ep is None:
         log.info("No vault plugin installed — secrets management unavailable")
-        return None
+        return NullVault()
     module = ep.load()
     return module.create_vault()

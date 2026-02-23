@@ -8,6 +8,10 @@ from typing import Any
 log = logging.getLogger(__name__)
 
 
+class PluginUnavailable(Exception):
+    """Raised by null-object implementations when no real plugin is installed."""
+
+
 def discover_all(group: str) -> list[Any]:
     """Load all entry points for a plugin group, skipping any that fail."""
     loaded = []

@@ -7,9 +7,11 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from docketeer.plugins import discover_one
+from docketeer.plugins import PluginUnavailable, discover_one
 
 log = logging.getLogger(__name__)
+
+_UNAVAILABLE = "No executor plugin installed — install docketeer-bubblewrap"
 
 
 @dataclass
@@ -116,11 +118,37 @@ class CommandExecutor(ABC):
         )
 
 
-def discover_executor() -> CommandExecutor | None:
-    """Discover the command executor via entry_points (optional)."""
+class NullExecutor(CommandExecutor):
+    """Falsy stand-in when no executor plugin is installed.
+
+    Every method raises PluginUnavailable.  The falsy __bool__ lets
+    callers branch on ``if executor:`` when they need to.
+    """
+
+    def __bool__(self) -> bool:
+        return False
+
+    async def start(
+        self,
+        command: list[str],
+        *,
+        env: dict[str, str] | None = None,
+        mounts: list[Mount] | None = None,
+        network_access: bool = False,
+        username: str | None = None,
+    ) -> RunningProcess:
+        raise PluginUnavailable(_UNAVAILABLE)
+
+
+def discover_executor() -> CommandExecutor:
+    """Discover the command executor via entry_points.
+
+    Returns NullExecutor when no plugin is installed, so callers always
+    get a usable CommandExecutor without null checks.
+    """
     ep = discover_one("docketeer.executor", "EXECUTOR")
     if ep is None:
         log.info("No executor plugin installed — sandboxed execution unavailable")
-        return None
+        return NullExecutor()
     module = ep.load()
     return module.create_executor()

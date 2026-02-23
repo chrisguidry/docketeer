@@ -1,6 +1,9 @@
-"""Tests for the Vault ABC and SecretReference."""
+"""Tests for the Vault ABC, NullVault, and SecretReference."""
 
-from docketeer.vault import SecretReference, Vault
+import pytest
+
+from docketeer.plugins import PluginUnavailable
+from docketeer.vault import NullVault, SecretReference, Vault
 
 
 def test_secret_reference_has_name():
@@ -9,7 +12,25 @@ def test_secret_reference_has_name():
 
 
 def test_vault_is_abstract():
-    import pytest
-
     with pytest.raises(TypeError):
         Vault()
+
+
+def test_null_vault_is_falsy():
+    assert not NullVault()
+
+
+@pytest.mark.parametrize(
+    ("method", "args"),
+    [
+        ("list_secrets", ()),
+        ("resolve", ("key",)),
+        ("store", ("key", "val")),
+        ("generate", ("key",)),
+        ("delete", ("key",)),
+    ],
+)
+async def test_null_vault_raises(method: str, args: tuple[str, ...]):
+    vault = NullVault()
+    with pytest.raises(PluginUnavailable, match="vault"):
+        await getattr(vault, method)(*args)

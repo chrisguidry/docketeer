@@ -95,7 +95,7 @@ async def connect_mcp_server(
             return f"Server {name!r} has secret env vars but no vault is configured."
         if has_secrets:
             try:
-                resolved_env = await resolve_env(cfg.env, ctx.vault)  # type: ignore[arg-type]
+                resolved_env = await resolve_env(cfg.env, ctx.vault)
             except SecretResolutionError as e:
                 return str(e)
         else:

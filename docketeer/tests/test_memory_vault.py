@@ -123,3 +123,11 @@ async def test_resolve_env_empty():
     vault = MemoryVault()
     result = await resolve_env({}, vault)
     assert result == {}
+
+
+async def test_resolve_env_propagates_plugin_unavailable():
+    from docketeer.plugins import PluginUnavailable
+    from docketeer.vault import NullVault
+
+    with pytest.raises(PluginUnavailable):
+        await resolve_env({"KEY": SecretEnvRef(secret="x")}, NullVault())

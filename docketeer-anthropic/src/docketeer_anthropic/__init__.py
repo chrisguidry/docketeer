@@ -47,7 +47,7 @@ def create_backend(executor: CommandExecutor | None) -> InferenceBackend:
     elif backend_type == "claude-code":
         from docketeer_anthropic.claude_code_backend import ClaudeCodeBackend
 
-        if executor is None:
+        if not executor:
             raise ValueError("claude-code backend requires an executor plugin")
         oauth_token = environment.get_str("CLAUDE_CODE_OAUTH_TOKEN")
         return ClaudeCodeBackend(executor=executor, oauth_token=oauth_token)

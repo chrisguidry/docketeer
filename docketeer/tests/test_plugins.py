@@ -5,7 +5,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from docketeer.plugins import discover_all, discover_one
+from docketeer.plugins import PluginUnavailable, discover_all, discover_one
+
+
+def test_plugin_unavailable_is_an_exception():
+    err = PluginUnavailable("test message")
+    assert isinstance(err, Exception)
+    assert str(err) == "test message"
 
 
 def _make_ep(name: str, value: str = "some_module") -> EntryPoint:

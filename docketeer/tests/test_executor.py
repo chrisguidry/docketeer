@@ -114,6 +114,21 @@ def test_command_executor_cannot_be_instantiated():
         CommandExecutor()
 
 
+def test_null_executor_is_falsy():
+    from docketeer.executor import NullExecutor
+
+    assert not NullExecutor()
+
+
+async def test_null_executor_start_raises():
+    from docketeer.executor import NullExecutor
+    from docketeer.plugins import PluginUnavailable
+
+    executor = NullExecutor()
+    with pytest.raises(PluginUnavailable, match="executor"):
+        await executor.start(["echo", "hi"])
+
+
 async def test_running_process_wait_for_exit():
     proc = AsyncMock()
     proc.wait.return_value = None
