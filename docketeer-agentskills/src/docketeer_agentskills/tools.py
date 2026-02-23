@@ -39,31 +39,6 @@ async def activate_skill(ctx: ToolContext, name: str) -> str:
 
 
 @registry.tool(emoji=":books:")
-async def read_skill_file(ctx: ToolContext, name: str, path: str) -> str:
-    """Read a file from an installed skill's directory.
-
-    name: skill name
-    path: relative path within the skill directory
-    """
-    skill_dir = safe_path(ctx.workspace, f"skills/{name}")
-    if not skill_dir.is_dir():
-        return f"Skill not found: {name}"
-    target = (skill_dir / path).resolve()
-    if not str(target).startswith(str(skill_dir.resolve())):
-        return f"Path '{path}' is outside the skill directory"
-    if not target.exists():
-        return f"File not found: {path}"
-    if target.is_dir():
-        return "\n".join(
-            f"{e.name}/" if e.is_dir() else e.name for e in sorted(target.iterdir())
-        )
-    try:
-        return target.read_text()
-    except UnicodeDecodeError:
-        return f"Cannot read binary file: {path}"
-
-
-@registry.tool(emoji=":books:")
 async def install_skill(
     ctx: ToolContext, url: str, name: str = "", path: str = ""
 ) -> str:

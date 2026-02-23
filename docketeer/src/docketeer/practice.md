@@ -20,7 +20,7 @@ Use `- HH:MM | text` format. Use [[wikilinks]] to reference workspace files.
 Always link people: `[[people/chris]]`. Link notes when relevant:
 `[[notes/meal-planning]]`.
 
-Tags are just text in the entry — they work with journal_search:
+Tags are just text in the entry — they work with search_files:
 - `#first-contact` — first real conversation with someone
 - `#promise` — you committed to doing something
 - `#moment` — emotionally significant interaction
@@ -29,8 +29,8 @@ Tags are just text in the entry — they work with journal_search:
 - `#reflection` — your own consolidation and thinking
 - `#milestone` — birthday, achievement, life event
 
-Always use journal_add, journal_read, and journal_search — never edit journal
-files directly with write_file.
+Always use journal_add and journal_entries — never edit journal files directly
+with write_file. Use search_files to search across journal entries.
 
 ### Reflection
 

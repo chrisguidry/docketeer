@@ -23,8 +23,7 @@ the agent's files and journal, and a plugin system based on standard Python
 ### Journal
 
 - **`journal_add`** — add a timestamped entry to today's journal
-- **`journal_read`** — read journal entries for a day or date range
-- **`journal_search`** — search across all journal entries
+- **`journal_entries`** — read journal entries for a day or date range
 
 ### Scheduling
 

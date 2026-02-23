@@ -36,7 +36,7 @@ async def journal_add(ctx: ToolContext, entry: str) -> str:
 
 
 @registry.tool(emoji=":pencil:")
-async def journal_read(
+async def journal_entries(
     ctx: ToolContext, date: str = "", start: str = "", end: str = ""
 ) -> str:
     """Read journal entries. Defaults to today. Use date for a single day, or start/end for a range.
@@ -75,31 +75,3 @@ async def journal_read(
     if not path.exists():
         return f"No journal entries for today ({today})"
     return path.read_text()
-
-
-@registry.tool(emoji=":pencil:")
-async def journal_search(ctx: ToolContext, query: str) -> str:
-    """Search across all journal entries.
-
-    query: text to search for (case-insensitive)
-    """
-    journal_dir = _journal_dir(ctx.workspace)
-    if not journal_dir.exists():
-        return "No journal entries yet"
-
-    query_lower = query.lower()
-    matches = []
-
-    for path in sorted(journal_dir.glob("*.md")):
-        file_date = path.stem
-        for line in path.read_text().splitlines():
-            if not line.startswith("- "):
-                continue
-            if query_lower in line.lower():
-                matches.append(f"[{file_date}] {line}")
-                if len(matches) >= 50:
-                    return "\n".join(matches)
-
-    if not matches:
-        return f"No journal entries matching '{query}'"
-    return "\n".join(matches)

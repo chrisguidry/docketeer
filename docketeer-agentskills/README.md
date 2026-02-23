@@ -12,18 +12,19 @@ with a `SKILL.md` file (YAML frontmatter + markdown instructions).
 |------|-------------|
 | `list_skills` | List installed skills with descriptions |
 | `activate_skill` | Load a skill's full instructions |
-| `read_skill_file` | Read any file from a skill directory |
 | `install_skill` | Install a skill from a git repository |
 | `uninstall_skill` | Remove an installed skill |
 
 ## How it works
 
-Skills live in `{workspace}/skills/`. The plugin provides three levels of
+Skills live in `{workspace}/skills/`. The plugin provides two levels of
 progressive disclosure:
 
 1. **System prompt** — skill names and descriptions are always available
 2. **activate_skill** — loads the full SKILL.md body on demand
-3. **read_skill_file** — reads any file from the skill directory on demand
+
+Skill files can be read directly with the workspace `read_file` and
+`list_files` tools (e.g. `read_file("skills/my-skill/template.txt")`).
 
 ## Configuration
 
