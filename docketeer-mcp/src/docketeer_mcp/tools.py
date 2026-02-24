@@ -353,18 +353,21 @@ async def search_mcp_tools(ctx: ToolContext, query: str, server: str = "") -> st
 
 @registry.tool(emoji=":electric_plug:")
 async def use_mcp_tool(
-    ctx: ToolContext, server: str, tool: str, arguments: str = "{}"
+    ctx: ToolContext, server: str, tool: str, arguments: str | dict = "{}"
 ) -> str:
     """Call a tool on a connected MCP server.
 
     server: server name
     tool: tool name on that server
-    arguments: JSON string of tool arguments
+    arguments: tool arguments as a JSON string or object
     """
-    try:
-        args = json.loads(arguments)
-    except json.JSONDecodeError as e:
-        return f"Invalid JSON arguments: {e}"
+    if isinstance(arguments, dict):
+        args = arguments
+    else:
+        try:
+            args = json.loads(arguments)
+        except (json.JSONDecodeError, TypeError) as e:
+            return f"Invalid JSON arguments: {e}"
 
     try:
         return await manager.call_tool(server, tool, args)

@@ -166,6 +166,34 @@ async def test_use_tool_success(
     fresh_manager.call_tool.assert_called_once_with("s", "add", {"a": 1, "b": 2})  # type: ignore[union-attr]
 
 
+async def test_use_tool_dict_arguments(
+    tool_context: ToolContext, fresh_manager: MCPClientManager
+):
+    fresh_manager.call_tool = AsyncMock(return_value="42")  # type: ignore[method-assign]
+
+    result = await registry.execute(
+        "use_mcp_tool",
+        {"server": "s", "tool": "add", "arguments": {"a": 1, "b": 2}},
+        tool_context,
+    )
+    assert result == "42"
+    fresh_manager.call_tool.assert_called_once_with("s", "add", {"a": 1, "b": 2})  # type: ignore[union-attr]
+
+
+async def test_use_tool_empty_dict_arguments(
+    tool_context: ToolContext, fresh_manager: MCPClientManager
+):
+    fresh_manager.call_tool = AsyncMock(return_value="ok")  # type: ignore[method-assign]
+
+    result = await registry.execute(
+        "use_mcp_tool",
+        {"server": "s", "tool": "t", "arguments": {}},
+        tool_context,
+    )
+    assert result == "ok"
+    fresh_manager.call_tool.assert_called_once_with("s", "t", {})  # type: ignore[union-attr]
+
+
 async def test_use_tool_bad_json(tool_context: ToolContext):
     result = await registry.execute(
         "use_mcp_tool",
