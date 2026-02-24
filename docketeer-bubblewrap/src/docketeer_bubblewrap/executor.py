@@ -100,8 +100,10 @@ class BubblewrapExecutor(CommandExecutor):
         if mounts:
             merged_mounts.extend(mounts)
 
-        # Merge env: toolshed → HOME → caller
-        merged_env: dict[str, str] = {}
+        # Merge env: defaults → toolshed → HOME → caller
+        merged_env: dict[str, str] = {
+            "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        }
         if self._toolshed:
             merged_env.update(self._toolshed.env())
         merged_env["HOME"] = str(sandbox_home)
