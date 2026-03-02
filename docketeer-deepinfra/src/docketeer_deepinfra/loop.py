@@ -5,20 +5,13 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from openai import AsyncOpenAI
-from openai.types import CompletionUsage
-from openai.types.chat import (
-    ChatCompletion,
-    ChatCompletionMessage,
-    ChatCompletionMessageFunctionToolCall,
-)
-from openai.types.chat.chat_completion import Choice
-from openai.types.chat.chat_completion_message_function_tool_call import Function
+from openai import AsyncOpenAI, LengthFinishReasonError
+from openai.lib.streaming.chat import ChatCompletionStreamState
+from openai.types.chat import ChatCompletion, ChatCompletionMessageToolCall
 
 from docketeer.audit import audit_log, log_usage, record_usage
 from docketeer.brain.backend import Usage
@@ -206,13 +199,10 @@ async def stream_message(
         len(serialized_messages),
     )
 
-    full_content = ""
-    accumulated_tool_calls: dict[str, dict] = {}
-    finish_reason = None
-    first_text_emitted = False
-    captured_usage: CompletionUsage | None = None
+    state = ChatCompletionStreamState()
+    first_text_fired = False
 
-    stream_resp = await client.chat.completions.create(  # type: ignore[no-matching-overload]
+    raw_stream = await client.chat.completions.create(  # type: ignore[no-matching-overload]
         model=model_id,
         messages=serialized_messages,
         tools=serialized_tools,
@@ -221,107 +211,19 @@ async def stream_message(
         stream_options={"include_usage": True},
     )
 
-    async for chunk in stream_resp:
-        if chunk.usage is not None:
-            captured_usage = chunk.usage
+    async for chunk in raw_stream:
+        state.handle_chunk(chunk)
 
-        choice = chunk.choices[0] if chunk.choices else None
-        if not choice:
-            continue
-
-        delta = choice.delta
-        if not delta:
-            continue
-
-        # Content
-        if delta.content:
-            if not first_text_emitted and on_first_text:
+        if not first_text_fired and on_first_text and chunk.choices:
+            delta = chunk.choices[0].delta
+            if delta and delta.content:
                 await on_first_text()
-                first_text_emitted = True
-            full_content += delta.content
+                first_text_fired = True
 
-        # Tool calls - use index to track tool calls across chunks (id is only on first chunk)
-        if delta.tool_calls:
-            log.debug("Stream tool_calls delta: %s", delta.tool_calls)
-            for tc in delta.tool_calls:
-                # Use index as the key since id is only present on first chunk
-                tc_idx = tc.index
-                if tc_idx is None:
-                    log.debug("Skipping tool call chunk with no index: %s", tc)
-                    continue
-                tc_key = str(tc_idx)
-                if tc_key not in accumulated_tool_calls:
-                    accumulated_tool_calls[tc_key] = {
-                        "id": tc.id or f"call_{tc_idx}",
-                        "type": "function",
-                        "function": {"name": "", "arguments": ""},
-                    }
-                # Update ID if we got one
-                if tc.id:
-                    accumulated_tool_calls[tc_key]["id"] = tc.id
-                if tc.function.name:
-                    accumulated_tool_calls[tc_key]["function"]["name"] += (
-                        tc.function.name
-                    )
-                if tc.function.arguments:
-                    accumulated_tool_calls[tc_key]["function"]["arguments"] += (
-                        tc.function.arguments
-                    )
-
-        if choice.finish_reason:
-            finish_reason = choice.finish_reason
-
-    log.debug(
-        "Stream complete: finish_reason=%s, accumulated_tool_calls=%d, content_length=%d",
-        finish_reason,
-        len(accumulated_tool_calls),
-        len(full_content),
-    )
-
-    # Parse tool calls
-    parsed_tool_calls: list[ChatCompletionMessageFunctionToolCall] = []
-    for tc_data in accumulated_tool_calls.values():
-        args_str = tc_data["function"]["arguments"]
-        # Handle empty arguments (tools with no params)
-        if not args_str or not args_str.strip():
-            args_str = "{}"
-        else:
-            # Try to parse as JSON
-            try:
-                args = json.loads(args_str)
-                args_str = json.dumps(args)
-            except json.JSONDecodeError:
-                args_str = "{}"  # Default to empty object if invalid JSON
-
-        parsed_tool_calls.append(
-            ChatCompletionMessageFunctionToolCall(
-                id=tc_data["id"],
-                type="function",
-                function=Function(
-                    name=tc_data["function"]["name"],
-                    arguments=args_str,
-                ),
-            )
-        )
-
-    # Build response
-    message = ChatCompletionMessage(
-        role="assistant",
-        content=full_content,
-        tool_calls=parsed_tool_calls or None,  # type: ignore[arg-type]
-    )
-
-    return ChatCompletion(
-        id=f"chatcmpl-{hash(full_content) % 1000000}",
-        choices=[
-            Choice(index=0, message=message, finish_reason=finish_reason or "stop")
-        ],
-        model=model_id or "unknown",
-        usage=captured_usage
-        or CompletionUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0),
-        object="chat.completion",
-        created=int(time.time()),
-    )
+    try:
+        return state.get_final_completion()  # type: ignore[return-value]
+    except LengthFinishReasonError as exc:
+        return exc.completion
 
 
 def _serialize_messages(
@@ -375,7 +277,7 @@ def _serialize_messages(
 
 
 async def execute_tools(
-    tool_calls: list[ChatCompletionMessageFunctionToolCall],
+    tool_calls: list[ChatCompletionMessageToolCall],
     tool_context: ToolContext,
     audit_path: Path,
 ) -> list[dict]:

@@ -12,10 +12,10 @@ from docketeer_deepinfra.loop import agentic_loop
 
 from .conftest import (
     MODEL,
-    AsyncStreamWrapper,
-    make_chunk,
+    FakeAsyncStream,
+    make_chunks,
     make_response,
-    make_stream_mock,
+    make_tc_delta,
     make_tool_call,
     make_usage,
 )
@@ -27,8 +27,8 @@ async def test_truncated_response_appends_length_warning(
     tool_context: ToolContext, tmp_path: Path
 ):
     mock_client = MagicMock()
-    mock_client.chat.completions.create = make_stream_mock(
-        [make_chunk(content="Hello", finish_reason="length")]
+    mock_client.chat.completions.create = AsyncMock(
+        return_value=make_chunks(content="Hello", finish_reason="length")
     )
 
     result = await agentic_loop(
@@ -55,8 +55,8 @@ async def test_empty_response_returns_no_response(
     tool_context: ToolContext, tmp_path: Path
 ):
     mock_client = MagicMock()
-    mock_client.chat.completions.create = make_stream_mock(
-        [make_chunk(finish_reason="stop")]
+    mock_client.chat.completions.create = AsyncMock(
+        return_value=make_chunks(finish_reason="stop")
     )
 
     result = await agentic_loop(
@@ -80,8 +80,8 @@ async def test_empty_response_returns_no_response(
 
 async def test_normal_stop_returns_content(tool_context: ToolContext, tmp_path: Path):
     mock_client = MagicMock()
-    mock_client.chat.completions.create = make_stream_mock(
-        [make_chunk(content="Final response", finish_reason="stop")]
+    mock_client.chat.completions.create = AsyncMock(
+        return_value=make_chunks(content="Final response")
     )
 
     result = await agentic_loop(
@@ -110,26 +110,24 @@ async def test_tool_round_limit_triggers_summary(
 
     monkeypatch.setattr(loop, "MAX_TOOL_ROUNDS", 2)
 
-    tool_chunk = make_chunk(
-        tool_calls=[make_tool_call(index=0, call_id="call_1", name="test_tool")],
-        finish_reason="tool_calls",
-        usage=make_usage(cached_tokens=50),
+    summary_usage = make_usage(
+        prompt_tokens=150, completion_tokens=20, total_tokens=170
     )
-    summary_chunk = make_chunk(
-        content="Here is a summary",
-        finish_reason="stop",
-        usage=make_usage(prompt_tokens=150, completion_tokens=20, total_tokens=170),
-    )
-    # Manually clear prompt_tokens_details to exercise the else branch
-    summary_chunk.usage.prompt_tokens_details = None
+    # Clear prompt_tokens_details to exercise the else branch
+    summary_usage.prompt_tokens_details = None
 
     call_count = [0]
 
-    async def side_effect(*args: object, **kwargs: object) -> AsyncStreamWrapper:
+    def side_effect(*args: object, **kwargs: object) -> FakeAsyncStream:
         call_count[0] += 1
         if call_count[0] <= 2:
-            return AsyncStreamWrapper([tool_chunk])
-        return AsyncStreamWrapper([summary_chunk])
+            tc = make_tc_delta(call_id=f"call_{call_count[0]}", name="test_tool")
+            return make_chunks(
+                tool_calls=[tc],
+                finish_reason="tool_calls",
+                usage=make_usage(cached_tokens=50),
+            )
+        return make_chunks(content="Here is a summary", usage=summary_usage)
 
     mock_client = MagicMock()
     mock_client.chat.completions.create = AsyncMock(side_effect=side_effect)
@@ -164,37 +162,44 @@ async def test_tool_round_limit_triggers_summary_without_cached_tokens(
 
     monkeypatch.setattr(loop, "MAX_TOOL_ROUNDS", 2)
 
-    tool_chunk = make_chunk(
-        tool_calls=[make_tool_call(index=0, call_id="call_1", name="test_tool")],
-        finish_reason="tool_calls",
-        usage=make_usage(cached_tokens=50),
+    tool_call_mock = make_tool_call(call_id="call_1", name="test_tool")
+    mock_usage = MagicMock()
+    mock_usage.prompt_tokens = 10
+    mock_usage.completion_tokens = 5
+    mock_usage.prompt_tokens_details = MagicMock(cached_tokens=50)
+
+    tool_response = make_response(
+        tool_calls=[tool_call_mock], finish_reason="tool_calls", usage=mock_usage
     )
-    summary_chunk = make_chunk(
-        content="Summary without cache",
-        finish_reason="stop",
-        usage=make_usage(prompt_tokens=150, completion_tokens=20, total_tokens=170),
+
+    summary_usage = MagicMock()
+    summary_usage.prompt_tokens = 150
+    summary_usage.completion_tokens = 20
+    # Non-int cached_tokens exercises the isinstance guard
+    summary_usage.prompt_tokens_details = MagicMock(cached_tokens="not_an_int")
+    summary_response = make_response(
+        content="Summary without cache", usage=summary_usage
     )
-    # Override prompt_tokens_details with a mock whose cached_tokens isn't an int
-    mock_details = MagicMock()
-    mock_details.cached_tokens = "not_an_int"
-    summary_chunk.usage.prompt_tokens_details = mock_details
 
     call_count = [0]
 
-    async def side_effect(*args: object, **kwargs: object) -> AsyncStreamWrapper:
+    async def stream_side_effect(*args: object, **kwargs: object) -> MagicMock:
         call_count[0] += 1
         if call_count[0] <= 2:
-            return AsyncStreamWrapper([tool_chunk])
-        return AsyncStreamWrapper([summary_chunk])
+            return tool_response
+        return summary_response
 
-    mock_client = MagicMock()
-    mock_client.chat.completions.create = AsyncMock(side_effect=side_effect)
-
-    with patch("docketeer_deepinfra.loop.registry") as mock_registry:
+    with (
+        patch(
+            "docketeer_deepinfra.loop.stream_message", new_callable=AsyncMock
+        ) as mock_stream,
+        patch("docketeer_deepinfra.loop.registry") as mock_registry,
+    ):
         mock_registry.execute = AsyncMock(return_value="tool result")
+        mock_stream.side_effect = stream_side_effect
 
         result = await agentic_loop(
-            client=mock_client,
+            client=MagicMock(),
             model=MODEL,
             system=[],
             messages=[MessageParam(role="user", content="test")],
@@ -212,7 +217,7 @@ async def test_tool_round_limit_triggers_summary_without_cached_tokens(
     assert result == "Summary without cache"
 
 
-async def test_tool_round_limit_triggers_summary_no_usage(
+async def test_tool_round_limit_with_cached_tokens(
     tool_context: ToolContext, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     """Summary request when prompt_tokens_details has int cached_tokens."""
@@ -220,26 +225,26 @@ async def test_tool_round_limit_triggers_summary_no_usage(
 
     monkeypatch.setattr(loop, "MAX_TOOL_ROUNDS", 2)
 
-    tool_chunk = make_chunk(
-        tool_calls=[make_tool_call(index=0, call_id="call_1", name="test_tool")],
-        finish_reason="tool_calls",
-        usage=make_usage(cached_tokens=50),
-    )
-    summary_chunk = make_chunk(
-        content="Final summary",
-        finish_reason="stop",
-        usage=make_usage(
-            prompt_tokens=150, completion_tokens=20, total_tokens=170, cached_tokens=100
-        ),
-    )
-
     call_count = [0]
 
-    async def side_effect(*args: object, **kwargs: object) -> AsyncStreamWrapper:
+    def side_effect(*args: object, **kwargs: object) -> FakeAsyncStream:
         call_count[0] += 1
         if call_count[0] <= 2:
-            return AsyncStreamWrapper([tool_chunk])
-        return AsyncStreamWrapper([summary_chunk])
+            tc = make_tc_delta(call_id=f"call_{call_count[0]}", name="test_tool")
+            return make_chunks(
+                tool_calls=[tc],
+                finish_reason="tool_calls",
+                usage=make_usage(cached_tokens=50),
+            )
+        return make_chunks(
+            content="Final summary",
+            usage=make_usage(
+                prompt_tokens=150,
+                completion_tokens=20,
+                total_tokens=170,
+                cached_tokens=100,
+            ),
+        )
 
     mock_client = MagicMock()
     mock_client.chat.completions.create = AsyncMock(side_effect=side_effect)
