@@ -1,8 +1,9 @@
-"""Tests for stream_message function."""
+"""Tests for stream_message and content block serialization."""
 
 from unittest.mock import MagicMock
 
-from docketeer_anthropic.loop import stream_message
+from anthropic.types import TextBlock, ToolUseBlock
+from docketeer_anthropic.loop import _dump_content_block, stream_message
 
 from docketeer.brain.core import InferenceModel
 from docketeer.prompt import MessageParam, SystemBlock
@@ -169,3 +170,24 @@ async def test_stream_message_empty_text_stream(mock_client: MagicMock) -> None:
     )
     assert result is not None
     assert callback_calls == []
+
+
+def test_dump_content_block_strips_extra_fields():
+    """Extra fields from model_extra are excluded from serialization."""
+    block = TextBlock.model_validate(
+        {"type": "text", "text": "hi", "parsed_output": {"key": "value"}}
+    )
+    dumped = _dump_content_block(block)
+    assert dumped == {"type": "text", "text": "hi"}
+    assert "parsed_output" not in dumped
+
+
+def test_dump_content_block_strips_none_values():
+    """None values are excluded from serialization."""
+    block = ToolUseBlock(type="tool_use", id="tool_1", name="test", input={"a": 1})
+    dumped = _dump_content_block(block)
+    assert "citations" not in dumped
+    assert dumped["type"] == "tool_use"
+    assert dumped["id"] == "tool_1"
+    assert dumped["name"] == "test"
+    assert dumped["input"] == {"a": 1}

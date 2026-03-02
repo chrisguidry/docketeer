@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 import anthropic
 from anthropic.types import (
+    ContentBlock,
     TextBlock,
     ThinkingConfigEnabledParam,
     ToolResultBlockParam,
@@ -87,7 +88,7 @@ async def agentic_loop(
             messages.append(
                 MessageParam(
                     role="assistant",
-                    content=[b.model_dump() for b in response.content],
+                    content=[_dump_content_block(b) for b in response.content],
                 )
             )
             messages.append(MessageParam(role="user", content=tool_results))
@@ -106,7 +107,7 @@ async def agentic_loop(
         messages.append(
             MessageParam(
                 role="assistant",
-                content=[b.model_dump() for b in response.content],
+                content=[_dump_content_block(b) for b in response.content],
             )
         )
         messages.append(
@@ -217,6 +218,12 @@ def update_cache_breakpoints(
                 block.pop("cache_control", None)
 
     tool_results[-1]["cache_control"] = CacheControl().to_dict()  # type: ignore[typeddict-item]
+
+
+def _dump_content_block(block: ContentBlock) -> dict:
+    """Serialize a response content block, stripping API-response-only fields."""
+    extra_keys = set(block.model_extra or {})
+    return block.model_dump(exclude_none=True, exclude=extra_keys)
 
 
 def build_reply(

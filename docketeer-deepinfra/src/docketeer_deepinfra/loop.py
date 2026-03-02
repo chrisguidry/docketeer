@@ -221,7 +221,7 @@ async def stream_message(
                 first_text_fired = True
 
     try:
-        return state.get_final_completion()  # type: ignore[return-value]
+        return state.get_final_completion()
     except LengthFinishReasonError as exc:
         return exc.completion
 
