@@ -244,10 +244,12 @@ async def stream_message(
 
         # Tool calls - use index to track tool calls across chunks (id is only on first chunk)
         if delta.tool_calls:
+            log.debug("Stream tool_calls delta: %s", delta.tool_calls)
             for tc in delta.tool_calls:
                 # Use index as the key since id is only present on first chunk
                 tc_idx = tc.index
                 if tc_idx is None:
+                    log.debug("Skipping tool call chunk with no index: %s", tc)
                     continue
                 tc_key = str(tc_idx)
                 if tc_key not in accumulated_tool_calls:
@@ -268,7 +270,15 @@ async def stream_message(
                         tc.function.arguments
                     )
 
-        finish_reason = choice.finish_reason
+        if choice.finish_reason:
+            finish_reason = choice.finish_reason
+
+    log.debug(
+        "Stream complete: finish_reason=%s, accumulated_tool_calls=%d, content_length=%d",
+        finish_reason,
+        len(accumulated_tool_calls),
+        len(full_content),
+    )
 
     # Parse tool calls
     parsed_tool_calls: list[ChatCompletionMessageFunctionToolCall] = []
