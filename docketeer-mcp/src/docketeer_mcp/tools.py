@@ -72,8 +72,10 @@ async def connect_mcp_server(
     client_secret: str = "",
     scopes: str = "",
 ) -> str:
-    """Connect to a configured MCP server and discover its tools. If the
-    server requires OAuth, returns an authorization URL for the user.
+    """Connect to a configured MCP server and discover its tools. Secret
+    env vars and auth tokens are resolved from the vault automatically —
+    you don't need to read or pass raw secret values. If the server
+    requires OAuth, returns an authorization URL for the user.
 
     name: server name from the configuration
     client_id: pre-configured OAuth client ID (optional, skips registration)
@@ -387,7 +389,14 @@ async def add_mcp_server(
     headers: str = "{}",
     network_access: bool = False,
 ) -> str:
-    """Save a new MCP server configuration.
+    """Save a new MCP server configuration. Environment variables can
+    reference vault secrets, which are resolved automatically at connect
+    time — you never need to read or handle the raw secret values yourself.
+
+    Workflow: use list_secrets to find available credentials, then pass
+    them as {"secret": "vault/path"} in env. For bearer-token auth, set
+    the auth field on the server config (done automatically by OAuth, or
+    manually via store_secret + config update).
 
     name: identifier for the server
     command: executable to run (for stdio servers)

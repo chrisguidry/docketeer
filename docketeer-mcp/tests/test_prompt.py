@@ -26,6 +26,8 @@ def test_with_servers_disconnected(workspace: Path, mcp_dir: Path):
     assert "**time**: `uvx`" in text
     assert "**api**: `https://api.example.com/mcp`" in text
     assert "connect_mcp_server" in text
+    assert "list_secrets" in text
+    assert '{"secret": "path"}' in text
     assert "Connected:" not in text
 
 

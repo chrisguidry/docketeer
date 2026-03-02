@@ -22,6 +22,10 @@ def provide_mcp_catalog(workspace: Path) -> list[SystemBlock]:
         "Use `connect_mcp_server` to connect, `search_mcp_tools` to find tools, "
         "and `use_mcp_tool` to call them.",
         "",
+        "Secret credentials are referenced by vault path, never by raw value. "
+        "Use `list_secrets` to find credentials, then reference them as "
+        '`{"secret": "path"}` in env when configuring servers.',
+        "",
         "Configured servers:",
     ]
     for name, cfg in servers.items():
