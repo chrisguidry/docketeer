@@ -125,7 +125,7 @@ async def agentic_loop(
             messages.append(
                 MessageParam(
                     role="assistant",
-                    content="",
+                    content=message.content or "",
                     tool_calls=[tc.model_dump() for tc in tool_calls],
                 )
             )
