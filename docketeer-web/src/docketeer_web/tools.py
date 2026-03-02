@@ -9,6 +9,7 @@ from importlib.metadata import version
 import httpx
 
 from docketeer import environment
+from docketeer.brain.backend import BackendError
 from docketeer.tools import ToolContext, registry, safe_path
 
 log = logging.getLogger(__name__)
@@ -202,7 +203,7 @@ async def web_request(
                     readable = await ctx.classify_response(
                         url, response.status_code, resp_headers
                     )
-                except Exception:
+                except BackendError:
                     log.exception("classify_response failed, falling back to heuristic")
 
             if not readable:
@@ -223,7 +224,7 @@ async def web_request(
                     summarize_text[:SUMMARIZE_INPUT_SIZE], purpose
                 )
                 text = f"[summarized from {original_size} of {media_type}]\n{text}"
-            except Exception:
+            except BackendError:
                 log.exception(
                     "Web page summarization failed, falling back to truncation"
                 )

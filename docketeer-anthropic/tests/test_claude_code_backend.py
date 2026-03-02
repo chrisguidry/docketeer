@@ -8,6 +8,8 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from docketeer_anthropic.claude_code_backend import ClaudeCodeBackend
 
+from docketeer.prompt import MessageParam
+
 TIER = "smart"
 
 
@@ -118,7 +120,7 @@ async def test_count_tokens_returns_context_after_invocation(
             "output_tokens": 200,
         },
     }
-    messages = [{"role": "user", "content": "hello"}]
+    messages = [MessageParam(role="user", content="hello")]
     with _patch_invoke(("reply", "sess-1", result_event)):
         await backend.run_agentic_loop(
             TIER,

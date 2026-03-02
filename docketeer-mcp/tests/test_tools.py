@@ -93,7 +93,7 @@ async def test_connect_failure(
     tool_context: ToolContext, mcp_dir: Path, fresh_manager: MCPClientManager
 ):
     _write_server(mcp_dir, "bad", {"command": "false"})
-    fresh_manager.connect = AsyncMock(side_effect=RuntimeError("connection refused"))  # type: ignore[method-assign]
+    fresh_manager.connect = AsyncMock(side_effect=ValueError("connection refused"))  # type: ignore[method-assign]
 
     result = await registry.execute("connect_mcp_server", {"name": "bad"}, tool_context)
     assert "Failed to connect" in result
@@ -206,7 +206,7 @@ async def test_use_tool_bad_json(tool_context: ToolContext):
 async def test_use_tool_error(
     tool_context: ToolContext, fresh_manager: MCPClientManager
 ):
-    fresh_manager.call_tool = AsyncMock(side_effect=RuntimeError("timeout"))  # type: ignore[method-assign]
+    fresh_manager.call_tool = AsyncMock(side_effect=ValueError("timeout"))  # type: ignore[method-assign]
 
     result = await registry.execute(
         "use_mcp_tool",

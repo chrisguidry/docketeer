@@ -6,13 +6,14 @@ import asyncio
 import json
 import logging
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from docketeer.brain.backend import (
     BackendAuthError,
     BackendError,
     ContextTooLargeError,
 )
+from docketeer.prompt import MessageParam, TextBlockParam
 
 if TYPE_CHECKING:
     from docketeer.brain.core import ProcessCallbacks
@@ -20,11 +21,9 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-def extract_text(message: Any) -> str:
+def extract_text(message: MessageParam) -> str:
     """Anthropic Claude Code output parsing utilities."""
-    content = (
-        message.content if hasattr(message, "content") else message.get("content", "")
-    )
+    content = message.content
     if isinstance(content, str):
         return content
     parts: list[str] = []
@@ -33,7 +32,7 @@ def extract_text(message: Any) -> str:
             parts.append(block)
         elif isinstance(block, dict) and block.get("type") == "text":
             parts.append(block.get("text", ""))
-        elif hasattr(block, "text"):
+        elif isinstance(block, TextBlockParam):
             parts.append(block.text)
     return "\n".join(parts)
 
@@ -56,7 +55,7 @@ def format_prompt(messages: list, *, resume: bool = False) -> str:
         text = extract_text(msg)
         if not text:
             continue
-        role = msg.role if hasattr(msg, "role") else msg.get("role")
+        role = msg.role
         if role == "assistant":
             parts.append(f"[assistant] {text}")
         else:

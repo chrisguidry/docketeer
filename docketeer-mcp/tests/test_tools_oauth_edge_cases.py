@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 from docketeer.tools import ToolContext, registry
-from docketeer.vault import Vault
+from docketeer.vault import SecretResolutionError, Vault
 from docketeer_mcp.manager import MCPClientManager
 from docketeer_mcp.oauth import PendingOAuth
 
@@ -23,7 +23,9 @@ async def test_connect_with_auth_vault_resolve_error(
     )
 
     mock_vault = AsyncMock(spec=Vault)
-    mock_vault.resolve = AsyncMock(side_effect=RuntimeError("secret not found"))
+    mock_vault.resolve = AsyncMock(
+        side_effect=SecretResolutionError("secret not found")
+    )
     tool_context.vault = mock_vault
 
     result = await registry.execute("connect_mcp_server", {"name": "api"}, tool_context)
@@ -43,7 +45,7 @@ async def test_connect_with_auth_connect_failure(
     mock_vault.resolve = AsyncMock(return_value="token_123")
     tool_context.vault = mock_vault
 
-    fresh_manager.connect = AsyncMock(side_effect=RuntimeError("connection failed"))  # type: ignore[method-assign]
+    fresh_manager.connect = AsyncMock(side_effect=ValueError("connection failed"))  # type: ignore[method-assign]
 
     result = await registry.execute("connect_mcp_server", {"name": "api"}, tool_context)
     assert "Failed to connect" in result

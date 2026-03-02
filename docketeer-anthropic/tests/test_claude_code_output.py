@@ -12,46 +12,47 @@ from docketeer_anthropic.claude_code_output import (
 )
 
 from docketeer.brain.backend import BackendAuthError, BackendError, ContextTooLargeError
+from docketeer.prompt import MessageParam, TextBlockParam
 
 # -- extract_text --
 
 
 def test_extract_text_string_content():
-    assert extract_text({"content": "hello"}) == "hello"
+    assert extract_text(MessageParam(role="user", content="hello")) == "hello"
 
 
 def test_extract_text_list_content():
-    msg = {
-        "content": [
+    msg = MessageParam(
+        role="user",
+        content=[
             {"type": "text", "text": "line 1"},
             {"type": "text", "text": "line 2"},
-        ]
-    }
+        ],
+    )
     assert extract_text(msg) == "line 1\nline 2"
 
 
 def test_extract_text_skips_non_text_blocks():
-    msg = {
-        "content": [
+    msg = MessageParam(
+        role="user",
+        content=[
             {"type": "image", "source": {}},
             {"type": "text", "text": "visible"},
-        ]
-    }
+        ],
+    )
     assert extract_text(msg) == "visible"
 
 
 def test_extract_text_raw_strings_in_list():
-    assert extract_text({"content": ["hello", "world"]}) == "hello\nworld"
+    msg = MessageParam(role="user", content=["hello", "world"])
+    assert extract_text(msg) == "hello\nworld"
 
 
 def test_extract_text_empty():
-    assert extract_text({}) == ""
+    assert extract_text(MessageParam(role="user", content="")) == ""
 
 
-def test_extract_text_messageparam_dataclass():
-    """extract_text handles MessageParam dataclass with text blocks."""
-    from docketeer.prompt import MessageParam, TextBlockParam
-
+def test_extract_text_text_block_params():
     msg = MessageParam(
         role="user",
         content=[TextBlockParam(text="hello"), TextBlockParam(text="world")],
@@ -59,44 +60,21 @@ def test_extract_text_messageparam_dataclass():
     assert extract_text(msg) == "hello\nworld"
 
 
-def test_extract_text_messageparam_string():
-    """extract_text handles MessageParam dataclass with string content."""
-    from docketeer.prompt import MessageParam
-
-    msg = MessageParam(role="user", content="hello world")
-    assert extract_text(msg) == "hello world"
-
-
 # -- format_prompt --
 
 
 def test_format_prompt_single_message():
-    messages = [{"role": "user", "content": "[21:19] @peps: hello"}]
+    messages = [MessageParam(role="user", content="[21:19] @peps: hello")]
     assert format_prompt(messages) == "[21:19] @peps: hello"
-
-
-def test_format_prompt_messageparam_dataclass():
-    """format_prompt handles MessageParam dataclass."""
-    from docketeer.prompt import MessageParam
-
-    messages = [
-        MessageParam(role="user", content="hello"),
-        MessageParam(role="assistant", content="hi there"),
-        MessageParam(role="user", content="question"),
-    ]
-    result = format_prompt(messages)
-    assert "hello" in result
-    assert "[assistant] hi there" in result
-    assert "question" in result
 
 
 def test_format_prompt_includes_history_for_new_session():
     messages = [
-        {"role": "user", "content": "[21:10] @peps: first message"},
-        {"role": "assistant", "content": "Got it."},
-        {"role": "user", "content": "[21:15] @peps: second message"},
-        {"role": "assistant", "content": "Sure thing."},
-        {"role": "user", "content": "[21:19] @peps: latest question"},
+        MessageParam(role="user", content="[21:10] @peps: first message"),
+        MessageParam(role="assistant", content="Got it."),
+        MessageParam(role="user", content="[21:15] @peps: second message"),
+        MessageParam(role="assistant", content="Sure thing."),
+        MessageParam(role="user", content="[21:19] @peps: latest question"),
     ]
     result = format_prompt(messages)
     assert "[21:10] @peps: first message" in result
@@ -108,9 +86,9 @@ def test_format_prompt_includes_history_for_new_session():
 
 def test_format_prompt_resume_sends_only_latest():
     messages = [
-        {"role": "user", "content": "[21:10] @peps: old message"},
-        {"role": "assistant", "content": "Old reply."},
-        {"role": "user", "content": "[21:19] @peps: new message"},
+        MessageParam(role="user", content="[21:10] @peps: old message"),
+        MessageParam(role="assistant", content="Old reply."),
+        MessageParam(role="user", content="[21:19] @peps: new message"),
     ]
     result = format_prompt(messages, resume=True)
     assert result == "[21:19] @peps: new message"
@@ -122,8 +100,8 @@ def test_format_prompt_empty_messages():
 
 def test_format_prompt_skips_empty_content():
     messages = [
-        {"role": "user", "content": ""},
-        {"role": "user", "content": "[21:19] @peps: hello"},
+        MessageParam(role="user", content=""),
+        MessageParam(role="user", content="[21:19] @peps: hello"),
     ]
     result = format_prompt(messages)
     assert result == "[21:19] @peps: hello"

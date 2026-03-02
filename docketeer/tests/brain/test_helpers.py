@@ -13,6 +13,7 @@ from docketeer.brain import Brain
 from docketeer.prompt import (
     CacheControl,
     MessageContent,
+    TextBlockParam,
     build_dynamic_context,
     build_system_blocks,
     ensure_template,
@@ -112,8 +113,8 @@ def test_extract_text_tool_result():
     assert "tool result:" in result
 
 
-def test_extract_text_hasattr_block():
-    block = make_text_block(text="from block")
+def test_extract_text_block_param():
+    block = TextBlockParam(text="from block")
     assert extract_text([block]) == "from block"
 
 
@@ -122,7 +123,7 @@ def test_extract_text_mixed_block_types():
     blocks = [
         {"type": "text", "text": "first"},
         {"type": "tool_result", "content": "result data"},
-        make_text_block(text="from sdk"),
+        TextBlockParam(text="from sdk"),
         {"type": "image"},
     ]
     result = extract_text(blocks)

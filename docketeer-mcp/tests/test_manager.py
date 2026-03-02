@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from mcp.types import TextContent
 
 from docketeer.executor import CommandExecutor, Mount, RunningProcess
 from docketeer_mcp.config import MCPServerConfig
@@ -312,7 +313,7 @@ async def test_search_tools_no_match(mgr: MCPClientManager):
 
 
 async def test_call_tool_text_result(mgr: MCPClientManager):
-    result = FakeCallResult(content=[FakeTextContent(text="hello")])
+    result = FakeCallResult(content=[TextContent(type="text", text="hello")])
     client = _mock_client(call_result=result)
     mgr._clients["s"] = client
 

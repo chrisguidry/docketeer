@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 from docketeer.brain.core import InferenceModel
 from docketeer.prompt import MessageParam, SystemBlock
+from docketeer.tools import ToolDefinition
 from docketeer_deepinfra.loop import stream_message
 
 from .conftest import MODEL, make_chunk, make_stream_mock, make_tool_call
@@ -248,11 +249,11 @@ async def test_tools_passed_to_api(mock_client: MagicMock):
         ]
     )
 
-    mock_tool = MagicMock()
-    mock_tool.to_api_dict.return_value = {
-        "type": "function",
-        "function": {"name": "test_tool", "parameters": {}},
-    }
+    mock_tool = ToolDefinition(
+        name="test_tool",
+        description="A test tool",
+        input_schema={"type": "object", "properties": {}},
+    )
 
     await stream_message(
         client=mock_client,

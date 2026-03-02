@@ -8,6 +8,7 @@ from pathlib import Path
 from fastmcp import Client
 from fastmcp.client.transports import ClientTransport, StreamableHttpTransport
 from fastmcp.client.transports.stdio import StdioTransport
+from mcp.types import TextContent
 
 from docketeer.executor import CommandExecutor, Mount
 
@@ -173,7 +174,7 @@ class MCPClientManager:
         result = await client.call_tool(tool, arguments)
         parts = []
         for block in result.content:
-            if hasattr(block, "text"):
+            if isinstance(block, TextContent):
                 parts.append(block.text)
             else:
                 parts.append(str(block))

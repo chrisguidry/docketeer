@@ -163,7 +163,7 @@ class RocketChatClient(ChatClient):
         try:
             result = await self._get("chat.getMessage", msgId=message_id)
             return result.get("message")
-        except Exception as e:
+        except httpx.HTTPError as e:
             log.warning("Failed to fetch message %s: %s", message_id, e)
             return None
 
@@ -193,7 +193,7 @@ class RocketChatClient(ChatClient):
 
             result = await self._get(endpoint, **params)
             raw_messages = list(reversed(result.get("messages", [])))
-        except Exception as e:
+        except httpx.HTTPError as e:
             log.warning("Failed to fetch messages for %s: %s", room_id, e)
             return []
 
@@ -241,7 +241,7 @@ class RocketChatClient(ChatClient):
                         members=usernames,
                     )
                 )
-        except Exception as e:
+        except httpx.HTTPError as e:
             log.warning("Failed to list DM rooms: %s", e)
 
         try:
@@ -257,7 +257,7 @@ class RocketChatClient(ChatClient):
                         name=ch.get("name", ""),
                     )
                 )
-        except Exception as e:
+        except httpx.HTTPError as e:
             log.warning("Failed to list channels: %s", e)
 
         try:
@@ -273,7 +273,7 @@ class RocketChatClient(ChatClient):
                         name=grp.get("name", ""),
                     )
                 )
-        except Exception as e:
+        except httpx.HTTPError as e:
             log.warning("Failed to list groups: %s", e)
 
         return rooms
@@ -285,7 +285,7 @@ class RocketChatClient(ChatClient):
             try:
                 await self._post("users.setStatus", status=status, message=message)
                 return
-            except Exception as e:
+            except httpx.HTTPError as e:
                 if attempt == 3:
                     log.warning(
                         "Failed to set status to %s after retries: %s", status, e
@@ -315,7 +315,7 @@ class RocketChatClient(ChatClient):
                 "stream-notify-room",
                 [f"{room_id}/user-activity", self.username, activities, {}],
             )
-        except Exception:
+        except (RuntimeError, ConnectionError):
             log.warning("Failed to send typing indicator to %s", room_id)
 
     async def room_context(self, room_id: str, username: str) -> str:
@@ -393,7 +393,7 @@ class RocketChatClient(ChatClient):
 
         try:
             rooms = await self.list_rooms()
-        except Exception:
+        except httpx.HTTPError:
             log.warning("Failed to list rooms for history", exc_info=True)
             return
 
@@ -422,7 +422,7 @@ class RocketChatClient(ChatClient):
                     ", ".join(others) or room.room_id,
                     len(messages),
                 )
-            except Exception:
+            except httpx.HTTPError:
                 log.warning(
                     "Failed to load history for %s", room.room_id, exc_info=True
                 )

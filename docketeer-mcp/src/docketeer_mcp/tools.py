@@ -8,6 +8,7 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 from docket import Docket
 
+from docketeer.plugins import PluginUnavailable
 from docketeer.tools import ToolContext, registry
 from docketeer.vault import SecretEnvRef, SecretResolutionError, resolve_env
 
@@ -32,7 +33,7 @@ async def _check_auth_required(url: str) -> bool:
         async with httpx.AsyncClient() as client:
             resp = await client.post(url, timeout=10)
             return resp.status_code == 401
-    except Exception:
+    except httpx.HTTPError:
         return False
 
 
@@ -107,7 +108,7 @@ async def connect_mcp_server(
             return f"Server {name!r} requires auth but no vault is configured."
         try:
             token = await ctx.vault.resolve(cfg.auth)
-        except Exception as e:
+        except (SecretResolutionError, PluginUnavailable) as e:
             return f"Failed to resolve auth secret {cfg.auth!r}: {e}"
 
         try:
@@ -119,7 +120,7 @@ async def connect_mcp_server(
                 auth=token,
                 resolved_env=resolved_env,
             )
-        except Exception as e:
+        except (ValueError, OSError) as e:
             log.warning("Failed to connect to MCP server %r", name, exc_info=True)
             return f"Failed to connect to {name!r}: {e}"
 
@@ -145,7 +146,7 @@ async def connect_mcp_server(
             ctx.workspace,
             resolved_env=resolved_env,
         )
-    except Exception as e:
+    except (ValueError, OSError) as e:
         log.warning("Failed to connect to MCP server %r", name, exc_info=True)
         return f"Failed to connect to {name!r}: {e}"
 
@@ -170,7 +171,7 @@ async def _start_oauth_flow(
         auth_ep, token_ep, reg_ep, discovered_scopes = await discover_oauth_metadata(
             cfg.url
         )
-    except Exception as e:
+    except (RuntimeError, httpx.HTTPError) as e:
         return f"OAuth discovery failed for {name!r}: {e}"
 
     effective_scopes = scopes or discovered_scopes or ""
@@ -181,7 +182,7 @@ async def _start_oauth_flow(
                 client_id, client_secret = await register_client(
                     reg_ep, REDIRECT_URI, f"docketeer-{name}", effective_scopes
                 )
-            except Exception as e:
+            except (RuntimeError, httpx.HTTPError) as e:
                 return f"Client registration failed for {name!r}: {e}"
         else:
             return (
@@ -250,7 +251,7 @@ async def mcp_oauth_complete(
     # Exchange code for tokens
     try:
         tokens = await exchange_code(pending, code)
-    except Exception as e:
+    except (RuntimeError, httpx.HTTPError) as e:
         return f"Token exchange failed: {e}"
 
     access_token = str(tokens.get("access_token", ""))
@@ -287,7 +288,7 @@ async def mcp_oauth_complete(
                 pending.client_secret,
                 expires_in,
             )
-        except Exception:
+        except (RuntimeError, LookupError):
             log.warning("Could not schedule token refresh", exc_info=True)
 
     return f"OAuth complete for {server!r}. Token stored at {token_secret!r}."
@@ -371,7 +372,7 @@ async def use_mcp_tool(
 
     try:
         return await manager.call_tool(server, tool, args)
-    except Exception as e:
+    except (ValueError, OSError) as e:
         return f"Error calling {server}/{tool}: {e}"
 
 

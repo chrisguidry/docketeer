@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 import httpx
 import respx
 
+from docketeer.brain.backend import BackendError
 from docketeer.tools import ToolContext, registry
 from docketeer_web.tools import SUMMARIZE_INPUT_SIZE
 
@@ -122,7 +123,7 @@ async def test_classify_overrides_heuristic_to_skip(
 async def test_classify_failure_falls_back_to_heuristic(
     tool_context: ToolContext,
 ):
-    tool_context.classify_response = AsyncMock(side_effect=Exception("API down"))
+    tool_context.classify_response = AsyncMock(side_effect=BackendError("API down"))
     respx.get("https://example.com/page").mock(
         return_value=httpx.Response(
             200,
@@ -324,7 +325,7 @@ async def test_strips_html_before_summarizing(tool_context: ToolContext):
 async def test_callback_failure_falls_back_to_truncation(
     tool_context: ToolContext,
 ):
-    tool_context.summarize = AsyncMock(side_effect=Exception("API down"))
+    tool_context.summarize = AsyncMock(side_effect=BackendError("API down"))
     respx.get("https://example.com/fail").mock(
         return_value=httpx.Response(
             200,

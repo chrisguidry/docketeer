@@ -84,7 +84,12 @@ async def agentic_loop(
             if callbacks_on_tool_end:
                 await callbacks_on_tool_end()
             update_cache_breakpoints(messages, tool_results)
-            messages.append(MessageParam(role="assistant", content=response.content))
+            messages.append(
+                MessageParam(
+                    role="assistant",
+                    content=[b.model_dump() for b in response.content],
+                )
+            )
             messages.append(MessageParam(role="user", content=tool_results))
             if any(b.name == WRAP_UP_TOOL_NAME for b in tool_blocks):
                 return ""
@@ -98,7 +103,12 @@ async def agentic_loop(
 
     if exhausted and used_tools:
         log.info("Tool round limit reached (%d), nudging for a text reply", rounds)
-        messages.append(MessageParam(role="assistant", content=response.content))
+        messages.append(
+            MessageParam(
+                role="assistant",
+                content=[b.model_dump() for b in response.content],
+            )
+        )
         messages.append(
             MessageParam(
                 role="user",
@@ -145,10 +155,7 @@ async def stream_message(
         if thinking and model.thinking_budget
         else anthropic.omit
     )
-    serialized_messages = [
-        msg.to_dict() if callable(getattr(msg, "to_dict", None)) else msg
-        for msg in messages
-    ]
+    serialized_messages = [msg.to_dict() for msg in messages]
     serialized_system = [b.to_dict() for b in system]
     serialized_tools = [t.to_dict() for t in tools]
     async with client.messages.stream(
@@ -229,7 +236,7 @@ def build_reply(
         if had_tool_use:
             log.info("Tool-only response, no text to send (rounds=%d)", rounds)
             return ""
-        types = [getattr(b, "type", type(b).__name__) for b in response.content]
+        types = [b.type for b in response.content]
         log.warning(
             "No text in response: stop=%s, blocks=%s, rounds=%d/%d",
             response.stop_reason,

@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from docketeer.brain.backend import BackendError
+
 if TYPE_CHECKING:
     from docketeer.brain.backend import InferenceBackend
 
@@ -22,7 +24,7 @@ async def summarize_webpage(backend: InferenceBackend, text: str, purpose: str) 
             f"{text}",
             max_tokens=2048,
         )
-    except Exception:
+    except BackendError:
         log.warning(
             "Webpage summarization failed, returning truncated text", exc_info=True
         )
@@ -43,7 +45,7 @@ async def classify_response(
             f"Headers:\n{headers}",
             max_tokens=8,
         )
-    except Exception:
+    except BackendError:
         log.warning("Response classification failed, assuming readable", exc_info=True)
         return True
     return answer.strip().lower() == "true"

@@ -3,10 +3,12 @@
 import logging
 from datetime import datetime, timedelta
 
+import httpx
 from docket import Docket
 
 from docketeer.dependencies import CurrentDocket, CurrentVault
-from docketeer.vault import Vault
+from docketeer.plugins import PluginUnavailable
+from docketeer.vault import SecretResolutionError, Vault
 
 from .oauth import refresh_access_token
 
@@ -25,7 +27,7 @@ async def mcp_oauth_refresh(
     """Refresh an OAuth access token and reschedule for the next refresh."""
     try:
         refresh_token = await vault.resolve(f"{token_secret}/refresh")
-    except Exception:
+    except (SecretResolutionError, PluginUnavailable):
         log.exception("Could not resolve refresh token for %s", token_secret)
         return
 
@@ -33,7 +35,7 @@ async def mcp_oauth_refresh(
         tokens = await refresh_access_token(
             token_endpoint, refresh_token, client_id, client_secret
         )
-    except Exception:
+    except (RuntimeError, httpx.HTTPError):
         log.exception("Token refresh failed for %s", token_secret)
         return
 

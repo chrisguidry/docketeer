@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from docketeer.brain import Brain, ProcessCallbacks
+from docketeer.brain.backend import BackendError
 from docketeer.chat import RoomMessage
 from docketeer.prompt import (
     Base64ImageSourceParam,
@@ -387,7 +388,7 @@ async def test_compact_history_summarization_failure(brain: Brain, fake_messages
         brain._conversations["room1"].append(
             MessageParam(role=role, content=f"msg {i}")
         )
-    fake_messages.create = AsyncMock(side_effect=Exception("API error"))
+    fake_messages.create = AsyncMock(side_effect=BackendError("API error"))
     await brain._compact_history("room1", [], [], "claude-haiku-4-5-20251001")
     assert len(brain._conversations["room1"]) == 6
 

@@ -1,8 +1,6 @@
 """Tests for message and tool serialization in the agentic loop."""
 
-from unittest.mock import MagicMock
-
-from docketeer.prompt import MessageParam, SystemBlock
+from docketeer.prompt import MessageParam, SystemBlock, TextBlockParam
 
 
 class TestSerializeMessages:
@@ -35,12 +33,8 @@ class TestSerializeMessages:
     def test_serialize_content_as_list_with_to_dict(self) -> None:
         from docketeer_deepinfra.loop import _serialize_messages
 
-        class FakeTextPart:
-            def to_dict(self) -> dict[str, str]:
-                return {"type": "text", "text": "hello"}
-
         result = _serialize_messages(
-            [], [MessageParam(role="user", content=[FakeTextPart()])]
+            [], [MessageParam(role="user", content=[TextBlockParam(text="hello")])]
         )
         assert result[0]["content"] == [{"type": "text", "text": "hello"}]
 
@@ -79,32 +73,21 @@ class TestSerializeMessages:
 
 
 class TestToolToDict:
-    def test_tool_with_to_api_dict(self) -> None:
+    def test_converts_tool_definition(self) -> None:
+        from docketeer.tools import ToolDefinition
         from docketeer_deepinfra.loop import _tool_to_dict
 
-        tool = MagicMock()
-        tool.to_api_dict.return_value = {
-            "type": "function",
-            "function": {"name": "list_files", "parameters": {}},
-        }
-        result = _tool_to_dict(tool)
-        assert result == {
-            "type": "function",
-            "function": {"name": "list_files", "parameters": {}},
-        }
-
-    def test_tool_fallback_without_to_api_dict(self) -> None:
-        from docketeer_deepinfra.loop import _tool_to_dict
-
-        tool = MagicMock(spec=["name", "input_schema"])
-        tool.name = "my_tool"
-        tool.input_schema = {"type": "object", "properties": {}}
-
+        tool = ToolDefinition(
+            name="my_tool",
+            description="Does something useful",
+            input_schema={"type": "object", "properties": {}},
+        )
         result = _tool_to_dict(tool)
         assert result == {
             "type": "function",
             "function": {
                 "name": "my_tool",
+                "description": "Does something useful",
                 "parameters": {"type": "object", "properties": {}},
             },
         }

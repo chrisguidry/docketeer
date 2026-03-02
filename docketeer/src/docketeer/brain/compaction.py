@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from docketeer.brain.backend import BackendError
 from docketeer.prompt import MessageParam, extract_text
 
 if TYPE_CHECKING:
@@ -29,13 +30,9 @@ async def compact_history(
     recent_messages = messages[-MIN_RECENT_MESSAGES:]
 
     transcript = "\n".join(
-        f"{msg.role if hasattr(msg, 'role') else msg.get('role')}: {text}"
+        f"{msg.role}: {text}"
         for msg in old_messages
-        if (
-            text := extract_text(
-                msg.content if hasattr(msg, "content") else msg.get("content")
-            )
-        )
+        if (text := extract_text(msg.content))
     )
 
     if not transcript.strip():
@@ -68,6 +65,6 @@ async def summarize_transcript(
             "Be brief but thorough.\n\n"
             f"{transcript}",
         )
-    except Exception:
+    except BackendError:
         log.exception("Summarization failed, falling back to truncation")
         return None

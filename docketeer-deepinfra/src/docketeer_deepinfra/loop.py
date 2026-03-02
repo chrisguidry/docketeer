@@ -22,7 +22,7 @@ from openai.types.chat.chat_completion_message_function_tool_call import Functio
 
 from docketeer.audit import audit_log, log_usage, record_usage
 from docketeer.brain.backend import Usage
-from docketeer.prompt import MessageParam, SystemBlock
+from docketeer.prompt import ImageBlockParam, MessageParam, SystemBlock, TextBlockParam
 from docketeer.tools import WRAP_UP_TOOL_NAME, ToolContext, ToolDefinition, registry
 
 if TYPE_CHECKING:
@@ -94,15 +94,13 @@ async def agentic_loop(
 
         # Extract tool calls from response
         message = response.choices[0].message
-        all_tool_calls = message.tool_calls or []
-        # Filter to only function tool calls (ignore custom tool calls)
-        tool_calls = [tc for tc in all_tool_calls if hasattr(tc, "function")]
+        tool_calls = message.tool_calls or []
         finish_reason = response.choices[0].finish_reason
 
         log.debug(
             "RESPONSE: content=%r, tool_calls=%s, finish_reason=%s",
             message.content,
-            [(tc.id, getattr(tc.function, "name", "")) for tc in tool_calls],
+            [(tc.id, tc.function.name) for tc in tool_calls],  # type: ignore[union-attr]
             finish_reason,
         )
 
@@ -353,7 +351,7 @@ def _serialize_messages(
             # Normal content list
             serialized_content = []
             for b in msg.content:
-                if hasattr(b, "to_dict"):
+                if isinstance(b, (TextBlockParam, ImageBlockParam)):
                     serialized_content.append(b.to_dict())
                 elif isinstance(b, dict):
                     serialized_content.append(b)
@@ -432,10 +430,11 @@ def build_reply(response: ChatCompletion, had_tool_use: bool, rounds: int) -> st
 
 def _tool_to_dict(tool: ToolDefinition) -> dict:
     """Convert ToolDefinition to OpenAI tool format."""
-    try:
-        return tool.to_api_dict()  # type: ignore[return-value]
-    except AttributeError:
-        return {
-            "type": "function",
-            "function": {"name": tool.name, "parameters": tool.input_schema},
-        }
+    return {
+        "type": "function",
+        "function": {
+            "name": tool.name,
+            "description": tool.description,
+            "parameters": tool.input_schema,
+        },
+    }

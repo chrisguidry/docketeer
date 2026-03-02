@@ -2,6 +2,7 @@
 
 from unittest.mock import AsyncMock, patch
 
+from docketeer.vault import SecretResolutionError
 from docketeer_mcp.tasks import mcp_oauth_refresh
 
 
@@ -102,7 +103,7 @@ async def test_mcp_oauth_refresh_no_access_token():
 async def test_mcp_oauth_refresh_resolve_failure():
     """When refresh token can't be resolved, log and return without crashing."""
     mock_vault = AsyncMock()
-    mock_vault.resolve = AsyncMock(side_effect=RuntimeError("vault error"))
+    mock_vault.resolve = AsyncMock(side_effect=SecretResolutionError("vault error"))
 
     mock_docket = AsyncMock()
 

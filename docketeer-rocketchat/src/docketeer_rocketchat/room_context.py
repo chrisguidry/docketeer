@@ -6,6 +6,8 @@ import logging
 from collections.abc import Callable, Coroutine
 from typing import Any
 
+import httpx
+
 from docketeer.chat import RoomKind
 
 log = logging.getLogger(__name__)
@@ -23,7 +25,7 @@ async def build_room_context(
     """Build rich room context from the RC API, with fallback on errors."""
     try:
         return await _build(get, bot_username, room_id, username, kind)
-    except Exception:
+    except httpx.HTTPError:
         log.warning("Failed to build room context for %s", room_id, exc_info=True)
         return fallback_room_context(room_id, username, kind)
 
@@ -53,7 +55,7 @@ async def _dm_context(get: GetFn, username: str) -> str:
         display_name = user.get("name", username)
         status = user.get("status", "offline")
         return f"Room: DM with {display_name} (@{username}, {status})"
-    except Exception:
+    except httpx.HTTPError:
         return f"Room: DM with @{username}"
 
 
@@ -71,7 +73,7 @@ async def _group_dm_context(
             status = m.get("status", "offline")
             parts.append(f"{name} (@{uname}, {status})")
         return f"Room: group DM with {', '.join(parts)}" if parts else "Room: group DM"
-    except Exception:
+    except httpx.HTTPError:
         return f"Room: group DM with @{username}"
 
 
@@ -106,7 +108,7 @@ async def _channel_context(
         ]
         if online:
             parts.append(f"Online: {', '.join(online)}")
-    except Exception:
+    except httpx.HTTPError:
         log.debug("Failed to fetch channel members for %s", room_id, exc_info=True)
 
     return "\n".join(parts)

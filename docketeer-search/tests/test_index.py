@@ -23,7 +23,7 @@ def search(tmp_path: Path, mock_docket: MagicMock) -> Iterator[FastembedSearch]:
         patch("docketeer_search.index.Embedder", FakeEmbedder),
         patch("docketeer_search.index.environment.DATA_DIR", tmp_path / "data"),
     ):
-        with FastembedSearch(docket=mock_docket) as s:  # type: ignore[arg-type]
+        with FastembedSearch(docket=mock_docket) as s:
             yield s
 
 

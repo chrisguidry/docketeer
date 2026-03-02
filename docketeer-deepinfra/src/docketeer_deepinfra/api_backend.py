@@ -64,9 +64,7 @@ class DeepInfraAPIBackend(InferenceBackend):
         thinking: bool = False,
     ) -> str:
         # Resolve tier to InferenceModel using environment variables
-        model_id = environment.get_str(
-            f"DEEPINFRA_MODEL_{tier.upper()}", self._default_model
-        )
+        model_id = environment.get_str(f"MODEL_{tier.upper()}", self._default_model)
         max_tokens = TIER_MAX_TOKENS.get(tier, 64_000)
         model = InferenceModel(model_id=model_id, max_output_tokens=max_tokens)
 

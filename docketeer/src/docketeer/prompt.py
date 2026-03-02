@@ -185,7 +185,7 @@ def extract_text(content: str | Iterable) -> str:
                 result = block.get("content", "")
                 if isinstance(result, str) and result:
                     parts.append(f"[tool result: {result[:200]}]")
-        elif hasattr(block, "text"):
+        elif isinstance(block, TextBlockParam):
             parts.append(block.text)
     return "\n".join(parts)
 
@@ -248,10 +248,8 @@ class MessageParam:
         elif isinstance(self.content, list):
             serialized_content = []
             for block in self.content:
-                if callable(getattr(block, "to_dict", None)):
+                if isinstance(block, (TextBlockParam, ImageBlockParam)):
                     serialized_content.append(block.to_dict())
-                elif callable(getattr(block, "model_dump", None)):
-                    serialized_content.append(block.model_dump())
                 elif isinstance(block, dict):
                     serialized_content.append(block)
                 else:

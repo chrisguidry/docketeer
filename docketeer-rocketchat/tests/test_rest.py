@@ -258,7 +258,7 @@ async def test_send_typing_no_ddp(rc: RocketChatClient):
 
 async def test_send_typing_exception_swallowed(rc: RocketChatClient):
     rc._ddp = AsyncMock()
-    rc._ddp.call.side_effect = Exception("connection lost")
+    rc._ddp.call.side_effect = RuntimeError("connection lost")
     await rc.send_typing("room1", True)
 
 

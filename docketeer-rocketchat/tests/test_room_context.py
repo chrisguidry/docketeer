@@ -183,7 +183,7 @@ async def test_build_raises_uses_fallback():
     """When _build raises unexpectedly, fallback is used."""
     with patch(
         "docketeer_rocketchat.room_context._build",
-        AsyncMock(side_effect=RuntimeError("unexpected")),
+        AsyncMock(side_effect=httpx.ConnectError("unexpected")),
     ):
         ctx = await build_room_context(
             AsyncMock(), "bot", "dm1", "alice", RoomKind.direct

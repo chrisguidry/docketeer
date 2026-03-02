@@ -197,7 +197,7 @@ class TestCountTokens:
 
         system = [SystemBlock(text="system")]
         tools: list[Any] = []
-        messages = [{"role": "user", "content": "hello"}]
+        messages = [MessageParam(role="user", content="hello")]
 
         result = await backend.count_tokens("model-id", system, tools, messages)
         assert result == 42
@@ -293,21 +293,17 @@ class TestSystemToDict:
 
 
 class TestToolToDict:
-    def test_tool_to_dict_with_to_api_dict(self, backend: AnthropicAPIBackend) -> None:
-        """_tool_to_dict uses to_api_dict."""
-        tool = MagicMock()
-        tool.to_api_dict.return_value = {"name": "test", "input_schema": {}}
-        result = backend._tool_to_dict(tool)
-        tool.to_api_dict.assert_called_once()
-        assert result == {"name": "test", "input_schema": {}}
+    def test_delegates_to_tool_definition(self, backend: AnthropicAPIBackend) -> None:
+        from docketeer.tools import ToolDefinition
 
-    def test_tool_to_dict_fallback_on_attribute_error(
-        self, backend: AnthropicAPIBackend
-    ) -> None:
-        """_tool_to_dict falls back when to_api_dict raises AttributeError."""
-        tool = MagicMock()
-        tool.to_api_dict.side_effect = AttributeError("no to_api_dict")
-        tool.name = "test"
-        tool.input_schema = {"type": "object"}
+        tool = ToolDefinition(
+            name="test",
+            description="A test tool",
+            input_schema={"type": "object"},
+        )
         result = backend._tool_to_dict(tool)
-        assert result == {"name": "test", "input_schema": {"type": "object"}}
+        assert result == {
+            "name": "test",
+            "description": "A test tool",
+            "input_schema": {"type": "object"},
+        }

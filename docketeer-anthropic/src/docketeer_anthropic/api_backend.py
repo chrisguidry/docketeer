@@ -49,9 +49,9 @@ class AnthropicAPIBackend(InferenceBackend):
     ) -> str:
         # Map tier to Anthropic model
         model_map = {
-            "smart": environment.get_str("MODEL_OPUS", "claude-opus-4-6"),
-            "balanced": environment.get_str("MODEL_SONNET", "claude-sonnet-4-6"),
-            "fast": environment.get_str("MODEL_HAIKU", "claude-haiku-4-5-20251001"),
+            "smart": environment.get_str("MODEL_SMART", "claude-opus-4-6"),
+            "balanced": environment.get_str("MODEL_BALANCED", "claude-sonnet-4-6"),
+            "fast": environment.get_str("MODEL_FAST", "claude-haiku-4-5-20251001"),
         }
         model_id = model_map.get(tier, "claude-sonnet-4-6")
         max_tokens = TIER_MAX_TOKENS.get(tier, 64_000)
@@ -94,9 +94,7 @@ class AnthropicAPIBackend(InferenceBackend):
         messages: list,
     ) -> int:
         try:
-            serialized_messages = [
-                msg.to_dict() if hasattr(msg, "to_dict") else msg for msg in messages
-            ]
+            serialized_messages = [msg.to_dict() for msg in messages]
             result = await self._client.messages.count_tokens(
                 model=model_id,
                 system=[self._system_to_dict(b) for b in system],  # type: ignore[arg-type]
@@ -118,7 +116,7 @@ class AnthropicAPIBackend(InferenceBackend):
 
         try:
             response = await self._client.messages.create(
-                model=environment.get_str("MODEL_HAIKU", "claude-haiku-4-5-20251001"),
+                model=environment.get_str("MODEL_FAST", "claude-haiku-4-5-20251001"),
                 max_tokens=max_tokens,
                 messages=[DocketeerMessageParam(role="user", content=prompt).to_dict()],  # type: ignore[arg-type]
             )
@@ -136,7 +134,4 @@ class AnthropicAPIBackend(InferenceBackend):
 
     def _tool_to_dict(self, tool: ToolDefinition) -> dict:
         """Convert ToolDefinition to dict format."""
-        try:
-            return tool.to_api_dict()  # type: ignore[union-attr]
-        except AttributeError:
-            return {"name": tool.name, "input_schema": tool.input_schema}
+        return tool.to_dict()

@@ -238,28 +238,17 @@ def test_message_param_to_dict_list_with_other():
     assert result["content"] == [{"type": "text", "text": "plain string"}]
 
 
-def test_message_param_to_dict_list_with_model_dump():
-    """Test that objects with model_dump() but not to_dict() are handled."""
+def test_message_param_to_dict_list_unknown_object_falls_back_to_str():
+    """Unknown objects in content are stringified as text blocks."""
 
-    class ModelWithDump:
-        def model_dump(self) -> dict[str, str]:
-            return {"type": "custom", "value": "test"}
+    class CustomBlock:
+        def __str__(self) -> str:
+            return "custom text"
 
-    msg = MessageParam(role="user", content=[ModelWithDump()])
+    msg = MessageParam(role="user", content=[CustomBlock()])
     result = msg.to_dict()
     assert result["role"] == "user"
-    assert result["content"] == [{"type": "custom", "value": "test"}]
-
-
-def test_message_param_to_dict_list_with_anthropic_block():
-    """Test that anthropic blocks (which have to_dict) are handled."""
-    from anthropic.types import TextBlock
-
-    block = TextBlock(type="text", text="from anthropic")
-    msg = MessageParam(role="user", content=[block])
-    result = msg.to_dict()
-    assert result["role"] == "user"
-    assert result["content"] == [{"type": "text", "text": "from anthropic"}]
+    assert result["content"] == [{"type": "text", "text": "custom text"}]
 
 
 def test_text_block_param_to_dict():

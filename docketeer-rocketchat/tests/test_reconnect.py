@@ -194,7 +194,7 @@ async def test_prime_history_list_rooms_failure():
     ) -> None:  # pragma: no cover - never called
         calls.append(room)
 
-    with patch.object(client, "list_rooms", side_effect=ConnectionError("boom")):
+    with patch.object(client, "list_rooms", side_effect=httpx.ConnectError("boom")):
         await client._prime_history(record)
 
     assert calls == []
@@ -213,7 +213,7 @@ async def test_prime_history_fetch_messages_failure():
 
     with (
         patch.object(client, "list_rooms", return_value=rooms),
-        patch.object(client, "fetch_messages", side_effect=ConnectionError("boom")),
+        patch.object(client, "fetch_messages", side_effect=httpx.ConnectError("boom")),
     ):
         await client._prime_history(record)
 
