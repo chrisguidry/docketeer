@@ -189,6 +189,21 @@ class Brain:
         """Check if we have history for a room."""
         return room_id in self._conversations
 
+    async def record_own_message(self, room_id: str, text: str) -> None:
+        """Record a message sent by the agent to a room's conversation history."""
+        if room_id == self.tool_context.room_id:
+            return
+        if not self.has_history(room_id):
+            return
+        messages = self._conversations[room_id]
+        if (
+            messages
+            and messages[-1].role == "assistant"
+            and messages[-1].content == text
+        ):
+            return
+        messages.append(MessageParam(role="assistant", content=text))
+
     async def process(
         self,
         room_id: str,

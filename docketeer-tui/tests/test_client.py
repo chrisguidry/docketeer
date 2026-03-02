@@ -310,3 +310,15 @@ def test_username_defaults_to_os_user():
 
     client = TUIClient()
     assert client._human_username == getpass.getuser()
+
+
+async def test_send_message_calls_on_message_sent_callback():
+    client = TUIClient()
+    calls: list[tuple[str, str]] = []
+
+    async def recorder(room_id: str, text: str) -> None:
+        calls.append((room_id, text))
+
+    client._on_message_sent = recorder
+    await client.send_message("room1", "hello")
+    assert calls == [("room1", "hello")]

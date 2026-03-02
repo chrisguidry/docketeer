@@ -26,6 +26,11 @@ async def process_messages(client: ChatClient, brain: Brain) -> None:
         if msg is None:
             break
 
+        if msg.is_own:
+            await brain.record_own_message(msg.room_id, msg.text)
+            next_msg = asyncio.create_task(anext(msg_iter, None))
+            continue
+
         interrupted = asyncio.Event()
         handle_task = asyncio.create_task(
             handle_message(client, brain, msg, interrupted=interrupted)

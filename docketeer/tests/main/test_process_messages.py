@@ -10,6 +10,7 @@ from docketeer.brain import Brain
 from docketeer.brain.backend import BackendAuthError
 from docketeer.chat import IncomingMessage, RoomKind, RoomMessage
 from docketeer.handlers import _check_handle_result, process_messages
+from docketeer.prompt import MessageParam
 from docketeer.testing import MemoryChat
 from docketeer.tools import ToolContext, registry
 
@@ -213,6 +214,40 @@ async def test_process_messages_generic_error_logged(
     texts = [m.text for m in chat.sent_messages]
     assert any("sorry" in t.lower() for t in texts)
     assert "Reply" in texts
+
+
+async def test_process_messages_records_own_without_processing(
+    chat: MemoryChat, brain: Brain, fake_messages: FakeMessages
+):
+    """Own messages are recorded in history but not dispatched to handle_message."""
+    _preload_room(brain, "dm-room")
+    fake_messages.responses = [FakeMessage(content=[make_text_block(text="Hi!")])]
+
+    own_msg = IncomingMessage(
+        message_id="own1",
+        user_id="u1",
+        username="alice",
+        display_name="Alice",
+        text="sent from a task",
+        room_id="dm-room",
+        kind=RoomKind.direct,
+        is_own=True,
+    )
+    user_msg = _make_incoming(text="hello", room_id="room1", message_id="m1")
+
+    await chat._incoming.put(own_msg)
+    await chat._incoming.put(user_msg)
+    await chat._incoming.put(None)
+
+    await process_messages(chat, brain)
+
+    # The own message was recorded in dm-room history
+    dm_messages = brain._conversations["dm-room"]
+    assert dm_messages[-1] == MessageParam(role="assistant", content="sent from a task")
+
+    # The user message was processed normally
+    assert len(chat.sent_messages) == 1
+    assert chat.sent_messages[0].text == "Hi!"
 
 
 async def test_check_handle_result_logs_generic_error():

@@ -414,6 +414,7 @@ async def main() -> None:  # pragma: no cover
 
         await stack.enter_async_context(client)
         tool_context.agent_username = client.username
+        client._on_message_sent = brain.record_own_message
 
         log.info("Listening for messages...")
         try:

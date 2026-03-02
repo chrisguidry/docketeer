@@ -71,6 +71,7 @@ class IncomingMessage:
     timestamp: datetime | None = None
     attachments: list[Attachment] | None = None
     thread_id: str = ""
+    is_own: bool = False
 
 
 OnHistoryCallback = Callable[["RoomInfo", list["RoomMessage"]], Awaitable[None]]
@@ -81,6 +82,7 @@ class ChatClient(ABC):
 
     username: str
     user_id: str
+    _on_message_sent: Callable[[str, str], Awaitable[None]] | None = None
 
     @abstractmethod
     async def __aenter__(self) -> ChatClient: ...

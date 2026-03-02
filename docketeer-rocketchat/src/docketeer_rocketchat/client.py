@@ -342,12 +342,10 @@ class RocketChatClient(ChatClient):
             async for event in self._ddp.events():
                 log.debug("DDP event: %s", event)
                 msg = await self._parse_message_event(event)
-                if (
-                    not msg
-                    or msg.user_id == self._user_id
-                    or not (msg.text or msg.attachments)
-                ):
+                if not msg or not (msg.text or msg.attachments):
                     continue
+                if msg.user_id == self._user_id:
+                    msg.is_own = True
                 if msg.message_id in seen:
                     log.debug("Skipping duplicate message %s", msg.message_id)
                     continue

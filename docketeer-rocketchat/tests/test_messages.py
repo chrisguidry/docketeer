@@ -29,7 +29,7 @@ def _make_event(
 
 
 async def test_incoming_messages_filters():
-    """Own messages, empty text, and unparsable events are skipped."""
+    """Empty text and unparsable events are skipped; own messages pass with is_own."""
     client = RocketChatClient()
     client._user_id = "bot_uid"
 
@@ -54,9 +54,13 @@ async def test_incoming_messages_filters():
     with patch.object(client, "_after_connect", new_callable=AsyncMock):
         async for msg in client.incoming_messages():  # pragma: no branch
             results.append(msg)
-            break
-    assert len(results) == 1
-    assert results[0].text == "hello"
+            if len(results) == 2:
+                break
+    assert len(results) == 2
+    assert results[0].text == "my own"
+    assert results[0].is_own is True
+    assert results[1].text == "hello"
+    assert results[1].is_own is False
 
 
 async def test_incoming_messages_dedup():

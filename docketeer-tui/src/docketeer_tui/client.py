@@ -190,6 +190,8 @@ class TUIClient(ChatClient):
             padding=(0, 1),
         )
         self._console.print(panel)
+        if self._on_message_sent:
+            await self._on_message_sent(room_id, text)
 
     async def upload_file(
         self, room_id: str, file_path: str, message: str = "", *, thread_id: str = ""
