@@ -356,24 +356,16 @@ async def search_mcp_tools(ctx: ToolContext, query: str, server: str = "") -> st
 
 @registry.tool(emoji=":electric_plug:")
 async def use_mcp_tool(
-    ctx: ToolContext, server: str, tool: str, arguments: str | dict = "{}"
+    ctx: ToolContext, server: str, tool: str, arguments: dict | None = None
 ) -> str:
     """Call a tool on a connected MCP server.
 
     server: server name
     tool: tool name on that server
-    arguments: tool arguments as a JSON string or object
+    arguments: tool arguments
     """
-    if isinstance(arguments, dict):
-        args = arguments
-    else:
-        try:
-            args = json.loads(arguments)
-        except (json.JSONDecodeError, TypeError) as e:
-            return f"Invalid JSON arguments: {e}"
-
     try:
-        return await manager.call_tool(server, tool, args)
+        return await manager.call_tool(server, tool, arguments or {})
     except (ValueError, OSError) as e:
         return f"Error calling {server}/{tool}: {e}"
 
@@ -383,10 +375,10 @@ async def add_mcp_server(
     ctx: ToolContext,
     name: str,
     command: str = "",
-    args: str = "[]",
-    env: str = "{}",
+    args: list[str] | None = None,
+    env: dict[str, str | dict[str, str]] | None = None,
     url: str = "",
-    headers: str = "{}",
+    headers: dict[str, str] | None = None,
     network_access: bool = False,
 ) -> str:
     """Save a new MCP server configuration. Environment variables can
@@ -400,41 +392,26 @@ async def add_mcp_server(
 
     name: identifier for the server
     command: executable to run (for stdio servers)
-    args: JSON array of command arguments
-    env: JSON object of environment variables — values are either plain strings
-        or {"secret": "vault/path"} objects for vault-backed secrets. Example:
+    args: command arguments
+    env: environment variables — values are either plain strings or
+        {"secret": "vault/path"} objects for vault-backed secrets. Example:
         {"TZ": "UTC", "API_KEY": {"secret": "mcp/my-server/api-key"}}
     url: server URL (for HTTP servers)
-    headers: JSON object of HTTP headers
+    headers: HTTP headers
     network_access: whether the server needs network access (stdio only)
     """
-    try:
-        args_list = json.loads(args)
-    except json.JSONDecodeError as e:
-        return f"Invalid args JSON: {e}"
-
-    try:
-        env_raw = json.loads(env)
-    except json.JSONDecodeError as e:
-        return f"Invalid env JSON: {e}"
-
-    try:
-        headers_dict = json.loads(headers)
-    except json.JSONDecodeError as e:
-        return f"Invalid headers JSON: {e}"
-
     if not command and not url:
         return "Must provide either command (stdio) or url (HTTP)."
 
-    env_dict = config._parse_env(env_raw)
+    env_dict = config._parse_env(env or {})
 
     cfg = config.MCPServerConfig(
         name=name,
         command=command,
-        args=args_list,
+        args=args or [],
         env=env_dict,
         url=url,
-        headers=headers_dict,
+        headers=headers or {},
         network_access=network_access,
     )
     try:

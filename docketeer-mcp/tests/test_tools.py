@@ -159,20 +159,6 @@ async def test_use_tool_success(
 
     result = await registry.execute(
         "use_mcp_tool",
-        {"server": "s", "tool": "add", "arguments": '{"a": 1, "b": 2}'},
-        tool_context,
-    )
-    assert result == "42"
-    fresh_manager.call_tool.assert_called_once_with("s", "add", {"a": 1, "b": 2})  # type: ignore[union-attr]
-
-
-async def test_use_tool_dict_arguments(
-    tool_context: ToolContext, fresh_manager: MCPClientManager
-):
-    fresh_manager.call_tool = AsyncMock(return_value="42")  # type: ignore[method-assign]
-
-    result = await registry.execute(
-        "use_mcp_tool",
         {"server": "s", "tool": "add", "arguments": {"a": 1, "b": 2}},
         tool_context,
     )
@@ -194,15 +180,6 @@ async def test_use_tool_empty_dict_arguments(
     fresh_manager.call_tool.assert_called_once_with("s", "t", {})  # type: ignore[union-attr]
 
 
-async def test_use_tool_bad_json(tool_context: ToolContext):
-    result = await registry.execute(
-        "use_mcp_tool",
-        {"server": "s", "tool": "t", "arguments": "not json"},
-        tool_context,
-    )
-    assert "Invalid JSON" in result
-
-
 async def test_use_tool_error(
     tool_context: ToolContext, fresh_manager: MCPClientManager
 ):
@@ -222,8 +199,8 @@ async def test_add_server_stdio(tool_context: ToolContext, mcp_dir: Path):
         {
             "name": "time",
             "command": "uvx",
-            "args": '["mcp-server-time"]',
-            "env": '{"TZ": "UTC"}',
+            "args": ["mcp-server-time"],
+            "env": {"TZ": "UTC"},
         },
         tool_context,
     )
@@ -246,33 +223,6 @@ async def test_add_server_http(tool_context: ToolContext, mcp_dir: Path):
 async def test_add_server_no_command_or_url(tool_context: ToolContext, data_dir: Path):
     result = await registry.execute("add_mcp_server", {"name": "empty"}, tool_context)
     assert "Must provide either command" in result
-
-
-async def test_add_server_bad_args_json(tool_context: ToolContext, data_dir: Path):
-    result = await registry.execute(
-        "add_mcp_server",
-        {"name": "t", "command": "echo", "args": "not json"},
-        tool_context,
-    )
-    assert "Invalid args JSON" in result
-
-
-async def test_add_server_bad_env_json(tool_context: ToolContext, data_dir: Path):
-    result = await registry.execute(
-        "add_mcp_server",
-        {"name": "t", "command": "echo", "env": "{bad}"},
-        tool_context,
-    )
-    assert "Invalid env JSON" in result
-
-
-async def test_add_server_bad_headers_json(tool_context: ToolContext, data_dir: Path):
-    result = await registry.execute(
-        "add_mcp_server",
-        {"name": "t", "url": "https://x.com", "headers": "nope"},
-        tool_context,
-    )
-    assert "Invalid headers JSON" in result
 
 
 async def test_add_server_invalid_name(tool_context: ToolContext, data_dir: Path):
@@ -426,7 +376,7 @@ async def test_add_server_with_secret_env(tool_context: ToolContext, mcp_dir: Pa
         {
             "name": "gw",
             "command": "uvx",
-            "env": '{"TZ": "UTC", "KEY": {"secret": "vault/path"}}',
+            "env": {"TZ": "UTC", "KEY": {"secret": "vault/path"}},
         },
         tool_context,
     )
