@@ -206,6 +206,7 @@ async def stream_message(
         model=model_id,
         messages=serialized_messages,
         tools=serialized_tools,
+        tool_choice="auto" if serialized_tools else None,
         max_tokens=model.max_output_tokens,
         stream=True,
         stream_options={"include_usage": True},

@@ -145,6 +145,24 @@ async def test_tools_passed_to_api(mock_client: MagicMock):
     call_kwargs = mock_client.chat.completions.create.call_args.kwargs
     assert call_kwargs["tools"] is not None
     assert len(call_kwargs["tools"]) == 1
+    assert call_kwargs["tool_choice"] == "auto"
+
+
+async def test_tool_choice_none_without_tools(mock_client: MagicMock):
+    mock_client.chat.completions.create.return_value = make_chunks(content="Hello")
+
+    await stream_message(
+        client=mock_client,
+        model=MODEL,
+        system=[],
+        messages=[MessageParam(role="user", content="test")],
+        tools=[],
+        on_first_text=None,
+        default_model="test-model",
+    )
+
+    call_kwargs = mock_client.chat.completions.create.call_args.kwargs
+    assert call_kwargs["tool_choice"] is None
 
 
 async def test_model_id_fallback_to_default(mock_client: MagicMock):
