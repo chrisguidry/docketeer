@@ -50,7 +50,8 @@ async def read_file(ctx: ToolContext, path: str) -> str:
 
 @registry.tool(emoji=":open_file_folder:")
 async def write_file(ctx: ToolContext, path: str, content: str) -> str:
-    """Write content to a text file in the workspace.
+    """Write content to a text file in the workspace. For editing existing
+    files, prefer edit_file — it's safer and uses fewer tokens.
 
     path: relative path to the file
     content: text content to write
@@ -60,6 +61,42 @@ async def write_file(ctx: ToolContext, path: str, content: str) -> str:
     target.write_text(content)
     await ctx.search.index_file(path, content)
     return f"Wrote {len(content)} bytes to {path}"
+
+
+@registry.tool(emoji=":open_file_folder:")
+async def edit_file(
+    ctx: ToolContext,
+    path: str,
+    old_string: str,
+    new_string: str,
+) -> str:
+    """Edit an existing text file by replacing a specific string. The
+    old_string must appear exactly once in the file — this ensures you're
+    editing the right location and catches stale reads. Use read_file first
+    to see the current content.
+
+    To insert text, include surrounding content in both old_string and
+    new_string. To delete text, pass an empty new_string.
+
+    path: relative path to the file
+    old_string: text to find (must match exactly once)
+    new_string: replacement text (empty string to delete the match)
+    """
+    target = safe_path(ctx.workspace, path)
+    if not target.exists():
+        return f"File not found: {path}"
+    if not old_string:
+        return "old_string must not be empty"
+    content = target.read_text()
+    count = content.count(old_string)
+    if count == 0:
+        return f"old_string not found in {path}"
+    if count > 1:
+        return f"old_string appears {count} times in {path} (must be unique)"
+    updated = content.replace(old_string, new_string, 1)
+    target.write_text(updated)
+    await ctx.search.index_file(path, updated)
+    return f"Edited {path}"
 
 
 @registry.tool(emoji=":open_file_folder:")

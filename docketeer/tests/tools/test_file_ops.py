@@ -140,6 +140,67 @@ async def test_read_link_not_a_symlink(tool_context: ToolContext):
     assert "Not a symlink" in result
 
 
+async def test_edit_file(tool_context: ToolContext):
+    (tool_context.workspace / "doc.txt").write_text("hello world")
+    result = await registry.execute(
+        "edit_file",
+        {"path": "doc.txt", "old_string": "hello", "new_string": "goodbye"},
+        tool_context,
+    )
+    assert "Edited" in result
+    assert (tool_context.workspace / "doc.txt").read_text() == "goodbye world"
+
+
+async def test_edit_file_deletion(tool_context: ToolContext):
+    (tool_context.workspace / "doc.txt").write_text("hello cruel world")
+    result = await registry.execute(
+        "edit_file",
+        {"path": "doc.txt", "old_string": "cruel ", "new_string": ""},
+        tool_context,
+    )
+    assert "Edited" in result
+    assert (tool_context.workspace / "doc.txt").read_text() == "hello world"
+
+
+async def test_edit_file_not_found(tool_context: ToolContext):
+    result = await registry.execute(
+        "edit_file",
+        {"path": "nope.txt", "old_string": "x", "new_string": "y"},
+        tool_context,
+    )
+    assert "File not found" in result
+
+
+async def test_edit_file_no_match(tool_context: ToolContext):
+    (tool_context.workspace / "doc.txt").write_text("hello world")
+    result = await registry.execute(
+        "edit_file",
+        {"path": "doc.txt", "old_string": "xyz", "new_string": "abc"},
+        tool_context,
+    )
+    assert "not found in" in result
+
+
+async def test_edit_file_multiple_matches(tool_context: ToolContext):
+    (tool_context.workspace / "doc.txt").write_text("aaa bbb aaa")
+    result = await registry.execute(
+        "edit_file",
+        {"path": "doc.txt", "old_string": "aaa", "new_string": "ccc"},
+        tool_context,
+    )
+    assert "2 times" in result
+
+
+async def test_edit_file_empty_old_string(tool_context: ToolContext):
+    (tool_context.workspace / "doc.txt").write_text("hello")
+    result = await registry.execute(
+        "edit_file",
+        {"path": "doc.txt", "old_string": "", "new_string": "x"},
+        tool_context,
+    )
+    assert "old_string must not be empty" in result
+
+
 async def test_search_files(tool_context: ToolContext):
     (tool_context.workspace / "a.txt").write_text("hello world\ngoodbye world")
     (tool_context.workspace / "b.txt").write_text("nothing here")
