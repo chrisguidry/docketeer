@@ -196,3 +196,29 @@ class MemoryVault(Vault):
         if name not in self._secrets:
             raise KeyError(name)
         del self._secrets[name]
+
+
+class MemoryWatcher:
+    """In-memory WorkspaceWatcher for tests — no filesystem watching."""
+
+    def __init__(self) -> None:
+        self._pending: set[str] = set()
+        self._initialized: set[str] = set()
+
+    async def __aenter__(self) -> MemoryWatcher:
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        pass
+
+    def notify(self, *paths: str) -> None:
+        """Simulate external file changes."""
+        self._pending.update(paths)
+
+    def drain(self, room_id: str) -> set[str]:
+        if room_id not in self._initialized:
+            self._initialized.add(room_id)
+            return set()
+        result = set(self._pending)
+        self._pending.clear()
+        return result

@@ -25,8 +25,10 @@ plugin tests when modifying public interfaces.
 - **`handlers.py`** — message handling and the bridge between chat and brain.
 - **`people.py`** — per-person profile management in the workspace.
 - **`environment.py`** — configuration from environment variables.
+- **`watcher.py`** — workspace filesystem watcher. Detects external changes
+  and provides a `drain()` interface for injecting workspace pulse messages.
 - **`testing.py`** — in-memory test doubles (`MemoryChat`, `MemoryVault`,
-  etc.). Excluded from coverage. Used by plugin test suites.
+  `MemoryWatcher`, etc.). Excluded from coverage. Used by plugin test suites.
 
 ## The protocol ABCs
 

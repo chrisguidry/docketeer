@@ -15,6 +15,7 @@ from anthropic.types import TextBlock, ToolUseBlock
 from docketeer import environment
 from docketeer.brain import Brain
 from docketeer.brain.backend import BackendAuthError
+from docketeer.testing import MemoryWatcher
 from docketeer.tools import ToolContext
 
 _FAKE_REQUEST = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
@@ -202,5 +203,5 @@ def mock_anthropic(fake_messages: FakeMessages) -> Iterator[MagicMock]:
 async def brain(
     tool_context: ToolContext, mock_anthropic: MagicMock
 ) -> AsyncIterator[Brain]:
-    async with Brain(tool_context) as brain:
+    async with Brain(tool_context, watcher=MemoryWatcher()) as brain:
         yield brain

@@ -39,6 +39,7 @@ from docketeer.prompt import (
     format_message_time,
 )
 from docketeer.tools import ToolContext, ToolDefinition, registry
+from docketeer.watcher import Watcher, WorkspaceWatcher, _format_workspace_pulse
 
 log = logging.getLogger(__name__)
 
@@ -133,10 +134,15 @@ class ProcessCallbacks:
 
 
 class Brain:
-    def __init__(self, tool_context: ToolContext) -> None:
+    def __init__(
+        self,
+        tool_context: ToolContext,
+        watcher: Watcher | None = None,
+    ) -> None:
         self._backend = _create_backend(executor=tool_context.executor)
         self.tool_context = tool_context
         self._workspace = tool_context.workspace
+        self._watcher = watcher or WorkspaceWatcher(self._workspace)
         self._audit_path = tool_context.workspace.parent / "audit"
         self._usage_path = tool_context.workspace.parent / "token-usage"
         self._conversations: dict[str, list[MessageParam]] = defaultdict(list)
@@ -161,6 +167,7 @@ class Brain:
     async def __aenter__(self) -> Brain:
         self._stack = AsyncExitStack()
         await self._stack.enter_async_context(self._backend)
+        await self._stack.enter_async_context(self._watcher)
         return self
 
     async def __aexit__(self, *exc: object) -> None:
@@ -254,6 +261,16 @@ class Brain:
                     )
                 self._profiles_loaded[room_id].add(current_user)
 
+            # Workspace pulse: inject changes from other contexts
+            changed = self._watcher.drain(room_id)
+            if changed:
+                messages.append(
+                    MessageParam(
+                        role="system",
+                        content=_format_workspace_pulse(changed),
+                    )
+                )
+
             # Layer C: Per-message context - just timestamp, room/thread, @username: message
             user_content = self._build_content(content, room_id)
             self._conversations[room_id].append(
@@ -310,6 +327,10 @@ class Brain:
                     MessageParam(role="assistant", content=reply)
                 )
                 log.info("← BRAIN: %s", reply)
+
+            # Absorb this turn's own tool changes so they don't trigger a
+            # false pulse on the next process() call.
+            self._watcher.drain(room_id)
 
             tokens = await self._measure_context(room_id, system, tools, tier)
             log.info(
