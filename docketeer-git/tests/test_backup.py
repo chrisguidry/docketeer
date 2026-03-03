@@ -2,10 +2,12 @@
 
 import subprocess
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
 
-from docketeer_git.backup import _git, _git_config, backup
+from docketeer.brain.backend import InferenceBackend
+from docketeer_git.backup import _generate_commit_message, _git, _git_config, backup
 
 
 @pytest.fixture()
@@ -44,6 +46,7 @@ async def _backup(
     branch: str = "main",
     author_name: str = "Test",
     author_email: str = "test@test",
+    backend: InferenceBackend | None = None,
 ) -> None:
     """Call backup() with all dependency parameters resolved for tests."""
     await backup(
@@ -52,6 +55,7 @@ async def _backup(
         branch=branch,
         author_name=author_name,
         author_email=author_email,
+        backend=backend,
     )
 
 
@@ -201,3 +205,61 @@ def test_task_collections_exported():
 async def test_empty_workspace_no_commit(workspace: Path):
     await _backup(workspace)
     assert not (workspace / ".git").is_dir()
+
+
+async def test_llm_commit_message(workspace: Path):
+    backend = AsyncMock(spec=InferenceBackend)
+    backend.utility_complete.return_value = "Update notes and add new entry"
+
+    (workspace / "note.md").write_text("hello")
+    await _backup(workspace, backend=backend)
+
+    commits = git_log(workspace)
+    assert len(commits) == 1
+    assert commits[0] == "Update notes and add new entry"
+    backend.utility_complete.assert_called_once()
+
+
+async def test_llm_commit_message_fallback_on_error(workspace: Path):
+    backend = AsyncMock(spec=InferenceBackend)
+    backend.utility_complete.side_effect = RuntimeError("API down")
+
+    (workspace / "note.md").write_text("hello")
+    await _backup(workspace, backend=backend)
+
+    commits = git_log(workspace)
+    assert len(commits) == 1
+    assert commits[0].startswith("backup: ")
+
+
+async def test_no_backend_uses_timestamp(workspace: Path):
+    (workspace / "note.md").write_text("hello")
+    await _backup(workspace, backend=None)
+
+    commits = git_log(workspace)
+    assert len(commits) == 1
+    assert commits[0].startswith("backup: ")
+
+
+async def test_llm_commit_message_empty_response(workspace: Path):
+    backend = AsyncMock(spec=InferenceBackend)
+    backend.utility_complete.return_value = ""
+
+    (workspace / "note.md").write_text("hello")
+    await _backup(workspace, backend=backend)
+
+    commits = git_log(workspace)
+    assert len(commits) == 1
+    assert commits[0].startswith("backup: ")
+
+
+async def test_generate_commit_message_no_backend():
+    result = await _generate_commit_message(None, "some diff")
+    assert result.startswith("backup: ")
+
+
+async def test_generate_commit_message_empty_diff():
+    backend = AsyncMock(spec=InferenceBackend)
+    result = await _generate_commit_message(backend, "   ")
+    assert result.startswith("backup: ")
+    backend.utility_complete.assert_not_called()

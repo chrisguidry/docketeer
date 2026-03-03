@@ -9,7 +9,12 @@ from pathlib import Path
 from docket.dependencies import Perpetual
 
 from docketeer import environment
-from docketeer.dependencies import EnvironmentStr, WorkspacePath
+from docketeer.brain.backend import InferenceBackend
+from docketeer.dependencies import (
+    CurrentInferenceBackend,
+    EnvironmentStr,
+    WorkspacePath,
+)
 
 log = logging.getLogger(__name__)
 
@@ -76,6 +81,27 @@ async def _has_changes(workspace: Path) -> bool:
     return bool(output.strip())
 
 
+async def _generate_commit_message(
+    backend: InferenceBackend | None,
+    diff: str,
+) -> str:
+    timestamp = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %z")
+    if not backend or not diff.strip():
+        return f"backup: {timestamp}"
+    try:
+        truncated = diff[:10_000]
+        summary = await backend.utility_complete(
+            "Summarize these workspace changes in one sentence for a git "
+            "commit message. No quotes, no prefix, just the message.\n\n"
+            f"{truncated}",
+            max_tokens=128,
+        )
+        return summary.strip() or f"backup: {timestamp}"
+    except Exception:
+        log.debug("LLM commit message failed, using timestamp", exc_info=True)
+        return f"backup: {timestamp}"
+
+
 async def backup(
     perpetual: Perpetual = Perpetual(every=BACKUP_INTERVAL, automatic=True),
     workspace: Path = WorkspacePath(),
@@ -83,6 +109,7 @@ async def backup(
     branch: str = EnvironmentStr("GIT_BRANCH", "main"),
     author_name: str = EnvironmentStr("GIT_AUTHOR_NAME", "Docketeer"),
     author_email: str = EnvironmentStr("GIT_AUTHOR_EMAIL", "docketeer@localhost"),
+    backend: InferenceBackend | None = CurrentInferenceBackend(),
 ) -> None:
     """Commit workspace changes and optionally push to a remote."""
     if not any(workspace.iterdir()):
@@ -102,6 +129,12 @@ async def backup(
 
     await _git(workspace, "add", ".")
 
+    diff_proc = await _git(workspace, "diff", "--cached")
+    assert diff_proc.stdout is not None
+    diff_text = (await diff_proc.stdout.read()).decode()
+
+    message = await _generate_commit_message(backend, diff_text)
+
     author_env = {
         "GIT_AUTHOR_NAME": author_name,
         "GIT_AUTHOR_EMAIL": author_email,
@@ -109,9 +142,8 @@ async def backup(
         "GIT_COMMITTER_EMAIL": author_email,
     }
 
-    timestamp = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %z")
-    await _git(workspace, "commit", "-m", f"backup: {timestamp}", env=author_env)
-    log.info("Workspace backup committed: %s", timestamp)
+    await _git(workspace, "commit", "-m", message, env=author_env)
+    log.info("Workspace backup committed: %s", message)
 
     if remote:
         result = await _git(workspace, "push", "-u", "origin", branch)

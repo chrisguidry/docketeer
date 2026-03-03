@@ -10,8 +10,10 @@ from docket.dependencies import Dependency
 
 from docketeer import environment
 from docketeer.brain import Brain
+from docketeer.brain.backend import InferenceBackend
 from docketeer.chat import ChatClient
 from docketeer.executor import CommandExecutor
+from docketeer.plugins import discover_one
 from docketeer.search import SearchIndex
 from docketeer.vault import Vault
 
@@ -104,6 +106,22 @@ class _CurrentDocket(Dependency):
 
 def CurrentDocket() -> Docket:
     return cast(Docket, _CurrentDocket())
+
+
+# --- CurrentInferenceBackend ---
+
+
+class _CurrentInferenceBackend(Dependency):
+    async def __aenter__(self) -> InferenceBackend | None:
+        ep = discover_one("docketeer.inference", "INFERENCE")
+        if ep is None:
+            return None
+        factory = ep.load()
+        return factory(executor=None)
+
+
+def CurrentInferenceBackend() -> InferenceBackend | None:
+    return cast(InferenceBackend | None, _CurrentInferenceBackend())
 
 
 # --- WorkspacePath ---

@@ -2,7 +2,7 @@
 
 from datetime import timedelta
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
@@ -11,6 +11,7 @@ from docketeer.dependencies import (
     CurrentChatClient,
     CurrentDocket,
     CurrentExecutor,
+    CurrentInferenceBackend,
     CurrentSearch,
     CurrentVault,
     EnvironmentInt,
@@ -23,6 +24,7 @@ from docketeer.dependencies import (
     _CurrentChatClient,
     _CurrentDocket,
     _CurrentExecutor,
+    _CurrentInferenceBackend,
     _CurrentSearch,
     _CurrentVault,
     _docket_var,
@@ -251,6 +253,31 @@ def test_set_search():
     search = AsyncMock()
     set_search(search)
     assert _search_var.get() is search
+
+
+# --- CurrentInferenceBackend ---
+
+
+async def test_current_inference_backend():
+    backend = AsyncMock()
+    factory = Mock(return_value=backend)
+    ep = Mock()
+    ep.load.return_value = factory
+    with patch("docketeer.dependencies.discover_one", return_value=ep):
+        dep = _CurrentInferenceBackend()
+        assert await dep.__aenter__() is backend
+    factory.assert_called_once_with(executor=None)
+
+
+async def test_current_inference_backend_no_plugin():
+    with patch("docketeer.dependencies.discover_one", return_value=None):
+        dep = _CurrentInferenceBackend()
+        assert await dep.__aenter__() is None
+
+
+def test_current_inference_backend_factory():
+    result = CurrentInferenceBackend()
+    assert isinstance(result, _CurrentInferenceBackend)
 
 
 # --- CurrentDocket ---
