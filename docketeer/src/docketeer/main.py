@@ -470,12 +470,13 @@ def _task_collection_args() -> list[str]:
 def run_snapshot() -> None:  # pragma: no cover
     """Exec `docket snapshot` with the right env vars."""
     import os
+    import sys
 
     os.environ["DOCKET_NAME"] = DOCKET_NAME
     os.environ["DOCKET_URL"] = DOCKET_URL
     os.execvp(
-        "docket",
-        ["docket", "snapshot", *_task_collection_args()],
+        sys.executable,
+        [sys.executable, "-m", "docket", "snapshot", *_task_collection_args()],
     )
 
 
