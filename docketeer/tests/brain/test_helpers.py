@@ -14,7 +14,6 @@ from docketeer.prompt import (
     CacheControl,
     MessageContent,
     TextBlockParam,
-    build_dynamic_context,
     build_system_blocks,
     ensure_template,
     extract_text,
@@ -44,21 +43,6 @@ def test_build_system_blocks_stable_only(workspace: Path):
     assert len(blocks) == 1
     assert "I am the soul" in blocks[0].text
     assert blocks[-1].cache_control == CacheControl()
-
-
-def test_build_dynamic_context_basic(workspace: Path):
-    ctx = build_dynamic_context("2026-02-06 10:00 EST", "chris", workspace)
-    assert "Current time:" in ctx
-    assert "@chris" in ctx
-
-
-def test_build_dynamic_context_with_person_profile(workspace: Path):
-    people = workspace / "people" / "chris"
-    people.mkdir(parents=True)
-    (people / "profile.md").write_text("Chris likes coffee")
-    ctx = build_dynamic_context("2026-02-06 10:00", "chris", workspace)
-    assert "What I know about @chris" in ctx
-    assert "Chris likes coffee" in ctx
 
 
 def test_build_system_blocks_with_bootstrap(workspace: Path):

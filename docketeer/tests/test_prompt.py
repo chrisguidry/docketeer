@@ -11,7 +11,6 @@ from docketeer.prompt import (
     MessageParam,
     SystemBlock,
     _load_prompt_providers,
-    build_dynamic_context,
     build_system_blocks,
     format_message_time,
 )
@@ -29,46 +28,6 @@ def test_build_system_blocks_includes_bootstrap(workspace: Path):
     (workspace / "BOOTSTRAP.md").write_text("Bootstrap stuff.")
     blocks = build_system_blocks(workspace)
     assert "Bootstrap stuff." in blocks[0].text
-
-
-def test_build_dynamic_context_includes_time_and_username(workspace: Path):
-    ctx = build_dynamic_context("2026-01-01T00:00:00", "chris", workspace)
-    assert "Current time: 2026-01-01T00:00:00" in ctx
-    assert "Talking to: @chris" in ctx
-
-
-def test_build_dynamic_context_missing_profile_instruction(workspace: Path):
-    ctx = build_dynamic_context("2026-01-01T00:00:00", "chris", workspace)
-    assert "don't have a profile for @chris" in ctx
-    assert "people/chris/profile.md" in ctx
-    assert "create_link" in ctx
-
-
-def test_build_dynamic_context_with_person_profile(workspace: Path):
-    people = workspace / "people" / "chris"
-    people.mkdir(parents=True)
-    (people / "profile.md").write_text("# Chris\nLikes coffee")
-    ctx = build_dynamic_context("2026-01-01T00:00:00", "chris", workspace)
-    assert "## What I know about @chris" in ctx
-    assert "Likes coffee" in ctx
-    assert "don't have a profile" not in ctx
-
-
-def test_build_dynamic_context_includes_room_context(workspace: Path):
-    ctx = build_dynamic_context(
-        "2026-01-01T00:00:00",
-        "chris",
-        workspace,
-        room_context="Room: DM with @alice",
-    )
-    assert "Room: DM with @alice" in ctx
-
-
-def test_build_dynamic_context_skips_empty_room_context(workspace: Path):
-    ctx = build_dynamic_context(
-        "2026-01-01T00:00:00", "chris", workspace, room_context=""
-    )
-    assert "Room:" not in ctx
 
 
 def test_build_system_blocks_calls_prompt_providers(workspace: Path):
@@ -141,8 +100,8 @@ def test_load_prompt_providers_delegates_to_discover_all():
 def test_format_message_time_absolute_without_previous():
     ts = datetime(2026, 2, 6, 10, 0, tzinfo=UTC)
     result = format_message_time(ts)
-    assert "2026-02-06" in result
-    assert "10:00" in result or "05:00" in result  # depends on local tz
+    # ISO 8601 with timezone offset
+    assert result == ts.astimezone().isoformat(timespec="seconds")
 
 
 def test_format_message_time_seconds():

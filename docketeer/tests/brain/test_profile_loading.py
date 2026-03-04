@@ -145,15 +145,23 @@ async def test_process_loads_different_profiles_for_different_users(
     assert "December 25" in sarah_profile.content
 
 
-async def test_process_no_profile_when_not_exists(
+async def test_process_no_profile_nudges_creation(
     brain: Brain, fake_messages: Any, tool_context: ToolContext
 ):
-    """When no profile exists, the conversation proceeds normally."""
+    """When no profile exists, a nudge to create one is injected."""
     fake_messages.responses = [FakeMessage(content=[make_text_block(text="Hi!")])]
     content = MessageContent(username="unknown_user", text="hello")
     response = await brain.process("room1", content)
 
     messages = brain._conversations["room1"]
-    profile_messages = [m for m in messages if m.role == "system"]
-    assert len(profile_messages) == 0
+    nudge = next(
+        (
+            m
+            for m in messages
+            if m.role == "system" and "don't have a profile" in m.content
+        ),
+        None,
+    )
+    assert nudge is not None
+    assert "people/unknown_user/profile.md" in nudge.content
     assert response.text == "Hi!"

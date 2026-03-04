@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import json
 import logging
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
@@ -251,14 +252,20 @@ class Brain:
                     profile_message = (
                         f"## What I know about @{current_user}\n\n{profile}"
                     )
-                    messages.append(
-                        MessageParam(role="system", content=profile_message)
-                    )
                     log.info(
                         "→ BRAIN: [profile %s]: %s",
                         current_user,
                         profile[:200] + "..." if len(profile) > 200 else profile,
                     )
+                else:
+                    profile_message = (
+                        f"I don't have a profile for @{current_user} yet. "
+                        f"I can create people/{current_user}/profile.md to "
+                        f"start one, or if I know this person under another "
+                        f"name, I can create a symlink with the create_link "
+                        f"tool."
+                    )
+                messages.append(MessageParam(role="system", content=profile_message))
                 self._profiles_loaded[room_id].add(current_user)
 
             # Workspace pulse: inject changes from other contexts
@@ -271,8 +278,8 @@ class Brain:
                     )
                 )
 
-            # Layer C: Per-message context - just timestamp, room/thread, @username: message
-            user_content = self._build_content(content, room_id)
+            # Layer C: Per-message context - JSON metadata + @username: message
+            user_content = self._build_content(content, room_id, room_context)
             self._conversations[room_id].append(
                 MessageParam(role="user", content=user_content)
             )
@@ -393,19 +400,34 @@ class Brain:
         self,
         content: MessageContent,
         room_id: str = "",
+        room_context: str = "",
     ) -> list[ContentBlockParam] | str:
         """Build content blocks for Claude."""
         blocks: list[ContentBlockParam] = []
 
-        id_tag = f"[{content.message_id}] " if content.message_id else ""
-        ts_tag = ""
+        # JSON metadata line
+        meta: dict[str, str] = {
+            "now": datetime.now().astimezone().isoformat(timespec="seconds"),
+        }
+        if room_context:
+            meta["room"] = room_context
+        if content.message_id:
+            meta["message_id"] = content.message_id
+        if content.thread_id:
+            meta["thread"] = content.thread_id
+
+        # Track delta timestamps for history formatting
         if content.timestamp:
             previous = self._last_user_timestamp.get(room_id)
-            ts_tag = f"[{format_message_time(content.timestamp, previous)}] "
+            meta["delta"] = format_message_time(content.timestamp, previous)
             self._last_user_timestamp[room_id] = content.timestamp
-        thread_tag = f"[thread:{content.thread_id}] " if content.thread_id else ""
-        prefix = f"{id_tag}{ts_tag}{thread_tag}"
-        empty = f"{prefix}@{content.username}: (empty message)"
+
+        meta_line = json.dumps(meta)
+        message_line = (
+            f"@{content.username}: {content.text}"
+            if content.text
+            else f"@{content.username}: (empty message)"
+        )
 
         for media_type, data in content.images:
             blocks.append(
@@ -419,14 +441,12 @@ class Brain:
                 )
             )
 
-        text = f"{prefix}@{content.username}: {content.text}" if content.text else ""
+        if blocks:
+            # Image messages: JSON line as a separate text block before images
+            blocks.insert(
+                0,
+                TextBlockParam(type="text", text=f"{meta_line}\n{message_line}"),
+            )
+            return blocks
 
-        if text:
-            blocks.append(TextBlockParam(type="text", text=text))
-        elif not blocks:
-            blocks.append(TextBlockParam(type="text", text=empty))
-
-        if len(blocks) == 1 and isinstance(blocks[0], TextBlockParam):
-            return blocks[0].text
-
-        return blocks
+        return f"{meta_line}\n{message_line}"

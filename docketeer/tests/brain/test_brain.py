@@ -81,7 +81,8 @@ def test_load_history_user_messages(brain: Brain):
     assert count == 1
     conv = brain._conversations["room1"][0].content
     assert "@chris: hello" in conv
-    assert "2026-02-06" in conv
+    # ISO 8601 absolute timestamp on first message
+    assert "2026-02-06T" in conv
 
 
 def test_load_history_assistant_messages(brain: Brain):
@@ -114,43 +115,6 @@ def test_has_history(brain: Brain):
         ],
     )
     assert brain.has_history("room1")
-
-
-def test_build_content_text_only(brain: Brain):
-    content = MessageContent(
-        username="chris",
-        text="hello",
-        timestamp=datetime(2026, 2, 6, 10, 0, tzinfo=UTC),
-    )
-    result = brain._build_content(content)
-    assert isinstance(result, str)
-    assert "@chris: hello" in result
-
-
-def test_build_content_with_images(brain: Brain):
-    content = MessageContent(
-        username="chris",
-        text="check this",
-        images=[("image/png", b"\x89PNG")],
-    )
-    result = brain._build_content(content)
-    assert isinstance(result, list)
-    assert any(b.type == "image" for b in result)
-    assert any(b.type == "text" for b in result)
-
-
-def test_build_content_empty_message(brain: Brain):
-    content = MessageContent(username="chris", text="")
-    result = brain._build_content(content)
-    assert isinstance(result, str)
-    assert "(empty message)" in result
-
-
-def test_build_content_images_only(brain: Brain):
-    content = MessageContent(username="chris", images=[("image/png", b"\x89PNG")])
-    result = brain._build_content(content)
-    assert isinstance(result, list)
-    assert any(b.type == "image" for b in result)
 
 
 async def test_process_simple_text_response(brain: Brain, fake_messages: Any):

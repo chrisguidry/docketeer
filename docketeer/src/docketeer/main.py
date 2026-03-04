@@ -266,7 +266,7 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
                 model=model,
             )
 
-        local = fire_at.astimezone().strftime("%Y-%m-%d %H:%M %Z")
+        local = fire_at.astimezone().isoformat(timespec="seconds")
         mode = "silently" if silent else "in this room"
         return f'Scheduled "{key}" for {local} ({mode})'
 
@@ -325,7 +325,7 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
             model=model,
         )
 
-        local = first_fire.astimezone().strftime("%Y-%m-%d %H:%M %Z")
+        local = first_fire.astimezone().isoformat(timespec="seconds")
         mode = "silently" if silent else "in this room"
         return f'Scheduled "{key}" ({mode_desc}, {mode}), first run {local}'
 
@@ -346,7 +346,7 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
         lines: list[str] = []
 
         for ex in snap.future:
-            local = ex.when.astimezone().strftime("%Y-%m-%d %H:%M %Z")
+            local = ex.when.astimezone().isoformat(timespec="seconds")
             prompt_file = ex.kwargs.get("prompt_file", "(inline prompt)")
             every = ex.kwargs.get("every", "")
             recur = f" (every {every})" if every else ""

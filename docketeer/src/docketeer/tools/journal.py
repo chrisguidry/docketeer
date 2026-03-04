@@ -22,7 +22,7 @@ async def journal_add(ctx: ToolContext, entry: str) -> str:
     """
     now = datetime.now().astimezone()
     date = now.strftime("%Y-%m-%d")
-    time = now.strftime("%H:%M")
+    time = now.isoformat(timespec="seconds")
     path = _journal_path_for_date(ctx.workspace, date)
     path.parent.mkdir(parents=True, exist_ok=True)
 

@@ -22,7 +22,7 @@ async def test_journal_add_existing_day(tool_context: ToolContext):
     journal = tool_context.workspace / "journal"
     journal.mkdir()
     path = journal / f"{today}.md"
-    path.write_text(f"# {today}\n\n- 09:00 | first entry\n")
+    path.write_text(f"# {today}\n\n- 2026-03-04T09:00:00-05:00 | first entry\n")
 
     await registry.execute("journal_add", {"entry": "second entry"}, tool_context)
     content = path.read_text()

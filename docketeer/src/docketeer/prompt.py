@@ -8,7 +8,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
-from docketeer.people import load_person_context
 from docketeer.plugins import discover_all
 
 log = logging.getLogger(__name__)
@@ -66,7 +65,7 @@ def format_message_time(timestamp: datetime, previous: datetime | None = None) -
     Two units max, trailing zero components dropped, negative deltas clamped to +0s.
     """
     if previous is None:
-        return timestamp.astimezone().strftime("%Y-%m-%d %H:%M")
+        return timestamp.astimezone().isoformat(timespec="seconds")
 
     total_seconds = int((timestamp - previous).total_seconds())
     if total_seconds < 0:
@@ -112,7 +111,7 @@ def build_system_blocks(workspace: Path) -> list[SystemBlock]:
 
     All content here is static between requests so that tools + system form
     a fully cacheable prefix. Dynamic per-request context (time, room, person)
-    goes into the user message via build_dynamic_context().
+    goes into the user message via _build_content().
     """
     soul_path = workspace / "SOUL.md"
     stable_text = soul_path.read_text()
@@ -138,38 +137,6 @@ def build_system_blocks(workspace: Path) -> list[SystemBlock]:
     blocks[-1].cache_control = CacheControl()
 
     return blocks
-
-
-def build_dynamic_context(
-    current_time: str,
-    username: str,
-    workspace: Path,
-    room_context: str = "",
-) -> str:
-    """Build per-request dynamic context to prepend to the user message.
-
-    Kept out of the system prompt so that tools + system form a stable
-    cacheable prefix.
-    """
-    parts = [f"Current time: {current_time}"]
-
-    if room_context:
-        parts.append(room_context)
-
-    parts.append(f"Talking to: @{username}")
-
-    person_context = load_person_context(workspace, username)
-    if person_context:
-        parts.append(f"\n## What I know about @{username}\n\n{person_context}")
-    else:
-        parts.append(
-            f"\nI don't have a profile for @{username} yet. "
-            f"I can create people/{username}/profile.md to start one, "
-            f"or if I know this person under another name, "
-            f"I can create a symlink with the create_link tool."
-        )
-
-    return "\n".join(parts)
 
 
 def extract_text(content: str | Iterable) -> str:
