@@ -266,7 +266,7 @@ class Brain:
             if changed:
                 messages.append(
                     MessageParam(
-                        role="system",
+                        role="user",
                         content=_format_workspace_pulse(changed),
                     )
                 )
@@ -328,8 +328,8 @@ class Brain:
                 )
                 log.info("← BRAIN: %s", reply)
 
-            # Absorb this turn's own tool changes so they don't trigger a
-            # false pulse on the next process() call.
+            # Absorb this turn's own tool changes so they don't echo back
+            # as a false pulse on the next turn.
             self._watcher.drain(room_id)
 
             tokens = await self._measure_context(room_id, system, tools, tier)

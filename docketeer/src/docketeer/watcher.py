@@ -11,6 +11,7 @@ from typing import Protocol, runtime_checkable
 from watchfiles import Change, awatch
 
 log = logging.getLogger(__name__)
+logging.getLogger("watchfiles.main").setLevel(logging.INFO)
 
 _IGNORED_DIRS = {".git", "__pycache__", ".venv", "node_modules", "tmp"}
 
@@ -61,6 +62,7 @@ class WorkspaceWatcher:
                 await self._task
 
     async def _watch(self) -> None:
+        log.info("Watcher started for %s", self._workspace)
         async for batch in awatch(
             self._workspace,
             stop_event=self._stop,

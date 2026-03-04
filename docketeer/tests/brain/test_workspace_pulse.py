@@ -11,6 +11,14 @@ from docketeer.testing import MemoryWatcher
 from ..conftest import FakeMessage, make_text_block
 
 
+def _pulse_msgs(brain: Brain, room_id: str = "room1") -> list:
+    return [
+        m
+        for m in brain._conversations[room_id]
+        if "workspace updated" in str(m.content)
+    ]
+
+
 @pytest.fixture()
 def watcher(brain: Brain) -> MemoryWatcher:
     assert isinstance(brain._watcher, MemoryWatcher)
@@ -23,9 +31,7 @@ async def test_first_process_no_pulse(brain: Brain, fake_messages: Any):
     content = MessageContent(username="chris", text="hello")
     await brain.process("room1", content)
 
-    system_msgs = [m for m in brain._conversations["room1"] if m.role == "system"]
-    pulse_msgs = [m for m in system_msgs if "workspace updated" in m.content]
-    assert len(pulse_msgs) == 0
+    assert len(_pulse_msgs(brain)) == 0
 
 
 async def test_external_change_injects_pulse(
@@ -45,10 +51,10 @@ async def test_external_change_injects_pulse(
     content2 = MessageContent(username="chris", text="what changed?")
     await brain.process("room1", content2)
 
-    system_msgs = [m for m in brain._conversations["room1"] if m.role == "system"]
-    pulse_msgs = [m for m in system_msgs if "workspace updated" in m.content]
-    assert len(pulse_msgs) == 1
-    assert "notes/todo.md" in pulse_msgs[0].content
+    pulses = _pulse_msgs(brain)
+    assert len(pulses) == 1
+    assert pulses[0].role == "user"
+    assert "notes/todo.md" in pulses[0].content
 
 
 async def test_pulse_appears_before_user_content(
@@ -70,9 +76,7 @@ async def test_pulse_appears_before_user_content(
 
     messages = brain._conversations["room1"]
     pulse_idx = next(
-        i
-        for i, m in enumerate(messages)
-        if m.role == "system" and "workspace updated" in m.content
+        i for i, m in enumerate(messages) if "workspace updated" in str(m.content)
     )
     user_idx = next(
         i
@@ -95,9 +99,7 @@ async def test_no_pulse_when_no_changes(brain: Brain, fake_messages: Any):
     content2 = MessageContent(username="chris", text="again")
     await brain.process("room1", content2)
 
-    system_msgs = [m for m in brain._conversations["room1"] if m.role == "system"]
-    pulse_msgs = [m for m in system_msgs if "workspace updated" in m.content]
-    assert len(pulse_msgs) == 0
+    assert len(_pulse_msgs(brain)) == 0
 
 
 async def test_pulse_format_few_files(
@@ -117,11 +119,11 @@ async def test_pulse_format_few_files(
     content2 = MessageContent(username="chris", text="what?")
     await brain.process("room1", content2)
 
-    system_msgs = [m for m in brain._conversations["room1"] if m.role == "system"]
-    pulse = next(m for m in system_msgs if "workspace updated" in m.content)
-    assert "a.md" in pulse.content
-    assert "b.md" in pulse.content
-    assert "c.md" in pulse.content
+    pulses = _pulse_msgs(brain)
+    assert len(pulses) == 1
+    assert "a.md" in pulses[0].content
+    assert "b.md" in pulses[0].content
+    assert "c.md" in pulses[0].content
 
 
 async def test_pulse_format_many_files(
@@ -141,13 +143,15 @@ async def test_pulse_format_many_files(
     content2 = MessageContent(username="chris", text="what?")
     await brain.process("room1", content2)
 
-    system_msgs = [m for m in brain._conversations["room1"] if m.role == "system"]
-    pulse = next(m for m in system_msgs if "workspace updated" in m.content)
-    assert "8 files changed" in pulse.content
+    pulses = _pulse_msgs(brain)
+    assert len(pulses) == 1
+    assert "8 files changed" in pulses[0].content
 
 
-async def test_own_changes_absorbed(brain: Brain, fake_messages: Any):
-    """Second drain at end of process prevents self-pulse next turn."""
+async def test_own_changes_absorbed(
+    brain: Brain, fake_messages: Any, watcher: MemoryWatcher
+):
+    """End-of-turn drain absorbs own tool writes so they don't echo back."""
     fake_messages.responses = [
         FakeMessage(content=[make_text_block(text="First!")]),
         FakeMessage(content=[make_text_block(text="Second!")]),
@@ -156,9 +160,8 @@ async def test_own_changes_absorbed(brain: Brain, fake_messages: Any):
     content1 = MessageContent(username="chris", text="hello")
     await brain.process("room1", content1)
 
+    # No notify between turns — nothing should pulse
     content2 = MessageContent(username="chris", text="again")
     await brain.process("room1", content2)
 
-    system_msgs = [m for m in brain._conversations["room1"] if m.role == "system"]
-    pulse_msgs = [m for m in system_msgs if "workspace updated" in m.content]
-    assert len(pulse_msgs) == 0
+    assert len(_pulse_msgs(brain)) == 0
