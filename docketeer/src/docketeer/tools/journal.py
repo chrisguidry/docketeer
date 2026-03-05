@@ -1,5 +1,6 @@
 """Journal tools for timestamped daily entries."""
 
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -16,10 +17,15 @@ def _journal_path_for_date(workspace: Path, date: str) -> Path:
 
 @registry.tool(emoji=":pencil:")
 async def journal_add(ctx: ToolContext, entry: str) -> str:
-    """Add a timestamped entry to today's journal. Use [[wikilinks]] to reference workspace files.
+    """Jot a quick timestamped note in today's journal. Journal often — small
+    frequent entries are better than rare long ones. Keep each entry to a sentence
+    or two, not paragraphs. Newlines are stripped — the entry will be stored as a
+    single line. Use [[wikilinks]] to reference workspace files and #hashtags for
+    categorization.
 
-    entry: text to append (e.g. "talked to [[people/chris]] about the project")
+    entry: a brief note to remember later (e.g. "talked to [[people/chris]] about the project #chat")
     """
+    entry = re.sub(r"\s*\n\s*", " ", entry).strip()
     now = datetime.now().astimezone()
     date = now.strftime("%Y-%m-%d")
     time = now.isoformat(timespec="seconds")

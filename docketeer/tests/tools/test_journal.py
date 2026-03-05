@@ -102,6 +102,17 @@ async def test_journal_entries_no_journal_dir(tool_context: ToolContext):
     assert "No journal entries yet" in result
 
 
+async def test_journal_add_strips_newlines(tool_context: ToolContext):
+    await registry.execute(
+        "journal_add", {"entry": "line one\nline two\n  line three"}, tool_context
+    )
+    today = datetime.now().astimezone().strftime("%Y-%m-%d")
+    path = tool_context.workspace / "journal" / f"{today}.md"
+    content = path.read_text()
+    assert "line one line two line three" in content
+    assert "\nline two" not in content
+
+
 async def test_journal_entries_today_no_entry(tool_context: ToolContext):
     journal = tool_context.workspace / "journal"
     journal.mkdir()
