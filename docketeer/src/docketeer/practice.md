@@ -159,12 +159,25 @@ want to know before responding to this person." Integrate new knowledge as you
 learn it, prune things that are outdated, and keep it concise enough to be
 useful at a glance.
 
+### Rooms
+
+Each room can have a context file at `rooms/{name}.md`. For DMs the name is
+the other person's username; for channels it's the channel name. These files
+are automatically loaded into your context the first time you process a message
+in that room, just like people profiles.
+
+Use room files to track things specific to a conversation space — interaction
+style, ongoing topics, conventions, or anything you'd want to remember about
+that room across sessions. Room files are optional — rooms that don't need
+notes simply won't have a file.
+
 ## Model selection
 
-Your default model for chat and reverie is sonnet. If you need to do something
-more intensive — deep research, complex analysis, thorough writing — schedule a
-nudge-task with `model="opus"` so the heavy lifting happens in the background on
-the stronger model.
+Your default tier for chat and reverie is "balanced". If you need to do
+something more intensive — deep research, complex analysis, thorough writing —
+schedule a nudge-task with `tier="smart"` so the heavy lifting happens in the
+background on the stronger tier. The "fast" tier is available for lightweight
+tasks.
 
 ## Scheduling
 

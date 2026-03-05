@@ -318,6 +318,23 @@ class RocketChatClient(ChatClient):
         except (RuntimeError, ConnectionError):
             log.warning("Failed to send typing indicator to %s", room_id)
 
+    async def room_slug(self, room_id: str) -> str:
+        """Return a human-readable slug for the room."""
+        kind = self._room_kinds.get(room_id)
+        if kind and kind.is_dm:
+            rooms = await self.list_rooms()
+            for room in rooms:
+                if room.room_id == room_id:
+                    others = [m for m in room.members if m != self.username]
+                    if others:
+                        return others[0]
+        elif kind:
+            rooms = await self.list_rooms()
+            for room in rooms:
+                if room.room_id == room_id and room.name:
+                    return room.name
+        return room_id
+
     async def room_context(self, room_id: str, username: str) -> str:
         """Return rich room context from the RC API."""
         kind = self._room_kinds.get(room_id)

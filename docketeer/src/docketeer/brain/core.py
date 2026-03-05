@@ -39,6 +39,7 @@ from docketeer.prompt import (
     ensure_template,
     format_message_time,
 )
+from docketeer.rooms import load_room_context
 from docketeer.tools import ToolContext, ToolDefinition, registry
 from docketeer.watcher import Watcher, WorkspaceWatcher, _format_workspace_pulse
 
@@ -153,6 +154,7 @@ class Brain:
         self._room_token_counts: dict[str, int] = {}
         self._last_user_timestamp: dict[str, datetime] = {}
         self._profiles_loaded: dict[str, set[str]] = defaultdict(set)
+        self._room_context_loaded: dict[str, bool] = {}
 
         soul_path = self._workspace / "SOUL.md"
         first_run = not soul_path.exists()
@@ -220,6 +222,7 @@ class Brain:
         tier: str = "",
         thinking: bool = False,
         room_context: str = "",
+        room_slug: str = "",
     ) -> BrainResponse:
         """Process a message and return a response with tool call info."""
         tier = tier or CHAT_MODEL
@@ -239,8 +242,9 @@ class Brain:
         async with self._conversation_locks[room_id]:
             if self._room_token_counts.get(room_id, 0) > COMPACT_THRESHOLD:
                 await self._compact_history(room_id, system, tools, tier)
-                # Reset profiles after compaction since history is cleared
+                # Reset profiles and room context after compaction
                 self._profiles_loaded[room_id].clear()
+                self._room_context_loaded.pop(room_id, None)
 
             messages = self._conversations[room_id]
 
@@ -267,6 +271,29 @@ class Brain:
                     )
                 messages.append(MessageParam(role="system", content=profile_message))
                 self._profiles_loaded[room_id].add(current_user)
+
+            # Load room context on first message in this room
+            if (
+                not room_id.startswith("__")
+                and room_id not in self._room_context_loaded
+            ):
+                slug = room_slug or room_id
+                room_notes = load_room_context(self._workspace, slug)
+                if room_notes:
+                    messages.append(
+                        MessageParam(
+                            role="system",
+                            content=f"## Room notes: {slug}\n\n{room_notes}",
+                        )
+                    )
+                    log.info(
+                        "→ BRAIN: [room %s]: %s",
+                        slug,
+                        room_notes[:200] + "..."
+                        if len(room_notes) > 200
+                        else room_notes,
+                    )
+                self._room_context_loaded[room_id] = True
 
             # Workspace pulse: inject changes from other contexts
             changed = self._watcher.drain(room_id)

@@ -312,6 +312,12 @@ def test_username_defaults_to_os_user():
     assert client._human_username == getpass.getuser()
 
 
+async def test_room_slug():
+    client = TUIClient()
+    slug = await client.room_slug(ROOM_ID)
+    assert slug == client._human_username
+
+
 async def test_send_message_calls_on_message_sent_callback():
     client = TUIClient()
     calls: list[tuple[str, str]] = []

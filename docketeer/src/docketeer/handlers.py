@@ -76,6 +76,7 @@ async def handle_message(
 
     content = await build_content(client, msg)
     room_ctx = await client.room_context(msg.room_id, msg.username)
+    slug = await client.room_slug(msg.room_id)
 
     thread_id = msg.thread_id
     tool_emojis: set[str] = set()
@@ -105,6 +106,7 @@ async def handle_message(
             callbacks=callbacks,
             tier=CHAT_MODEL,
             room_context=room_ctx,
+            room_slug=slug,
         )
     except BackendAuthError:
         raise

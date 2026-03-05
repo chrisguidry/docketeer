@@ -142,6 +142,10 @@ class ChatClient(ABC):
     @abstractmethod
     async def unreact(self, message_id: str, emoji: str) -> None: ...
 
+    async def room_slug(self, room_id: str) -> str:
+        """Return a filesystem-friendly slug for the room. Override for rich data."""
+        return ""
+
     async def room_context(self, room_id: str, username: str) -> str:
         """Return per-room context for the system prompt. Override for rich data."""
         return ""

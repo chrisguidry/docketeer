@@ -264,5 +264,8 @@ class TUIClient(ChatClient):
     async def unreact(self, message_id: str, emoji: str) -> None:
         pass
 
+    async def room_slug(self, room_id: str) -> str:
+        return self._human_username
+
     async def room_context(self, room_id: str, username: str) -> str:
         return f"Room: DM with @{username}"
