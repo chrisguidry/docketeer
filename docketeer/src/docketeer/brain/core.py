@@ -20,7 +20,11 @@ from docketeer.brain.backend import (
     InferenceBackend,
 )
 from docketeer.brain.compaction import compact_history
-from docketeer.brain.helpers import classify_response, summarize_webpage
+from docketeer.brain.helpers import (
+    classify_response,
+    format_message_for_log,
+    summarize_webpage,
+)
 from docketeer.chat import RoomMessage
 from docketeer.executor import CommandExecutor
 from docketeer.people import load_person_context
@@ -44,44 +48,6 @@ from docketeer.tools import ToolContext, ToolDefinition, registry
 from docketeer.watcher import Watcher, WorkspaceWatcher, _format_workspace_pulse
 
 log = logging.getLogger(__name__)
-
-MAX_LOG_CONTENT_LENGTH = 500
-
-
-def _format_message_content(content: str | list) -> str:
-    """Extract and truncate message content for logging."""
-    if isinstance(content, str):
-        text = content
-    elif isinstance(content, list):
-        parts = []
-        for block in content:
-            if hasattr(block, "text"):
-                parts.append(block.text)
-            elif isinstance(block, dict) and block.get("type") == "text":
-                parts.append(block.get("text", ""))
-        text = "\n".join(parts)
-    else:
-        text = str(content)
-
-    if len(text) > MAX_LOG_CONTENT_LENGTH:
-        return text[:MAX_LOG_CONTENT_LENGTH] + "..."
-    return text
-
-
-def _format_message_for_log(msg: MessageParam) -> str:
-    """Format a message for logging (no system prompts)."""
-    content = _format_message_content(msg.content)
-    tool_calls = msg.tool_calls
-
-    if tool_calls:
-        tc_names = [tc.get("function", {}).get("name", "?") for tc in tool_calls]
-        return f"tools={tc_names}: {content[:200]}"
-
-    # For user messages, extract just the actual text (strip @username: prefix)
-    if msg.role == "user" and ": " in content:
-        content = content.split(": ", 1)[1]
-
-    return content
 
 
 @dataclass(frozen=True)
@@ -241,10 +207,21 @@ class Brain:
 
         async with self._conversation_locks[room_id]:
             if self._room_token_counts.get(room_id, 0) > COMPACT_THRESHOLD:
+                prev_profiles = set(self._profiles_loaded[room_id])
+                prev_room_loaded = room_id in self._room_context_loaded
+
                 await self._compact_history(room_id, system, tools, tier)
-                # Reset profiles and room context after compaction
                 self._profiles_loaded[room_id].clear()
                 self._room_context_loaded.pop(room_id, None)
+
+                context_msgs = self._reinject_context(
+                    room_id,
+                    prev_profiles,
+                    prev_room_loaded,
+                    room_slug,
+                )
+                if context_msgs:
+                    self._conversations[room_id][0:0] = context_msgs
 
             messages = self._conversations[room_id]
 
@@ -256,18 +233,13 @@ class Brain:
                     profile_message = (
                         f"## What I know about @{current_user}\n\n{profile}"
                     )
-                    log.info(
-                        "→ BRAIN: [profile %s]: %s",
-                        current_user,
-                        profile[:200] + "..." if len(profile) > 200 else profile,
-                    )
+                    log.info("→ BRAIN: [profile %s]: %.200s", current_user, profile)
                 else:
                     profile_message = (
                         f"I don't have a profile for @{current_user} yet. "
                         f"I can create people/{current_user}/profile.md to "
                         f"start one, or if I know this person under another "
-                        f"name, I can create a symlink with the create_link "
-                        f"tool."
+                        f"name, I can create a symlink with the create_link tool."
                     )
                 messages.append(MessageParam(role="system", content=profile_message))
                 self._profiles_loaded[room_id].add(current_user)
@@ -286,13 +258,7 @@ class Brain:
                             content=f"## Room notes: {slug}\n\n{room_notes}",
                         )
                     )
-                    log.info(
-                        "→ BRAIN: [room %s]: %s",
-                        slug,
-                        room_notes[:200] + "..."
-                        if len(room_notes) > 200
-                        else room_notes,
-                    )
+                    log.info("→ BRAIN: [room %s]: %.200s", slug, room_notes)
                 self._room_context_loaded[room_id] = True
 
             # Workspace pulse: inject changes from other contexts
@@ -317,7 +283,7 @@ class Brain:
 
             # Log the user message being sent to the brain (not system prompt)
             last_msg = messages[-1]
-            log.info("→ BRAIN: %s", _format_message_for_log(last_msg))
+            log.info("→ BRAIN: %s", format_message_for_log(last_msg))
 
             try:
                 reply = await self._backend.run_agentic_loop(
@@ -414,6 +380,32 @@ class Brain:
                 new_count,
                 tokens,
             )
+
+    def _reinject_context(
+        self,
+        room_id: str,
+        prev_profiles: set[str],
+        prev_room_loaded: bool,
+        room_slug: str,
+    ) -> list[MessageParam]:
+        """Re-read profile/room context after compaction for prepending."""
+
+        def sys(text: str) -> MessageParam:
+            return MessageParam(role="system", content=text)
+
+        msgs: list[MessageParam] = []
+        for username in sorted(prev_profiles):
+            profile = load_person_context(self._workspace, username)
+            if profile:
+                msgs.append(sys(f"## What I know about @{username}\n\n{profile}"))
+            self._profiles_loaded[room_id].add(username)
+        if prev_room_loaded and not room_id.startswith("__"):
+            slug = room_slug or room_id
+            room_notes = load_room_context(self._workspace, slug)
+            if room_notes:
+                msgs.append(sys(f"## Room notes: {slug}\n\n{room_notes}"))
+            self._room_context_loaded[room_id] = True
+        return msgs
 
     async def _summarize_webpage(self, text: str, purpose: str) -> str:
         return await summarize_webpage(self._backend, text, purpose)
