@@ -10,10 +10,11 @@ bringing in dozens or hundreds of modules you don't. Instead of a huge and
 sprawling monolithic system, Docketeer is small, opinionated, and designed to be
 extended through plugins.
 
-The core of Docketeer is an agent loop based on Anthropic's client SDK, a Docket
-for scheduling autonomous work, and a small set of tools for managing memory in
-its workspace. Any other functionality can be added through simple Python
-plugins that register via standard Python
+The core of Docketeer is an agentic loop, a Docket for scheduling autonomous
+work, and a small set of tools for managing memory in its workspace. The
+inference backend is pluggable — bring your own LLM provider. Any other
+functionality can be added through simple Python plugins that register via
+standard Python
 [entry points](https://packaging.python.org/en/latest/specifications/entry-points/).
 
 Docketeer is currently under heavy early and active development. If you're
@@ -69,7 +70,7 @@ graph TD
     People <--> ChatClient
 
     subgraph chat ["🔌 docketeer.chat"]
-        ChatClient["Rocket.Chat, ..."]
+        ChatClient["Rocket.Chat, TUI, ..."]
     end
 
     ChatClient <--> Brain
@@ -77,7 +78,10 @@ graph TD
     subgraph agent ["Docketeer Agent"]
         Brain["🧠 Brain / agentic loop"]
 
-        Brain <-- "reasoning" --> API["🤖 Claude API"]
+        subgraph inference ["🔌 docketeer.inference"]
+            API["Anthropic, DeepInfra, ..."]
+        end
+        Brain <-- "reasoning" --> API
         Brain <-- "memory" --> Workspace["📂 Workspace"]
         Brain <-- "scheduling" --> Docket["⏰ Docket"]
 
@@ -118,7 +122,7 @@ graph TD
 
     classDef plugin fill:#f0f4ff,stroke:#4a6fa5
     classDef core fill:#fff4e6,stroke:#c77b2a
-    class ChatClient,Prompts,PluginTools,Sandbox,Secrets,PluginTasks plugin
+    class API,ChatClient,Prompts,PluginTools,Sandbox,Secrets,PluginTasks plugin
     class Brain core
 ```
 
@@ -126,11 +130,11 @@ graph TD
 
 The Brain is the agentic loop at the center of Docketeer. It receives messages
 from the chat backend, builds a system prompt, manages conversation history, and
-runs a multi-turn tool-use loop against the Claude API. Each turn sends the
-conversation, system prompt blocks, and available tool definitions to Claude and
-gets back text and/or tool calls — looping until Claude responds with text or
-hits the tool-round limit. Everything else in the system either feeds into the
-Brain or is called by it.
+runs a multi-turn tool-use loop against the configured inference backend. Each
+turn sends the conversation, system prompt blocks, and available tool definitions
+to the LLM and gets back text and/or tool calls — looping until the model
+responds with text or hits the tool-round limit. Everything else in the system
+either feeds into the Brain or is called by it.
 
 ### Workspace
 
@@ -163,16 +167,19 @@ environment variables that only the child process can see.
 
 All plugins are discovered via standard Python
 [entry points](https://packaging.python.org/en/latest/specifications/entry-points/).
-Single-plugin groups (`docketeer.chat`, `docketeer.executor`, `docketeer.vault`)
-auto-select when only one is installed, or can be chosen with an environment
-variable when several are available. Multi-plugin groups (`docketeer.tools`,
+Single-plugin groups (`docketeer.inference`, `docketeer.chat`,
+`docketeer.executor`, `docketeer.vault`, `docketeer.search`) auto-select when
+only one is installed, or can be chosen with an environment variable when several
+are available. Multi-plugin groups (`docketeer.tools`,
 `docketeer.prompt`, `docketeer.tasks`) load everything they find.
 
 | Entry point group | Cardinality | Purpose |
 |-------------------|-------------|---------|
+| `docketeer.inference` | single | Inference backend — which LLM provider powers the agent |
 | `docketeer.chat` | single | Chat backend — how the agent talks to people |
 | `docketeer.executor` | single, optional | Command executor — sandboxed process execution on the host |
 | `docketeer.vault` | single, optional | Secrets vault — store and resolve secrets without exposing values to the agent |
+| `docketeer.search` | single, optional | Search index — semantic search over workspace files |
 | `docketeer.tools` | multiple | Tool plugins — capabilities the agent can use during its agentic loop |
 | `docketeer.prompt` | multiple | Prompt providers — contribute blocks to the system prompt |
 | `docketeer.tasks` | multiple | Task plugins — background work run by the Docket scheduler |
@@ -189,11 +196,15 @@ your own and install them alongside Docketeer to build your perfect agent.
 | [docketeer](docketeer/) | [![PyPI](https://img.shields.io/pypi/v/docketeer)](https://pypi.org/project/docketeer/) | Core agent engine — workspace, journal, scheduling, plugin discovery |
 | [docketeer-1password](docketeer-1password/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-1password)](https://pypi.org/project/docketeer-1password/) | [1Password](https://1password.com/) secret vault — store, generate, and resolve secrets |
 | [docketeer-agentskills](docketeer-agentskills/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-agentskills)](https://pypi.org/project/docketeer-agentskills/) | [Agent Skills](https://agentskills.io/specification) — install, manage, and use packaged agent expertise |
+| [docketeer-anthropic](docketeer-anthropic/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-anthropic)](https://pypi.org/project/docketeer-anthropic/) | Anthropic inference backend |
 | [docketeer-bubblewrap](docketeer-bubblewrap/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-bubblewrap)](https://pypi.org/project/docketeer-bubblewrap/) | Sandboxed command execution via [bubblewrap](https://github.com/containers/bubblewrap) |
+| [docketeer-deepinfra](docketeer-deepinfra/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-deepinfra)](https://pypi.org/project/docketeer-deepinfra/) | [DeepInfra](https://deepinfra.com/) inference backend |
 | [docketeer-git](docketeer-git/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-git)](https://pypi.org/project/docketeer-git/) | Automatic git-backed workspace backups |
 | [docketeer-mcp](docketeer-mcp/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-mcp)](https://pypi.org/project/docketeer-mcp/) | [MCP](https://modelcontextprotocol.io/) server support — connect to any MCP-compatible server |
 | [docketeer-monty](docketeer-monty/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-monty)](https://pypi.org/project/docketeer-monty/) | Sandboxed Python execution via [Monty](https://github.com/pydantic/monty) |
-| [docketeer-rocketchat](docketeer-rocketchat/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-rocketchat)](https://pypi.org/project/docketeer-rocketchat/) | Rocket Chat backend for messaging |
+| [docketeer-rocketchat](docketeer-rocketchat/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-rocketchat)](https://pypi.org/project/docketeer-rocketchat/) | [Rocket.Chat](https://www.rocket.chat/) chat backend |
+| [docketeer-search](docketeer-search/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-search)](https://pypi.org/project/docketeer-search/) | Semantic workspace search via [fastembed](https://github.com/qdrant/fastembed) |
+| [docketeer-tui](docketeer-tui/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-tui)](https://pypi.org/project/docketeer-tui/) | Terminal chat backend |
 | [docketeer-web](docketeer-web/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-web)](https://pypi.org/project/docketeer-web/) | Web search, HTTP requests, file downloads |
 
 Each package's README lists its tools and configuration variables.
@@ -213,12 +224,24 @@ scheduling):
 docker compose up -d
 ```
 
-Set your Anthropic API key (and any plugin-specific variables — see each
-package's README):
+Set your inference backend's API key (and any plugin-specific variables — see
+each package's README):
 
 ```sh
+# For the Anthropic backend:
 export DOCKETEER_ANTHROPIC_API_KEY="sk-ant-..."
+
+# For the DeepInfra backend:
+export DOCKETEER_DEEPINFRA_API_KEY="..."
+# Optionally override the default model:
+export DOCKETEER_DEEPINFRA_MODEL="MiniMaxAI/MiniMax-M2.5"
 ```
+
+Docketeer uses three model tiers — `CHAT_MODEL`, `REVERIE_MODEL`, and
+`CONSOLIDATION_MODEL` — each defaulting to `"balanced"`. Each backend maps
+tier names to its own model IDs, and the DeepInfra backend also lets you
+override per-tier with `DOCKETEER_MODEL_BALANCED`, `DOCKETEER_MODEL_FAST`,
+etc.
 
 Run the agent:
 
