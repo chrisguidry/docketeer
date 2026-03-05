@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 
 from croniter import croniter
 from docket import Logged
-from docket.dependencies import Perpetual
+from docket.dependencies import Perpetual, TaskKey
 
 from docketeer import environment
 from docketeer.brain import APOLOGY, CHAT_MODEL, Brain
@@ -49,9 +49,10 @@ async def nudge(
     prompt_file: Annotated[str, Logged],
     room_id: Annotated[str, Logged] = "",
     thread_id: Annotated[str, Logged] = "",
-    model: Annotated[str, Logged] = "",
+    tier: Annotated[str, Logged] = "",
     brain: Brain = CurrentBrain(),
     client: ChatClient = CurrentChatClient(),
+    task_key: str = TaskKey(),
 ) -> None:
     """Nudge the brain with a prompt from a file.
 
@@ -71,11 +72,11 @@ async def nudge(
         username="system", timestamp=now, text=prompt, thread_id=thread_id
     )
 
-    context_room = room_id or "__tasks__"
-    key = f"nudge:{room_id or '__tasks__'}"
+    context_room = room_id or f"__task__:{task_key}"
+    key = f"nudge:{task_key}"
     try:
         response: BrainResponse = await brain.process(
-            context_room, content, model=model or CHAT_MODEL
+            context_room, content, tier=tier or CHAT_MODEL
         )
     except BackendAuthError:
         raise
@@ -103,10 +104,11 @@ async def nudge_every(
     timezone: Annotated[str, Logged] = "",
     room_id: Annotated[str, Logged] = "",
     thread_id: Annotated[str, Logged] = "",
-    model: Annotated[str, Logged] = "",
+    tier: Annotated[str, Logged] = "",
     perpetual: Perpetual = Perpetual(),
     brain: Brain = CurrentBrain(),
     client: ChatClient = CurrentChatClient(),
+    task_key: str = TaskKey(),
 ) -> None:
     """Recurring nudge — fires on a fixed interval or cron schedule.
 
@@ -129,11 +131,11 @@ async def nudge_every(
         username="system", timestamp=now, text=prompt, thread_id=thread_id
     )
 
-    context_room = room_id or "__tasks__"
-    key = f"nudge_every:{room_id or '__tasks__'}"
+    context_room = room_id or f"__task__:{task_key}"
+    key = f"nudge_every:{task_key}"
     try:
         response: BrainResponse = await brain.process(
-            context_room, content, model=model or CHAT_MODEL
+            context_room, content, tier=tier or CHAT_MODEL
         )
     except BackendAuthError:
         raise

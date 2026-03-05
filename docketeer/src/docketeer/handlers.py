@@ -103,7 +103,7 @@ async def handle_message(
             msg.room_id,
             content,
             callbacks=callbacks,
-            model=CHAT_MODEL,
+            tier=CHAT_MODEL,
             room_context=room_ctx,
         )
     except BackendAuthError:

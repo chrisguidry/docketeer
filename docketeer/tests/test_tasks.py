@@ -91,11 +91,15 @@ async def test_nudge_silent_uses_tasks_room(workspace: Path, task_files: dict):
     client = AsyncMock()
 
     await nudge(
-        prompt_file=task_files["do_reflection"], room_id="", brain=brain, client=client
+        prompt_file=task_files["do_reflection"],
+        room_id="",
+        brain=brain,
+        client=client,
+        task_key="do-reflection",
     )
 
     brain.process.assert_called_once()
-    assert brain.process.call_args[0][0] == "__tasks__"
+    assert brain.process.call_args[0][0] == "__task__:do-reflection"
     client.send_message.assert_not_called()
 
 
@@ -324,10 +328,11 @@ async def test_nudge_every_silent_no_message(workspace: Path, task_files: dict):
         brain=brain,
         client=client,
         perpetual=perpetual,
+        task_key="silent-work",
     )
 
     brain.process.assert_called_once()
-    assert brain.process.call_args[0][0] == "__tasks__"
+    assert brain.process.call_args[0][0] == "__task__:silent-work"
     client.send_message.assert_not_called()
 
 

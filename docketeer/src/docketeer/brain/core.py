@@ -217,12 +217,12 @@ class Brain:
         room_id: str,
         content: MessageContent,
         callbacks: ProcessCallbacks | None = None,
-        model: str = "",
+        tier: str = "",
         thinking: bool = False,
         room_context: str = "",
     ) -> BrainResponse:
         """Process a message and return a response with tool call info."""
-        tier = model or CHAT_MODEL
+        tier = tier or CHAT_MODEL
 
         system = build_system_blocks(self._workspace)
 

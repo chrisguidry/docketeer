@@ -230,7 +230,7 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
         when: str,
         key: str = "",
         silent: bool = False,
-        model: str = "",
+        tier: str = "",
     ) -> str:
         """Schedule a future task — reminder, follow-up, or background work. The time
         must be in the future — add the delay to the current time shown in your context.
@@ -240,7 +240,7 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
         when: ISO 8601 datetime in the future (e.g. 2026-02-07T15:00:00-05:00)
         key: unique identifier for cancellation/rescheduling (e.g. "remind-chris-dentist")
         silent: if true, work silently without sending a message (default: false)
-        model: intelligence tier — "opus", "sonnet", or "haiku" (default: chat model)
+        tier: intelligence tier — "smart", "balanced", or "fast" (default: chat tier)
         """
         try:
             fire_at = datetime.fromisoformat(when)
@@ -255,7 +255,7 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
                 prompt_file=prompt_file,
                 room_id=room_id,
                 thread_id=thread_id,
-                model=model,
+                tier=tier,
             )
         else:
             key = f"task-{fire_at.strftime('%Y%m%d-%H%M%S')}"
@@ -263,7 +263,7 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
                 prompt_file=prompt_file,
                 room_id=room_id,
                 thread_id=thread_id,
-                model=model,
+                tier=tier,
             )
 
         local = fire_at.astimezone().isoformat(timespec="seconds")
@@ -278,7 +278,7 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
         key: str,
         timezone: str = "",
         silent: bool = False,
-        model: str = "",
+        tier: str = "",
     ) -> str:
         """Schedule a recurring task on a fixed interval or cron schedule.
 
@@ -289,7 +289,7 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
         key: required — stable identifier for cancellation (e.g. "daily-standup")
         timezone: timezone for cron expressions (default: system timezone, ignored for durations)
         silent: if true, work silently without sending a message (default: false)
-        model: intelligence tier — "opus", "sonnet", or "haiku" (default: chat model)
+        tier: intelligence tier — "smart", "balanced", or "fast" (default: chat tier)
         """
         duration = parse_every(every)
 
@@ -322,7 +322,7 @@ def _register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
             timezone=timezone,
             room_id=room_id,
             thread_id=thread_id,
-            model=model,
+            tier=tier,
         )
 
         local = first_fire.astimezone().isoformat(timespec="seconds")

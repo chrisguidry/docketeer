@@ -5,7 +5,7 @@ import re
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from docket.dependencies import Cron, Perpetual
+from docket.dependencies import Cron, Perpetual, TaskKey
 
 from docketeer import environment
 from docketeer.brain import CONSOLIDATION_MODEL, REVERIE_MODEL, Brain
@@ -69,13 +69,16 @@ async def reverie(
     perpetual: Perpetual = Perpetual(every=REVERIE_INTERVAL, automatic=True),
     brain: Brain = CurrentBrain(),
     workspace: Path = WorkspacePath(),
+    task_key: str = TaskKey(),
 ) -> None:
     """Periodic receptive internal processing cycle."""
     prompt = _build_cycle_prompt(REVERIE_PROMPT, workspace, "Reverie")
     now = datetime.now().astimezone()
     content = MessageContent(username="system", timestamp=now, text=prompt)
     try:
-        response = await brain.process("__tasks__", content, model=REVERIE_MODEL)
+        response = await brain.process(
+            f"__task__:{task_key}", content, tier=REVERIE_MODEL
+        )
     except BackendAuthError:
         raise
     except Exception:
@@ -101,13 +104,16 @@ async def consolidation(
     ),
     brain: Brain = CurrentBrain(),
     workspace: Path = WorkspacePath(),
+    task_key: str = TaskKey(),
 ) -> None:
     """Daily memory integration and reflection cycle."""
     prompt = _build_cycle_prompt(CONSOLIDATION_PROMPT, workspace, "Consolidation")
     now = datetime.now().astimezone()
     content = MessageContent(username="system", timestamp=now, text=prompt)
     try:
-        response = await brain.process("__tasks__", content, model=CONSOLIDATION_MODEL)
+        response = await brain.process(
+            f"__task__:{task_key}", content, tier=CONSOLIDATION_MODEL
+        )
     except BackendAuthError:
         raise
     except Exception:

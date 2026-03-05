@@ -65,7 +65,7 @@ class InferenceBackend(ABC):
         *,
         max_tokens: int = 1024,
     ) -> str:
-        """One-shot lightweight completion (haiku-tier)."""
+        """One-shot lightweight completion (fast tier)."""
         ...
 
 

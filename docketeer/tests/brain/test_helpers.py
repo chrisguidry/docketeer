@@ -143,7 +143,9 @@ async def test_process_synthetic_room_clears_tool_room_id(
     brain: Brain, fake_messages: Any
 ):
     fake_messages.responses = [FakeMessage(content=[make_text_block(text="ok")])]
-    await brain.process("__tasks__", MessageContent(username="system", text="reverie"))
+    await brain.process(
+        "__task__:test", MessageContent(username="system", text="reverie")
+    )
     assert brain.tool_context.room_id == ""
 
 

@@ -66,18 +66,18 @@ def test_build_cycle_prompt_without_guidance(workspace: Path):
 
 
 async def test_reverie_calls_brain(brain: Brain, workspace: Path, fake_messages: Any):
-    await reverie(brain=brain, workspace=workspace)
-    assert "__tasks__" in brain._conversations
-    msgs = brain._conversations["__tasks__"]
+    await reverie(task_key="reverie", brain=brain, workspace=workspace)
+    assert "__task__:reverie" in brain._conversations
+    msgs = brain._conversations["__task__:reverie"]
     assert any(REVERIE_PROMPT in extract_text(m.content) for m in msgs)
 
 
 async def test_consolidation_calls_brain(
     brain: Brain, workspace: Path, fake_messages: Any
 ):
-    await consolidation(brain=brain, workspace=workspace)
-    assert "__tasks__" in brain._conversations
-    msgs = brain._conversations["__tasks__"]
+    await consolidation(task_key="consolidation", brain=brain, workspace=workspace)
+    assert "__task__:consolidation" in brain._conversations
+    msgs = brain._conversations["__task__:consolidation"]
     assert any(CONSOLIDATION_PROMPT in extract_text(m.content) for m in msgs)
 
 
@@ -88,8 +88,8 @@ async def test_reverie_empty_response(
         FakeMessage(content=[make_tool_use_block(name="list_files", input={})]),
         FakeMessage(content=[]),
     ]
-    await reverie(brain=brain, workspace=workspace)
-    assert "__tasks__" in brain._conversations
+    await reverie(task_key="reverie", brain=brain, workspace=workspace)
+    assert "__task__:reverie" in brain._conversations
 
 
 async def test_consolidation_empty_response(
@@ -99,8 +99,8 @@ async def test_consolidation_empty_response(
         FakeMessage(content=[make_tool_use_block(name="list_files", input={})]),
         FakeMessage(content=[]),
     ]
-    await consolidation(brain=brain, workspace=workspace)
-    assert "__tasks__" in brain._conversations
+    await consolidation(task_key="consolidation", brain=brain, workspace=workspace)
+    assert "__task__:consolidation" in brain._conversations
 
 
 def test_cycle_handlers_in_task_collection():
@@ -117,7 +117,7 @@ async def test_reverie_error_returns_early(workspace: Path):
 
     brain = AsyncMock()
     brain.process.side_effect = RuntimeError("boom")
-    await reverie(brain=brain, workspace=workspace)
+    await reverie(task_key="reverie", brain=brain, workspace=workspace)
     brain.process.assert_called_once()
 
 
@@ -127,7 +127,7 @@ async def test_consolidation_error_returns_early(workspace: Path):
 
     brain = AsyncMock()
     brain.process.side_effect = RuntimeError("boom")
-    await consolidation(brain=brain, workspace=workspace)
+    await consolidation(task_key="consolidation", brain=brain, workspace=workspace)
     brain.process.assert_called_once()
 
 
@@ -138,7 +138,7 @@ async def test_reverie_auth_error_propagates(workspace: Path):
     brain = AsyncMock()
     brain.process.side_effect = make_backend_auth_error()
     with pytest.raises(BackendAuthError):
-        await reverie(brain=brain, workspace=workspace)
+        await reverie(task_key="reverie", brain=brain, workspace=workspace)
 
 
 async def test_consolidation_auth_error_propagates(workspace: Path):
@@ -148,4 +148,4 @@ async def test_consolidation_auth_error_propagates(workspace: Path):
     brain = AsyncMock()
     brain.process.side_effect = make_backend_auth_error()
     with pytest.raises(BackendAuthError):
-        await consolidation(brain=brain, workspace=workspace)
+        await consolidation(task_key="consolidation", brain=brain, workspace=workspace)

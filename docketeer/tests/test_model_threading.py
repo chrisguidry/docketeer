@@ -9,47 +9,45 @@ from docketeer.prompt import BrainResponse
 from docketeer.tasks import nudge, nudge_every
 
 
-async def test_reverie_uses_reverie_model(workspace: Path):
+async def test_reverie_uses_reverie_tier(workspace: Path):
     brain = AsyncMock()
     brain.process.return_value = BrainResponse(text="thoughts")
     await reverie(brain=brain, workspace=workspace)
-    assert brain.process.call_args[1]["model"] == REVERIE_MODEL
+    assert brain.process.call_args[1]["tier"] == REVERIE_MODEL
 
 
-async def test_consolidation_uses_consolidation_model(workspace: Path):
+async def test_consolidation_uses_consolidation_tier(workspace: Path):
     brain = AsyncMock()
     brain.process.return_value = BrainResponse(text="reflection")
     await consolidation(brain=brain, workspace=workspace)
-    assert brain.process.call_args[1]["model"] == CONSOLIDATION_MODEL
+    assert brain.process.call_args[1]["tier"] == CONSOLIDATION_MODEL
 
 
-async def test_nudge_uses_chat_model_by_default(workspace: Path, task_files: dict):
+async def test_nudge_uses_chat_tier_by_default(workspace: Path, task_files: dict):
     brain = AsyncMock()
     brain.process.return_value = BrainResponse(text="nudged")
     client = AsyncMock()
     await nudge(
         prompt_file=task_files["hey_there"], room_id="room1", brain=brain, client=client
     )
-    assert brain.process.call_args[1]["model"] == CHAT_MODEL
+    assert brain.process.call_args[1]["tier"] == CHAT_MODEL
 
 
-async def test_nudge_passes_explicit_model(workspace: Path, task_files: dict):
+async def test_nudge_passes_explicit_tier(workspace: Path, task_files: dict):
     brain = AsyncMock()
     brain.process.return_value = BrainResponse(text="nudged")
     client = AsyncMock()
     await nudge(
         prompt_file=task_files["hey_there"],
         room_id="room1",
-        model="opus",
+        tier="smart",
         brain=brain,
         client=client,
     )
-    assert brain.process.call_args[1]["model"] == "opus"
+    assert brain.process.call_args[1]["tier"] == "smart"
 
 
-async def test_nudge_every_uses_chat_model_by_default(
-    workspace: Path, task_files: dict
-):
+async def test_nudge_every_uses_chat_tier_by_default(workspace: Path, task_files: dict):
     brain = AsyncMock()
     brain.process.return_value = BrainResponse(text="ok")
     client = AsyncMock()
@@ -62,10 +60,10 @@ async def test_nudge_every_uses_chat_model_by_default(
         client=client,
         perpetual=perpetual,
     )
-    assert brain.process.call_args[1]["model"] == CHAT_MODEL
+    assert brain.process.call_args[1]["tier"] == CHAT_MODEL
 
 
-async def test_nudge_every_passes_explicit_model(workspace: Path, task_files: dict):
+async def test_nudge_every_passes_explicit_tier(workspace: Path, task_files: dict):
     brain = AsyncMock()
     brain.process.return_value = BrainResponse(text="ok")
     client = AsyncMock()
@@ -74,9 +72,9 @@ async def test_nudge_every_passes_explicit_model(workspace: Path, task_files: di
         prompt_file=task_files["check"],
         every="PT30M",
         room_id="room1",
-        model="sonnet",
+        tier="balanced",
         brain=brain,
         client=client,
         perpetual=perpetual,
     )
-    assert brain.process.call_args[1]["model"] == "sonnet"
+    assert brain.process.call_args[1]["tier"] == "balanced"
