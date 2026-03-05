@@ -27,6 +27,7 @@ def _save_registry() -> Iterator[None]:
 @pytest.fixture()
 def mock_docket() -> MagicMock:
     docket = MagicMock()
+    docket.tasks = {}
     docket.replace.return_value = AsyncMock()
     docket.add.return_value = AsyncMock()
     docket.cancel = AsyncMock()
