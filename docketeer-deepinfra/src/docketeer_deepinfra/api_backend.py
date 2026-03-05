@@ -116,6 +116,7 @@ class DeepInfraAPIBackend(InferenceBackend):
                 model=self._default_model,
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=max_tokens,
+                extra_body={"reasoning_effort": "none"},
             )
             return response.choices[0].message.content or ""
         except APIError as exc:

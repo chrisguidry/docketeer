@@ -263,6 +263,21 @@ class TestUtilityComplete:
         result = await backend.utility_complete("prompt")
         assert result == "completion text"
 
+    async def test_utility_complete_disables_reasoning(
+        self, backend: DeepInfraAPIBackend
+    ) -> None:
+        """utility_complete passes reasoning_effort='none' to skip thinking."""
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "summary"
+
+        backend._client = MagicMock()
+        backend._client.chat.completions.create = AsyncMock(return_value=mock_response)
+
+        await backend.utility_complete("prompt")
+        call_kwargs = backend._client.chat.completions.create.call_args.kwargs
+        assert call_kwargs["extra_body"] == {"reasoning_effort": "none"}
+
     async def test_utility_complete_empty_content(
         self, backend: DeepInfraAPIBackend
     ) -> None:
