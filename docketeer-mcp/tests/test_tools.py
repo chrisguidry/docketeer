@@ -4,6 +4,9 @@ import json
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
+from mcp.shared.exceptions import McpError
+from mcp.types import ErrorData
+
 from docketeer.testing import MemoryVault
 from docketeer.tools import ToolContext, registry
 from docketeer_mcp.manager import MCPClientManager, MCPToolInfo
@@ -100,6 +103,19 @@ async def test_connect_failure(
     assert "connection refused" in result
 
 
+async def test_connect_mcp_error(
+    tool_context: ToolContext, mcp_dir: Path, fresh_manager: MCPClientManager
+):
+    _write_server(mcp_dir, "bad", {"command": "false"})
+    fresh_manager.connect = AsyncMock(  # type: ignore[method-assign]
+        side_effect=McpError(ErrorData(code=-1, message="Connection closed")),
+    )
+
+    result = await registry.execute("connect_mcp_server", {"name": "bad"}, tool_context)
+    assert "Failed to connect" in result
+    assert "Connection closed" in result
+
+
 async def test_disconnect_not_connected(tool_context: ToolContext):
     result = await registry.execute(
         "disconnect_mcp_server", {"name": "x"}, tool_context
@@ -191,6 +207,47 @@ async def test_use_tool_error(
         tool_context,
     )
     assert "Error calling s/t" in result
+
+
+async def test_use_tool_string_arguments(
+    tool_context: ToolContext, fresh_manager: MCPClientManager
+):
+    fresh_manager.call_tool = AsyncMock(return_value="ok")  # type: ignore[method-assign]
+
+    result = await registry.execute(
+        "use_mcp_tool",
+        {"server": "s", "tool": "t", "arguments": '{"a": 1}'},
+        tool_context,
+    )
+    assert result == "ok"
+    fresh_manager.call_tool.assert_called_once_with("s", "t", {"a": 1})  # type: ignore[union-attr]
+
+
+async def test_use_tool_invalid_json_arguments(
+    tool_context: ToolContext, fresh_manager: MCPClientManager
+):
+    result = await registry.execute(
+        "use_mcp_tool",
+        {"server": "s", "tool": "t", "arguments": "not json"},
+        tool_context,
+    )
+    assert "invalid JSON" in result
+
+
+async def test_use_tool_mcp_error(
+    tool_context: ToolContext, fresh_manager: MCPClientManager
+):
+    fresh_manager.call_tool = AsyncMock(  # type: ignore[method-assign]
+        side_effect=McpError(ErrorData(code=-1, message="Connection closed")),
+    )
+
+    result = await registry.execute(
+        "use_mcp_tool",
+        {"server": "s", "tool": "t"},
+        tool_context,
+    )
+    assert "Error calling s/t" in result
+    assert "Connection closed" in result
 
 
 async def test_add_server_stdio(tool_context: ToolContext, mcp_dir: Path):

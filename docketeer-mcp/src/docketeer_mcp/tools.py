@@ -7,6 +7,7 @@ from urllib.parse import parse_qs, urlparse
 
 import httpx
 from docket import Docket
+from mcp.shared.exceptions import McpError
 
 from docketeer.plugins import PluginUnavailable
 from docketeer.tools import ToolContext, registry
@@ -122,7 +123,7 @@ async def connect_mcp_server(
                 auth=token,
                 resolved_env=resolved_env,
             )
-        except (ValueError, OSError) as e:
+        except (ValueError, OSError, McpError) as e:
             log.warning("Failed to connect to MCP server %r", name, exc_info=True)
             return f"Failed to connect to {name!r}: {e}"
 
@@ -148,7 +149,7 @@ async def connect_mcp_server(
             ctx.workspace,
             resolved_env=resolved_env,
         )
-    except (ValueError, OSError) as e:
+    except (ValueError, OSError, McpError) as e:
         log.warning("Failed to connect to MCP server %r", name, exc_info=True)
         return f"Failed to connect to {name!r}: {e}"
 
@@ -356,17 +357,22 @@ async def search_mcp_tools(ctx: ToolContext, query: str, server: str = "") -> st
 
 @registry.tool(emoji=":electric_plug:")
 async def use_mcp_tool(
-    ctx: ToolContext, server: str, tool: str, arguments: dict | None = None
+    ctx: ToolContext, server: str, tool: str, arguments: dict | str | None = None
 ) -> str:
     """Call a tool on a connected MCP server.
 
     server: server name
     tool: tool name on that server
-    arguments: tool arguments
+    arguments: tool arguments as a dict
     """
+    if isinstance(arguments, str):
+        try:
+            arguments = json.loads(arguments)
+        except json.JSONDecodeError:
+            return f"Error calling {server}/{tool}: invalid JSON in arguments"
     try:
         return await manager.call_tool(server, tool, arguments or {})
-    except (ValueError, OSError) as e:
+    except (ValueError, OSError, McpError) as e:
         return f"Error calling {server}/{tool}: {e}"
 
 
