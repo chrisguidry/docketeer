@@ -120,6 +120,9 @@ async def backup(
     backend: InferenceBackend | None = CurrentInferenceBackend(),
 ) -> None:
     """Commit workspace changes and optionally push to a remote."""
+    import sys
+
+    print(f"BACKUP BODY ENTERED: workspace={workspace}", file=sys.stderr, flush=True)
     log.info("backup: workspace=%s", workspace)
 
     if not any(workspace.iterdir()):
