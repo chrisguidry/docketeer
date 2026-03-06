@@ -27,6 +27,7 @@ def test_configure_logging_default(monkeypatch: pytest.MonkeyPatch) -> None:
         "httpx",
         "websockets",
         "httpcore",
+        "markdown_it",
         "mcp.server.lowlevel",
         "openai",
     ]
@@ -54,6 +55,7 @@ def test_configure_logging_debug(monkeypatch: pytest.MonkeyPatch) -> None:
         "httpx",
         "websockets",
         "httpcore",
+        "markdown_it",
         "mcp.server.lowlevel",
         "openai",
     ]
@@ -81,6 +83,7 @@ def test_configure_logging_warning(monkeypatch: pytest.MonkeyPatch) -> None:
         "httpx",
         "websockets",
         "httpcore",
+        "markdown_it",
         "mcp.server.lowlevel",
         "openai",
     ]
@@ -108,6 +111,7 @@ def test_configure_logging_error(monkeypatch: pytest.MonkeyPatch) -> None:
         "httpx",
         "websockets",
         "httpcore",
+        "markdown_it",
         "mcp.server.lowlevel",
         "openai",
     ]

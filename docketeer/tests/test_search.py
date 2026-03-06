@@ -11,14 +11,14 @@ async def test_null_search_returns_empty_results():
     assert results == []
 
 
-async def test_null_search_index_file_is_noop():
+async def test_null_search_index_is_noop():
     search = NullSearch()
-    await search.index_file("test.txt", "content")
+    await search.index("test.txt", "content")
 
 
-async def test_null_search_remove_file_is_noop():
+async def test_null_search_deindex_is_noop():
     search = NullSearch()
-    await search.remove_file("test.txt")
+    await search.deindex("test.txt")
 
 
 def test_null_catalog_returns_null_search():

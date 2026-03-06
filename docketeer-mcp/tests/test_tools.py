@@ -145,7 +145,7 @@ async def test_search_with_results(
     tool_context: ToolContext, fresh_manager: MCPClientManager
 ):
     index = tool_context.search.get_index("mcp-tools")
-    await index.index_file("s/get_time", "get_time: Gets the current time")
+    await index.index("s/get_time", "get_time: Gets the current time")
     fresh_manager._clients["s"] = object()  # type: ignore[assignment]
     fresh_manager._tools["s"] = [
         MCPToolInfo(
@@ -156,8 +156,10 @@ async def test_search_with_results(
         ),
     ]
     result = await registry.execute("search_mcp_tools", {"query": "time"}, tool_context)
+    assert "1 result(s):" in result
     assert "s/get_time" in result
     assert "connected" in result
+    assert "score:" in result
     assert "Gets the current time" in result
 
 
@@ -165,7 +167,7 @@ async def test_search_disconnected_server(
     tool_context: ToolContext, fresh_manager: MCPClientManager
 ):
     index = tool_context.search.get_index("mcp-tools")
-    await index.index_file("s/bare_tool", "bare_tool: does bare things")
+    await index.index("s/bare_tool", "bare_tool: does bare things")
     result = await registry.execute("search_mcp_tools", {"query": "bare"}, tool_context)
     assert "bare_tool" in result
     assert "disconnected" in result
@@ -175,8 +177,8 @@ async def test_search_filters_by_server(
     tool_context: ToolContext, fresh_manager: MCPClientManager
 ):
     index = tool_context.search.get_index("mcp-tools")
-    await index.index_file("a/tool1", "tool1: tool on a")
-    await index.index_file("b/tool2", "tool2: tool on b")
+    await index.index("a/tool1", "tool1: tool on a")
+    await index.index("b/tool2", "tool2: tool on b")
     result = await registry.execute(
         "search_mcp_tools", {"query": "tool", "server": "a"}, tool_context
     )

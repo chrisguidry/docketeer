@@ -60,7 +60,7 @@ async def write_file(ctx: ToolContext, path: str, content: str) -> str:
     target = safe_path(ctx.workspace, path)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(content)
-    await ctx.search.get_index("workspace").index_file(path, content)
+    await ctx.search.get_index("workspace").index(path, content)
     return f"Wrote {len(content)} bytes to {path}"
 
 
@@ -96,7 +96,7 @@ async def edit_file(
         return f"old_string appears {count} times in {path} (must be unique)"
     updated = content.replace(old_string, new_string, 1)
     target.write_text(updated)
-    await ctx.search.get_index("workspace").index_file(path, updated)
+    await ctx.search.get_index("workspace").index(path, updated)
     return f"Edited {path}"
 
 
@@ -112,7 +112,7 @@ async def delete_file(ctx: ToolContext, path: str) -> str:
     if target.is_dir():
         return f"Cannot delete directories, only files: {path}"
     target.unlink()
-    await ctx.search.get_index("workspace").remove_file(path)
+    await ctx.search.get_index("workspace").deindex(path)
     return f"Deleted {path}"
 
 
@@ -153,8 +153,8 @@ async def read_link(ctx: ToolContext, path: str) -> str:
 
 @registry.tool(emoji=":mag:")
 async def search_files(ctx: ToolContext, query: str, path: str = "") -> str:
-    """Search workspace files by meaning or text. Uses semantic search when
-    a search plugin is installed, falls back to keyword matching otherwise.
+    """Semantic search across workspace files. Falls back to keyword
+    matching when no search plugin is installed.
 
     query: what you're looking for (natural language or keywords)
     path: relative path to search within (empty string for all)

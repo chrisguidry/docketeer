@@ -25,10 +25,10 @@ class SearchIndex(ABC):
     async def search(self, query: str, limit: int = 10) -> list[SearchResult]: ...
 
     @abstractmethod
-    async def index_file(self, path: str, content: str) -> None: ...
+    async def index(self, path: str, content: str) -> None: ...
 
     @abstractmethod
-    async def remove_file(self, path: str) -> None: ...
+    async def deindex(self, path: str) -> None: ...
 
 
 class NullSearch(SearchIndex):
@@ -37,10 +37,10 @@ class NullSearch(SearchIndex):
     async def search(self, query: str, limit: int = 10) -> list[SearchResult]:
         return []
 
-    async def index_file(self, path: str, content: str) -> None:
+    async def index(self, path: str, content: str) -> None:
         pass
 
-    async def remove_file(self, path: str) -> None:
+    async def deindex(self, path: str) -> None:
         pass
 
 

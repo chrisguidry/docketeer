@@ -94,6 +94,11 @@ class MCPClientManager:
         self._tools: dict[str, list[MCPToolInfo]] = {}
         self._pending_oauth: dict[str, PendingOAuth] = {}
         self._search = search or NullCatalog()
+        self._reindexed = False
+
+    def set_search(self, search: SearchCatalog) -> None:
+        """Wire in a search catalog after construction."""
+        self._search = search
 
     async def connect(
         self,
@@ -196,22 +201,25 @@ class MCPClientManager:
 
     async def reindex_from_cache(self) -> None:
         """Load all cached tool catalogs and index them for semantic search."""
+        if self._reindexed:
+            return
         catalogs = load_all_tool_catalogs()
         for server_name, tools in catalogs.items():
             await self._index_tools(server_name, tools)
+        self._reindexed = True
 
     async def deindex_server(self, name: str) -> None:
         """Remove all indexed tools for a server from the search index."""
         index = self._search.get_index("mcp-tools")
         catalog = load_all_tool_catalogs().get(name, [])
         for tool in catalog:
-            await index.remove_file(f"{name}/{tool.name}")
+            await index.deindex(f"{name}/{tool.name}")
 
     async def _index_tools(self, name: str, tools: list[CachedToolInfo]) -> None:
         """Index a server's tools for semantic search."""
         index = self._search.get_index("mcp-tools")
         for tool in tools:
-            await index.index_file(
+            await index.index(
                 f"{name}/{tool.name}",
                 f"{tool.name}: {tool.description}",
             )

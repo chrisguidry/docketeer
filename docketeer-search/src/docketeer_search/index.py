@@ -6,11 +6,9 @@ from docket import Docket
 
 from docketeer import environment
 from docketeer.search import SearchCatalog, SearchIndex, SearchResult
+from docketeer_search import tasks
 from docketeer_search.embedding import Embedder
 from docketeer_search.store import VectorStore
-
-INDEX_TASK = "do_index_file"
-REMOVE_TASK = "do_remove_file"
 
 
 class FastembedIndex(SearchIndex):
@@ -35,15 +33,15 @@ class FastembedIndex(SearchIndex):
         vector = self._embedder.embed([query])[0]
         return self._store.query(vector, limit)
 
-    async def index_file(self, path: str, content: str) -> None:
-        schedule = self._docket.add(INDEX_TASK, key=f"search:index:{self._name}:{path}")
-        await schedule(index_name=self._name, path=path)
-
-    async def remove_file(self, path: str) -> None:
-        schedule = self._docket.add(
-            REMOVE_TASK, key=f"search:remove:{self._name}:{path}"
+    async def index(self, path: str, content: str) -> None:
+        await self._docket.add(tasks.index, key=f"search:index:{self._name}:{path}")(
+            index_name=self._name, path=path, content=content
         )
-        await schedule(index_name=self._name, path=path)
+
+    async def deindex(self, path: str) -> None:
+        await self._docket.add(tasks.deindex, key=f"search:remove:{self._name}:{path}")(
+            index_name=self._name, path=path
+        )
 
 
 class FastembedCatalog(SearchCatalog):

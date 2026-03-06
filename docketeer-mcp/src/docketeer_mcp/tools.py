@@ -86,6 +86,7 @@ async def connect_mcp_server(
     if manager.is_connected(name):
         return f"Already connected to {name!r}."
 
+    manager.set_search(ctx.search)
     servers = config.load_servers()
     cfg = servers.get(name)
     if not cfg:
@@ -336,12 +337,14 @@ async def disconnect_mcp_server(ctx: ToolContext, name: str) -> str:
 
 @registry.tool(emoji=":electric_plug:")
 async def search_mcp_tools(ctx: ToolContext, query: str, server: str = "") -> str:
-    """Search MCP servers for tools matching a query. Searches all
-    configured servers, including disconnected ones.
+    """Semantic search across MCP server tools. Searches all configured
+    servers, including disconnected ones.
 
     query: natural language description of the capability you need
     server: optional server name to limit the search to
     """
+    manager.set_search(ctx.search)
+    await manager.reindex_from_cache()
     index = ctx.search.get_index("mcp-tools")
     results = await index.search(query, limit=20)
     if server:
@@ -350,12 +353,15 @@ async def search_mcp_tools(ctx: ToolContext, query: str, server: str = "") -> st
         return f"No tools matching {query!r}."
 
     connected = manager.connected_servers()
+    hits = results[:10]
     lines: list[str] = []
-    for r in results[:10]:
+    for r in hits:
         srv, tool_name = r.path.split("/", 1)
         status = "connected" if srv in connected else "disconnected"
-        lines.append(f"- **{srv}/{tool_name}** ({status}): {r.snippet}")
-    return "\n".join(lines)
+        lines.append(f"  {srv}/{tool_name} ({status}, score: {r.score:.3f})")
+        snippet = r.snippet.replace("\n", " ")[:120]
+        lines.append(f"    {snippet}")
+    return f"{len(hits)} result(s):\n" + "\n".join(lines)
 
 
 @registry.tool(emoji=":electric_plug:")

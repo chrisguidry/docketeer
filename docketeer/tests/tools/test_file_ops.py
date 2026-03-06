@@ -251,7 +251,7 @@ async def test_search_files_skips_binary(tool_context: ToolContext):
 
 async def test_search_files_semantic(workspace: Path):
     catalog = MemoryCatalog()
-    await catalog.get_index("workspace").index_file("notes/hello.md", "hello world")
+    await catalog.get_index("workspace").index("notes/hello.md", "hello world")
     ctx = ToolContext(workspace=workspace, search=catalog)
 
     result = await registry.execute("search_files", {"query": "hello"}, ctx)
@@ -261,8 +261,8 @@ async def test_search_files_semantic(workspace: Path):
 
 async def test_search_files_semantic_with_path_filter(workspace: Path):
     catalog = MemoryCatalog()
-    await catalog.get_index("workspace").index_file("notes/a.md", "topic alpha")
-    await catalog.get_index("workspace").index_file("docs/b.md", "topic beta")
+    await catalog.get_index("workspace").index("notes/a.md", "topic alpha")
+    await catalog.get_index("workspace").index("docs/b.md", "topic beta")
     ctx = ToolContext(workspace=workspace, search=catalog)
 
     result = await registry.execute(
@@ -274,7 +274,7 @@ async def test_search_files_semantic_with_path_filter(workspace: Path):
 
 async def test_search_files_semantic_path_filter_all_excluded(workspace: Path):
     catalog = MemoryCatalog()
-    await catalog.get_index("workspace").index_file("docs/b.md", "topic beta")
+    await catalog.get_index("workspace").index("docs/b.md", "topic beta")
     ctx = ToolContext(workspace=workspace, search=catalog)
 
     (workspace / "notes").mkdir()

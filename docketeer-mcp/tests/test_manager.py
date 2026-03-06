@@ -380,6 +380,24 @@ async def test_reindex_from_cache(data_dir: Path):
     assert any(r.path == "time/get_time" for r in results)
 
 
+async def test_reindex_from_cache_only_runs_once(data_dir: Path):
+    save_tool_catalog(
+        "time", [CachedToolInfo(name="get_time", description="Get current time")]
+    )
+    catalog = MemoryCatalog()
+    mgr = MCPClientManager(search=catalog)
+    await mgr.reindex_from_cache()
+
+    # Deindex so we can detect if reindex runs again
+    await mgr.deindex_server("time")
+
+    await mgr.reindex_from_cache()
+
+    index = catalog.get_index("mcp-tools")
+    results = await index.search("time")
+    assert not any(r.path == "time/get_time" for r in results)
+
+
 async def test_deindex_server(data_dir: Path):
     save_tool_catalog(
         "time", [CachedToolInfo(name="get_time", description="Get current time")]

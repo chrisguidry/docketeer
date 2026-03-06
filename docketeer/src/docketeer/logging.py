@@ -14,6 +14,7 @@ _VERBOSE_PACKAGES: Final[set[str]] = {
     "websockets",  # WebSocket client/server
     "httpcore",  # HTTP core library (includes http11, connection, etc.)
     "mcp.server.lowlevel",  # MCP low-level server dispatch
+    "markdown_it",  # Markdown parser
     "openai",  # OpenAI API client library
 }
 

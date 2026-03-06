@@ -19,25 +19,28 @@ def _db_path(index_name: str) -> Path:
     return environment.DATA_DIR / "search" / f"{index_name}.db"
 
 
-async def do_index_file(
+async def index(
+    index_name: str,
     path: str,
-    index_name: str = "workspace",
+    content: str = "",
+    file: str = "",
     workspace: Path = WorkspacePath(),
 ) -> None:
-    """Embed and store a single file."""
-    full_path = workspace / path
-    if not full_path.exists():
-        log.debug("Skipping missing file: %s", path)
-        return
+    """Embed and store a single item."""
+    if not content and file:
+        full_path = workspace / file
+        if not full_path.exists():
+            log.debug("Skipping missing file: %s", file)
+            return
 
-    try:
-        content = full_path.read_text()
-    except UnicodeDecodeError:
-        log.debug("Skipping binary file: %s", path)
-        return
+        try:
+            content = full_path.read_text()
+        except UnicodeDecodeError:
+            log.debug("Skipping binary file: %s", file)
+            return
 
     if not content.strip():
-        log.debug("Skipping empty file: %s", path)
+        log.debug("Skipping empty content: %s", path)
         return
 
     embedder = Embedder()
@@ -47,15 +50,14 @@ async def do_index_file(
         log.info("Indexed: %s (index=%s)", path, index_name)
 
 
-async def do_remove_file(
+async def deindex(
+    index_name: str,
     path: str,
-    index_name: str = "workspace",
-    workspace: Path = WorkspacePath(),
 ) -> None:
-    """Remove a file from the search index."""
+    """Remove an item from the search index."""
     with VectorStore(_db_path(index_name)) as store:
         store.remove(path)
         log.info("Removed from index: %s (index=%s)", path, index_name)
 
 
-search_tasks = [do_index_file, do_remove_file]
+search_tasks = [index, deindex]

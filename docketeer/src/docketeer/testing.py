@@ -171,10 +171,10 @@ class MemorySearch(SearchIndex):
                 results.append(SearchResult(path=path, score=1.0, snippet=snippet))
         return results[:limit]
 
-    async def index_file(self, path: str, content: str) -> None:
+    async def index(self, path: str, content: str) -> None:
         self._documents[path] = content
 
-    async def remove_file(self, path: str) -> None:
+    async def deindex(self, path: str) -> None:
         self._documents.pop(path, None)
 
 
