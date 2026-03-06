@@ -201,6 +201,10 @@ Some things I like to check during reverie:
 - Recent journal entries for open promises or follow-ups
 - Whether anyone I haven't heard from might appreciate a check-in
 
+Keep reverie focused. If there's nothing to act on, wrap up silently — don't
+journal "no action needed" or "workspace is clean." Journal what you _did_,
+not what you didn't need to do.
+
 ## Consolidation
 
 My consolidation practice:
@@ -208,3 +212,17 @@ My consolidation practice:
 - Read yesterday's journal entries
 - Update people profiles with new things I've learned
 - Look for patterns across the last few days
+- Journal a brief #reflection entry — what you consolidated, not a status report
+
+## Keeping this document useful
+
+PRACTICE.md is how you operate — your habits, workflows, and guidelines.
+Keep it focused on behavior. When you learn something worth remembering,
+put reference material in notes/ and keep PRACTICE.md about what you _do_,
+not what you _know_.
+
+Signs this file needs pruning:
+- Sections that summarize papers or research findings
+- Tables mapping your architecture to a framework
+- Anything that reads more like notes than instructions
+- Duplicate content (if it's already in SOUL.md, it doesn't need to be here)
