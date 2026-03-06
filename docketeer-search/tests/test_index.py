@@ -1,4 +1,4 @@
-"""Tests for FastembedSearch."""
+"""Tests for FastembedCatalog and FastembedIndex."""
 
 from collections.abc import Iterator
 from pathlib import Path
@@ -6,7 +6,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from docketeer_search.index import INDEX_TASK, REMOVE_TASK, FastembedSearch
+from docketeer_search.index import (
+    INDEX_TASK,
+    REMOVE_TASK,
+    FastembedCatalog,
+    FastembedIndex,
+)
 from tests.conftest import FakeEmbedder
 
 
@@ -18,38 +23,75 @@ def mock_docket() -> MagicMock:
 
 
 @pytest.fixture()
-def search(tmp_path: Path, mock_docket: MagicMock) -> Iterator[FastembedSearch]:
+def catalog(tmp_path: Path, mock_docket: MagicMock) -> Iterator[FastembedCatalog]:
     with (
         patch("docketeer_search.index.Embedder", FakeEmbedder),
         patch("docketeer_search.index.environment.DATA_DIR", tmp_path / "data"),
     ):
-        with FastembedSearch(docket=mock_docket) as s:
-            yield s
+        with FastembedCatalog(docket=mock_docket) as c:
+            yield c
 
 
-async def test_search_empty_index(search: FastembedSearch):
-    results = await search.search("anything")
+def test_get_index_returns_fastembed_index(catalog: FastembedCatalog):
+    index = catalog.get_index("workspace")
+    assert isinstance(index, FastembedIndex)
+
+
+def test_get_index_returns_same_instance(catalog: FastembedCatalog):
+    a = catalog.get_index("workspace")
+    b = catalog.get_index("workspace")
+    assert a is b
+
+
+def test_get_index_different_names(catalog: FastembedCatalog):
+    ws = catalog.get_index("workspace")
+    mcp = catalog.get_index("mcp-tools")
+    assert ws is not mcp
+
+
+async def test_search_empty_index(catalog: FastembedCatalog):
+    index = catalog.get_index("workspace")
+    results = await index.search("anything")
     assert results == []
 
 
-async def test_search_finds_indexed_content(search: FastembedSearch):
-    vec = search._embedder.embed(["hello world"])[0]
-    search._store.upsert("note.md", vec, "hello world")
+async def test_search_finds_indexed_content(catalog: FastembedCatalog):
+    index = catalog.get_index("workspace")
+    vec = index._embedder.embed(["hello world"])[0]
+    index._store.upsert("note.md", vec, "hello world")
 
-    results = await search.search("hello world")
+    results = await index.search("hello world")
     assert len(results) == 1
     assert results[0].path == "note.md"
 
 
 async def test_index_file_schedules_docket_task(
-    search: FastembedSearch, mock_docket: MagicMock
+    catalog: FastembedCatalog, mock_docket: MagicMock
 ):
-    await search.index_file("test.md", "content")
-    mock_docket.add.assert_called_once_with(INDEX_TASK, key="search:index:test.md")
+    index = catalog.get_index("workspace")
+    await index.index_file("test.md", "content")
+    mock_docket.add.assert_called_once_with(
+        INDEX_TASK, key="search:index:workspace:test.md"
+    )
 
 
 async def test_remove_file_schedules_docket_task(
-    search: FastembedSearch, mock_docket: MagicMock
+    catalog: FastembedCatalog, mock_docket: MagicMock
 ):
-    await search.remove_file("test.md")
-    mock_docket.add.assert_called_once_with(REMOVE_TASK, key="search:remove:test.md")
+    index = catalog.get_index("workspace")
+    await index.remove_file("test.md")
+    mock_docket.add.assert_called_once_with(
+        REMOVE_TASK, key="search:remove:workspace:test.md"
+    )
+
+
+async def test_index_file_passes_index_name(
+    catalog: FastembedCatalog, mock_docket: MagicMock
+):
+    index = catalog.get_index("mcp-tools")
+    await index.index_file("server/tool", "description")
+    mock_docket.add.assert_called_once_with(
+        INDEX_TASK, key="search:index:mcp-tools:server/tool"
+    )
+    schedule_fn = mock_docket.add.return_value
+    schedule_fn.assert_called_once_with(index_name="mcp-tools", path="server/tool")

@@ -41,7 +41,7 @@ def _walk_workspace(workspace: Path) -> list[Path]:
 
 def reindex(workspace: Path) -> int:
     """Rebuild the search index from scratch."""
-    db_path = environment.DATA_DIR / "search" / "index.db"
+    db_path = environment.DATA_DIR / "search" / "workspace.db"
 
     files = _walk_workspace(workspace)
     if not files:

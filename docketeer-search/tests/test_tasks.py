@@ -13,15 +13,20 @@ from docketeer_search.tasks import (
 from tests.conftest import FakeEmbedder
 
 
-def test_db_path(workspace: Path):
-    result = _db_path(workspace)
-    assert result.name == "index.db"
+def test_db_path_default():
+    result = _db_path("workspace")
+    assert result.name == "workspace.db"
     assert "search" in result.parts
+
+
+def test_db_path_custom_name():
+    result = _db_path("mcp-tools")
+    assert result.name == "mcp-tools.db"
 
 
 async def test_index_file_embeds_and_stores(workspace: Path, tmp_path: Path):
     (workspace / "note.md").write_text("hello world")
-    db_path = tmp_path / "data" / "search" / "index.db"
+    db_path = tmp_path / "data" / "search" / "workspace.db"
 
     with (
         patch("docketeer_search.tasks.Embedder", FakeEmbedder),
@@ -34,7 +39,7 @@ async def test_index_file_embeds_and_stores(workspace: Path, tmp_path: Path):
 
 
 async def test_index_file_skips_missing(workspace: Path, tmp_path: Path):
-    db_path = tmp_path / "data" / "search" / "index.db"
+    db_path = tmp_path / "data" / "search" / "workspace.db"
     with (
         patch("docketeer_search.tasks.Embedder", FakeEmbedder),
         patch("docketeer_search.tasks._db_path", return_value=db_path),
@@ -47,7 +52,7 @@ async def test_index_file_skips_missing(workspace: Path, tmp_path: Path):
 
 async def test_index_file_skips_binary(workspace: Path, tmp_path: Path):
     (workspace / "bin.dat").write_bytes(b"\x00\x01\x02\xff\xfe")
-    db_path = tmp_path / "data" / "search" / "index.db"
+    db_path = tmp_path / "data" / "search" / "workspace.db"
 
     with (
         patch("docketeer_search.tasks.Embedder", FakeEmbedder),
@@ -61,7 +66,7 @@ async def test_index_file_skips_binary(workspace: Path, tmp_path: Path):
 
 async def test_index_file_skips_empty(workspace: Path, tmp_path: Path):
     (workspace / "empty.md").write_text("   \n  ")
-    db_path = tmp_path / "data" / "search" / "index.db"
+    db_path = tmp_path / "data" / "search" / "workspace.db"
 
     with (
         patch("docketeer_search.tasks.Embedder", FakeEmbedder),
@@ -76,7 +81,7 @@ async def test_index_file_skips_empty(workspace: Path, tmp_path: Path):
 async def test_index_file_truncates_snippet(workspace: Path, tmp_path: Path):
     long_content = "x" * 1_000
     (workspace / "long.md").write_text(long_content)
-    db_path = tmp_path / "data" / "search" / "index.db"
+    db_path = tmp_path / "data" / "search" / "workspace.db"
 
     with (
         patch("docketeer_search.tasks.Embedder", FakeEmbedder),
@@ -91,9 +96,23 @@ async def test_index_file_truncates_snippet(workspace: Path, tmp_path: Path):
         assert len(results[0].snippet) == SNIPPET_LENGTH
 
 
+async def test_index_file_with_custom_index_name(workspace: Path, tmp_path: Path):
+    (workspace / "tool.md").write_text("tool description")
+    db_path = tmp_path / "data" / "search" / "mcp-tools.db"
+
+    with (
+        patch("docketeer_search.tasks.Embedder", FakeEmbedder),
+        patch("docketeer_search.tasks._db_path", return_value=db_path),
+    ):
+        await do_index_file(path="tool.md", index_name="mcp-tools", workspace=workspace)
+
+    with VectorStore(db_path) as store:
+        assert store.list_paths() == {"tool.md"}
+
+
 async def test_remove_file_deletes_entry(workspace: Path, tmp_path: Path):
     (workspace / "gone.md").write_text("bye")
-    db_path = tmp_path / "data" / "search" / "index.db"
+    db_path = tmp_path / "data" / "search" / "workspace.db"
 
     with (
         patch("docketeer_search.tasks.Embedder", FakeEmbedder),

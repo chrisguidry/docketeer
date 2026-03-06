@@ -336,22 +336,25 @@ async def disconnect_mcp_server(ctx: ToolContext, name: str) -> str:
 
 @registry.tool(emoji=":electric_plug:")
 async def search_mcp_tools(ctx: ToolContext, query: str, server: str = "") -> str:
-    """Search connected MCP servers for tools matching a query.
+    """Search MCP servers for tools matching a query. Searches all
+    configured servers, including disconnected ones.
 
-    query: search term to match against tool names and descriptions
+    query: natural language description of the capability you need
     server: optional server name to limit the search to
     """
-    results = manager.search_tools(query, server=server)
+    index = ctx.search.get_index("mcp-tools")
+    results = await index.search(query, limit=20)
+    if server:
+        results = [r for r in results if r.path.startswith(f"{server}/")]
     if not results:
         return f"No tools matching {query!r}."
 
-    lines = []
-    for t in results:
-        lines.append(f"### {t.server} / {t.name}")
-        if t.description:
-            lines.append(t.description)
-        lines.append(f"```json\n{json.dumps(t.input_schema, indent=2)}\n```")
-        lines.append("")
+    connected = manager.connected_servers()
+    lines: list[str] = []
+    for r in results[:10]:
+        srv, tool_name = r.path.split("/", 1)
+        status = "connected" if srv in connected else "disconnected"
+        lines.append(f"- **{srv}/{tool_name}** ({status}): {r.snippet}")
     return "\n".join(lines)
 
 
@@ -446,6 +449,9 @@ async def remove_mcp_server(ctx: ToolContext, name: str) -> str:
             await docket.cancel(f"mcp-refresh-{cfg.auth}")
         except Exception:
             log.debug("Could not cancel refresh task for %s", name, exc_info=True)
+
+    await manager.deindex_server(name)
+    config.remove_tool_catalog(name)
 
     if config.remove_server(name):
         return f"Removed server {name!r}."

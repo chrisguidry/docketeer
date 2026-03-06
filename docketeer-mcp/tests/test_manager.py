@@ -9,7 +9,8 @@ import pytest
 from mcp.types import TextContent
 
 from docketeer.executor import CommandExecutor, Mount, RunningProcess
-from docketeer_mcp.config import MCPServerConfig
+from docketeer.testing import MemoryCatalog
+from docketeer_mcp.config import CachedToolInfo, MCPServerConfig, save_tool_catalog
 from docketeer_mcp.manager import (
     MCPClientManager,
     MCPToolInfo,
@@ -168,7 +169,7 @@ def test_build_transport_invalid():
 
 @pytest.fixture()
 def mgr() -> MCPClientManager:
-    return MCPClientManager()
+    return MCPClientManager(search=MemoryCatalog())
 
 
 async def test_connect_discovers_tools(mgr: MCPClientManager):
@@ -336,3 +337,59 @@ async def test_call_tool_non_text_result(mgr: MCPClientManager):
 async def test_call_tool_not_connected(mgr: MCPClientManager):
     with pytest.raises(ValueError, match="Not connected"):
         await mgr.call_tool("missing", "tool", {})
+
+
+# --- search indexing ---
+
+
+async def test_connect_indexes_tools_for_search(mgr: MCPClientManager):
+    tools = [FakeTool("get_time", "Get current time", {})]
+    client = _mock_client(tools)
+    config = MCPServerConfig(name="time", command="echo")
+
+    with patch("docketeer_mcp.manager.Client", return_value=client):
+        await mgr.connect("time", config)
+
+    index = mgr._search.get_index("mcp-tools")
+    results = await index.search("time")
+    assert any(r.path == "time/get_time" for r in results)
+
+
+async def test_connect_saves_tool_catalog(mgr: MCPClientManager, data_dir: Path):
+    tools = [FakeTool("get_time", "Get current time", {})]
+    client = _mock_client(tools)
+    config = MCPServerConfig(name="time", command="echo")
+
+    with patch("docketeer_mcp.manager.Client", return_value=client):
+        await mgr.connect("time", config)
+
+    catalog_path = data_dir / "mcp" / "catalogs" / "time.json"
+    assert catalog_path.is_file()
+
+
+async def test_reindex_from_cache(data_dir: Path):
+    save_tool_catalog(
+        "time", [CachedToolInfo(name="get_time", description="Get current time")]
+    )
+    catalog = MemoryCatalog()
+    mgr = MCPClientManager(search=catalog)
+    await mgr.reindex_from_cache()
+
+    index = catalog.get_index("mcp-tools")
+    results = await index.search("time")
+    assert any(r.path == "time/get_time" for r in results)
+
+
+async def test_deindex_server(data_dir: Path):
+    save_tool_catalog(
+        "time", [CachedToolInfo(name="get_time", description="Get current time")]
+    )
+    catalog = MemoryCatalog()
+    mgr = MCPClientManager(search=catalog)
+    await mgr.reindex_from_cache()
+
+    await mgr.deindex_server("time")
+
+    index = catalog.get_index("mcp-tools")
+    results = await index.search("time")
+    assert not any(r.path == "time/get_time" for r in results)

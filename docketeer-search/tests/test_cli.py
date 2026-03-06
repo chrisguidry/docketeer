@@ -63,13 +63,13 @@ def test_reindex_indexes_text_files(workspace: Path, tmp_path: Path):
         count = reindex(workspace)
 
     assert count == 2
-    db_path = tmp_path / "data" / "search" / "index.db"
+    db_path = tmp_path / "data" / "search" / "workspace.db"
     with VectorStore(db_path) as store:
         assert store.list_paths() == {"a.md", "b.md"}
 
 
 def test_reindex_removes_stale_entries(workspace: Path, tmp_path: Path):
-    db_path = tmp_path / "data" / "search" / "index.db"
+    db_path = tmp_path / "data" / "search" / "workspace.db"
 
     embedder = FakeEmbedder()
     with VectorStore(db_path) as store:

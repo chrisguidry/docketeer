@@ -144,28 +144,44 @@ async def test_search_no_results(tool_context: ToolContext):
 async def test_search_with_results(
     tool_context: ToolContext, fresh_manager: MCPClientManager
 ):
+    index = tool_context.search.get_index("mcp-tools")
+    await index.index_file("s/get_time", "get_time: Gets the current time")
+    fresh_manager._clients["s"] = object()  # type: ignore[assignment]
     fresh_manager._tools["s"] = [
         MCPToolInfo(
             server="s",
             name="get_time",
             description="Gets the current time",
-            input_schema={"type": "object", "properties": {"tz": {"type": "string"}}},
+            input_schema={},
         ),
     ]
     result = await registry.execute("search_mcp_tools", {"query": "time"}, tool_context)
-    assert "s / get_time" in result
+    assert "s/get_time" in result
+    assert "connected" in result
     assert "Gets the current time" in result
-    assert '"tz"' in result
 
 
-async def test_search_no_description(
+async def test_search_disconnected_server(
     tool_context: ToolContext, fresh_manager: MCPClientManager
 ):
-    fresh_manager._tools["s"] = [
-        MCPToolInfo(server="s", name="bare_tool", description="", input_schema={}),
-    ]
+    index = tool_context.search.get_index("mcp-tools")
+    await index.index_file("s/bare_tool", "bare_tool: does bare things")
     result = await registry.execute("search_mcp_tools", {"query": "bare"}, tool_context)
     assert "bare_tool" in result
+    assert "disconnected" in result
+
+
+async def test_search_filters_by_server(
+    tool_context: ToolContext, fresh_manager: MCPClientManager
+):
+    index = tool_context.search.get_index("mcp-tools")
+    await index.index_file("a/tool1", "tool1: tool on a")
+    await index.index_file("b/tool2", "tool2: tool on b")
+    result = await registry.execute(
+        "search_mcp_tools", {"query": "tool", "server": "a"}, tool_context
+    )
+    assert "a/tool1" in result
+    assert "b/tool2" not in result
 
 
 async def test_use_tool_success(

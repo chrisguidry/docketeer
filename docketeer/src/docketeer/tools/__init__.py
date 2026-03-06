@@ -14,7 +14,7 @@ from typing import Any, get_args, get_origin, get_type_hints
 from docketeer.executor import CommandExecutor, NullExecutor
 from docketeer.plugins import discover_all
 from docketeer.prompt import CacheControl
-from docketeer.search import NullSearch, SearchIndex
+from docketeer.search import NullCatalog, SearchCatalog
 from docketeer.vault import NullVault, Vault
 
 log = logging.getLogger(__name__)
@@ -56,7 +56,7 @@ class ToolContext:
     classify_response: Callable[[str, int, str], Awaitable[bool]] | None = None
     executor: CommandExecutor = field(default_factory=NullExecutor)
     vault: Vault = field(default_factory=NullVault)
-    search: SearchIndex = field(default_factory=NullSearch)
+    search: SearchCatalog = field(default_factory=NullCatalog)
 
 
 class ToolRegistry:

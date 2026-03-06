@@ -7,11 +7,16 @@ import pytest
 
 from docketeer.vault import SecretEnvRef
 from docketeer_mcp.config import (
+    CachedToolInfo,
     MCPServerConfig,
     _validate_name,
+    load_all_tool_catalogs,
     load_servers,
+    load_tool_catalog,
     remove_server,
+    remove_tool_catalog,
     save_server,
+    save_tool_catalog,
 )
 
 
@@ -269,3 +274,63 @@ def test_load_save_roundtrip_secret_env(mcp_dir: Path):
     save_server(servers["rt"])
     data = json.loads((mcp_dir / "rt.json").read_text())
     assert data["env"] == original_env
+
+
+# --- tool catalog persistence ---
+
+
+def test_save_and_load_tool_catalog(mcp_dir: Path):
+    tools = [
+        CachedToolInfo(name="get_time", description="Gets the time"),
+        CachedToolInfo(name="set_alarm", description="Sets an alarm"),
+    ]
+    save_tool_catalog("time", tools)
+    loaded = load_tool_catalog("time")
+    assert len(loaded) == 2
+    assert loaded[0].name == "get_time"
+    assert loaded[0].description == "Gets the time"
+    assert loaded[1].name == "set_alarm"
+
+
+def test_load_tool_catalog_missing(mcp_dir: Path):
+    assert load_tool_catalog("nonexistent") == []
+
+
+def test_load_tool_catalog_bad_json(mcp_dir: Path):
+    catalog_dir = mcp_dir / "catalogs"
+    catalog_dir.mkdir()
+    (catalog_dir / "bad.json").write_text("not json{{{")
+    assert load_tool_catalog("bad") == []
+
+
+def test_load_all_tool_catalogs(mcp_dir: Path):
+    save_tool_catalog("time", [CachedToolInfo(name="get_time", description="time")])
+    save_tool_catalog("weather", [CachedToolInfo(name="forecast", description="wx")])
+    catalogs = load_all_tool_catalogs()
+    assert "time" in catalogs
+    assert "weather" in catalogs
+    assert len(catalogs["time"]) == 1
+    assert len(catalogs["weather"]) == 1
+
+
+def test_load_all_tool_catalogs_no_dir(mcp_dir: Path):
+    assert load_all_tool_catalogs() == {}
+
+
+def test_remove_tool_catalog(mcp_dir: Path):
+    save_tool_catalog("time", [CachedToolInfo(name="t", description="d")])
+    assert remove_tool_catalog("time") is True
+    assert load_tool_catalog("time") == []
+
+
+def test_remove_tool_catalog_missing(mcp_dir: Path):
+    assert remove_tool_catalog("nonexistent") is False
+
+
+def test_load_all_tool_catalogs_skips_empty(mcp_dir: Path):
+    save_tool_catalog("good", [CachedToolInfo(name="t", description="d")])
+    catalog_dir = mcp_dir / "catalogs"
+    (catalog_dir / "empty.json").write_text("[]")
+    catalogs = load_all_tool_catalogs()
+    assert "good" in catalogs
+    assert "empty" not in catalogs

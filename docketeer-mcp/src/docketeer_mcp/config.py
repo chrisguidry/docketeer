@@ -131,3 +131,60 @@ def remove_server(name: str) -> bool:
         return False
     path.unlink()
     return True
+
+
+# --- Tool catalog persistence ---
+
+
+@dataclass
+class CachedToolInfo:
+    """Serializable tool metadata for disk caching."""
+
+    name: str
+    description: str
+
+
+def save_tool_catalog(server_name: str, tools: list[CachedToolInfo]) -> None:
+    """Persist a server's tool catalog to disk."""
+    catalog_dir = _mcp_dir() / "catalogs"
+    catalog_dir.mkdir(parents=True, exist_ok=True)
+    data = [{"name": t.name, "description": t.description} for t in tools]
+    (catalog_dir / f"{server_name}.json").write_text(json.dumps(data, indent=2) + "\n")
+
+
+def load_tool_catalog(server_name: str) -> list[CachedToolInfo]:
+    """Load a server's cached tool catalog from disk."""
+    path = _mcp_dir() / "catalogs" / f"{server_name}.json"
+    if not path.is_file():
+        return []
+    try:
+        data = json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return []
+    return [
+        CachedToolInfo(name=t["name"], description=t.get("description", ""))
+        for t in data
+    ]
+
+
+def load_all_tool_catalogs() -> dict[str, list[CachedToolInfo]]:
+    """Load all cached tool catalogs from disk."""
+    catalog_dir = _mcp_dir() / "catalogs"
+    if not catalog_dir.is_dir():
+        return {}
+    catalogs: dict[str, list[CachedToolInfo]] = {}
+    for path in sorted(catalog_dir.glob("*.json")):
+        server_name = path.stem
+        tools = load_tool_catalog(server_name)
+        if tools:
+            catalogs[server_name] = tools
+    return catalogs
+
+
+def remove_tool_catalog(server_name: str) -> bool:
+    """Delete a server's cached tool catalog. Returns True if the file existed."""
+    path = _mcp_dir() / "catalogs" / f"{server_name}.json"
+    if not path.is_file():
+        return False
+    path.unlink()
+    return True

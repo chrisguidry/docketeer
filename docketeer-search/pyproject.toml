@@ -31,9 +31,6 @@ docketeer-search = "docketeer_search.cli:main"
 [project.entry-points."docketeer.search"]
 fastembed = "docketeer_search"
 
-[project.entry-points."docketeer.tools"]
-search = "docketeer_search.tools"
-
 [project.entry-points."docketeer.tasks"]
 search = "docketeer_search:task_collections"
 

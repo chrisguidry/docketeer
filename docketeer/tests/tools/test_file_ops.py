@@ -1,7 +1,9 @@
 """Tests for file operation tools (list, read, write, delete, search, links)."""
 
 import os
+from pathlib import Path
 
+from docketeer.testing import MemoryCatalog
 from docketeer.tools import ToolContext, registry
 
 
@@ -242,3 +244,50 @@ async def test_search_files_skips_binary(tool_context: ToolContext):
     result = await registry.execute("search_files", {"query": "match"}, tool_context)
     assert "ok.txt" in result
     assert "bin.dat" not in result
+
+
+# --- semantic search path ---
+
+
+async def test_search_files_semantic(workspace: Path):
+    catalog = MemoryCatalog()
+    await catalog.get_index("workspace").index_file("notes/hello.md", "hello world")
+    ctx = ToolContext(workspace=workspace, search=catalog)
+
+    result = await registry.execute("search_files", {"query": "hello"}, ctx)
+    assert "1 result(s)" in result
+    assert "notes/hello.md" in result
+
+
+async def test_search_files_semantic_with_path_filter(workspace: Path):
+    catalog = MemoryCatalog()
+    await catalog.get_index("workspace").index_file("notes/a.md", "topic alpha")
+    await catalog.get_index("workspace").index_file("docs/b.md", "topic beta")
+    ctx = ToolContext(workspace=workspace, search=catalog)
+
+    result = await registry.execute(
+        "search_files", {"query": "topic", "path": "notes"}, ctx
+    )
+    assert "notes/a.md" in result
+    assert "docs/b.md" not in result
+
+
+async def test_search_files_semantic_path_filter_all_excluded(workspace: Path):
+    catalog = MemoryCatalog()
+    await catalog.get_index("workspace").index_file("docs/b.md", "topic beta")
+    ctx = ToolContext(workspace=workspace, search=catalog)
+
+    (workspace / "notes").mkdir()
+    result = await registry.execute(
+        "search_files", {"query": "topic", "path": "notes"}, ctx
+    )
+    assert "No matches" in result
+
+
+async def test_search_files_semantic_no_results_falls_back(workspace: Path):
+    catalog = MemoryCatalog()
+    ctx = ToolContext(workspace=workspace, search=catalog)
+    (workspace / "found.txt").write_text("keyword match here")
+
+    result = await registry.execute("search_files", {"query": "keyword"}, ctx)
+    assert "found.txt:1:keyword match here" in result

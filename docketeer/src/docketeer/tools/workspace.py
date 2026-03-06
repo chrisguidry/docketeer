@@ -1,6 +1,7 @@
 """Workspace file and directory tools."""
 
 import os
+from pathlib import Path
 
 from . import ToolContext, registry, safe_path
 
@@ -59,7 +60,7 @@ async def write_file(ctx: ToolContext, path: str, content: str) -> str:
     target = safe_path(ctx.workspace, path)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(content)
-    await ctx.search.index_file(path, content)
+    await ctx.search.get_index("workspace").index_file(path, content)
     return f"Wrote {len(content)} bytes to {path}"
 
 
@@ -95,7 +96,7 @@ async def edit_file(
         return f"old_string appears {count} times in {path} (must be unique)"
     updated = content.replace(old_string, new_string, 1)
     target.write_text(updated)
-    await ctx.search.index_file(path, updated)
+    await ctx.search.get_index("workspace").index_file(path, updated)
     return f"Edited {path}"
 
 
@@ -111,7 +112,7 @@ async def delete_file(ctx: ToolContext, path: str) -> str:
     if target.is_dir():
         return f"Cannot delete directories, only files: {path}"
     target.unlink()
-    await ctx.search.remove_file(path)
+    await ctx.search.get_index("workspace").remove_file(path)
     return f"Deleted {path}"
 
 
@@ -150,19 +151,38 @@ async def read_link(ctx: ToolContext, path: str) -> str:
     return str(os.readlink(unresolved))
 
 
-@registry.tool(emoji=":open_file_folder:")
+@registry.tool(emoji=":mag:")
 async def search_files(ctx: ToolContext, query: str, path: str = "") -> str:
-    """Search for text across files in the workspace.
+    """Search workspace files by meaning or text. Uses semantic search when
+    a search plugin is installed, falls back to keyword matching otherwise.
 
-    query: text to search for (case-insensitive)
+    query: what you're looking for (natural language or keywords)
     path: relative path to search within (empty string for all)
     """
-    target = safe_path(ctx.workspace, path)
+    index = ctx.search.get_index("workspace")
+    results = await index.search(query, limit=10)
+    if results:
+        lines: list[str] = []
+        for r in results:
+            if path and not r.path.startswith(path):
+                continue
+            lines.append(f"  {r.path} (score: {r.score:.3f})")
+            snippet = r.snippet.replace("\n", " ")[:120]
+            lines.append(f"    {snippet}")
+        if lines:
+            return f"{len(lines) // 2} result(s):\n" + "\n".join(lines)
+
+    return _keyword_search(ctx.workspace, query, path)
+
+
+def _keyword_search(workspace: Path, query: str, path: str) -> str:
+    """Grep-style keyword fallback for when no search plugin is installed."""
+    target = safe_path(workspace, path)
     if not target.exists():
         return f"Directory not found: {path}"
 
     query_lower = query.lower()
-    matches = []
+    matches: list[str] = []
     for file in sorted(target.rglob("*")):
         if not file.is_file():
             continue
@@ -172,7 +192,7 @@ async def search_files(ctx: ToolContext, query: str, path: str = "") -> str:
             continue
         for line_num, line in enumerate(text.splitlines(), 1):
             if query_lower in line.lower():
-                rel = file.relative_to(ctx.workspace.resolve())
+                rel = file.relative_to(workspace.resolve())
                 matches.append(f"{rel}:{line_num}:{line.rstrip()}")
                 if len(matches) >= 50:
                     matches.append("(results truncated at 50 matches)")

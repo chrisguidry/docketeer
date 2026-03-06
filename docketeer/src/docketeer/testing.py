@@ -16,7 +16,7 @@ from docketeer.chat import (
     RoomInfo,
     RoomMessage,
 )
-from docketeer.search import SearchIndex, SearchResult
+from docketeer.search import SearchCatalog, SearchIndex, SearchResult
 from docketeer.vault import SecretReference, Vault
 
 
@@ -176,6 +176,18 @@ class MemorySearch(SearchIndex):
 
     async def remove_file(self, path: str) -> None:
         self._documents.pop(path, None)
+
+
+class MemoryCatalog(SearchCatalog):
+    """In-memory SearchCatalog for tests."""
+
+    def __init__(self) -> None:
+        self._indices: dict[str, MemorySearch] = {}
+
+    def get_index(self, name: str) -> MemorySearch:
+        if name not in self._indices:
+            self._indices[name] = MemorySearch()
+        return self._indices[name]
 
 
 class MemoryVault(Vault):

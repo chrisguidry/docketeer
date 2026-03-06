@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from docketeer import environment
+from docketeer.testing import MemoryCatalog
 from docketeer.tools import ToolContext
 from docketeer_mcp.manager import MCPClientManager
 
@@ -27,13 +28,13 @@ def workspace(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def tool_context(workspace: Path) -> ToolContext:
-    return ToolContext(workspace=workspace, room_id="room1")
+    return ToolContext(workspace=workspace, room_id="room1", search=MemoryCatalog())
 
 
 @pytest.fixture()
 def fresh_manager() -> Generator[MCPClientManager]:
     """Replace the module-level manager with a fresh instance for each test."""
-    fresh = MCPClientManager()
+    fresh = MCPClientManager(search=MemoryCatalog())
     with (
         patch("docketeer_mcp.tools.manager", fresh),
         patch("docketeer_mcp.prompt.manager", fresh),

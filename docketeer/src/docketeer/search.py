@@ -44,15 +44,35 @@ class NullSearch(SearchIndex):
         pass
 
 
-def discover_search(**kwargs: object) -> SearchIndex:
-    """Discover the search index via entry_points.
+class SearchCatalog(ABC):
+    """A catalog of named search indices."""
 
-    Returns NullSearch when no plugin is installed, so callers always
-    get a usable SearchIndex without null checks.
+    @abstractmethod
+    def get_index(self, name: str) -> SearchIndex:
+        """Return a SearchIndex for the given namespace.
+
+        Creates the index on first access. Each name gets an independent
+        index with its own storage.
+        """
+        ...
+
+
+class NullCatalog(SearchCatalog):
+    """No-op catalog for when no search plugin is installed."""
+
+    def get_index(self, name: str) -> SearchIndex:
+        return NullSearch()
+
+
+def discover_search(**kwargs: object) -> SearchCatalog:
+    """Discover the search catalog via entry_points.
+
+    Returns NullCatalog when no plugin is installed, so callers always
+    get a usable SearchCatalog without null checks.
     """
     ep = discover_one("docketeer.search", "SEARCH")
     if ep is None:
         log.info("No search plugin installed — semantic search unavailable")
-        return NullSearch()
+        return NullCatalog()
     module = ep.load()
     return module.create_search(**kwargs)

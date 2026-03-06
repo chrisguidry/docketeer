@@ -11,8 +11,15 @@ from fastmcp.client.transports.stdio import StdioTransport
 from mcp.types import TextContent
 
 from docketeer.executor import CommandExecutor, Mount
+from docketeer.search import NullCatalog, SearchCatalog
 
-from .config import MCPServerConfig, _mcp_dir
+from .config import (
+    CachedToolInfo,
+    MCPServerConfig,
+    _mcp_dir,
+    load_all_tool_catalogs,
+    save_tool_catalog,
+)
 from .oauth import PendingOAuth
 from .transport import ExecutorTransport
 
@@ -81,11 +88,12 @@ def _build_transport(
 class MCPClientManager:
     """Manages connections to MCP servers and their tool catalogs."""
 
-    def __init__(self) -> None:
+    def __init__(self, search: SearchCatalog | None = None) -> None:
         self._clients: dict[str, Client] = {}
         self._stacks: dict[str, AsyncExitStack] = {}
         self._tools: dict[str, list[MCPToolInfo]] = {}
         self._pending_oauth: dict[str, PendingOAuth] = {}
+        self._search = search or NullCatalog()
 
     async def connect(
         self,
@@ -125,6 +133,12 @@ class MCPClientManager:
         self._clients[name] = client
         self._stacks[name] = stack
         self._tools[name] = tools
+
+        # Cache tool catalog and index for semantic search
+        cached = [CachedToolInfo(name=t.name, description=t.description) for t in tools]
+        save_tool_catalog(name, cached)
+        await self._index_tools(name, cached)
+
         return tools
 
     async def disconnect(self, name: str) -> None:
@@ -179,6 +193,28 @@ class MCPClientManager:
             else:
                 parts.append(str(block))
         return "\n".join(parts)
+
+    async def reindex_from_cache(self) -> None:
+        """Load all cached tool catalogs and index them for semantic search."""
+        catalogs = load_all_tool_catalogs()
+        for server_name, tools in catalogs.items():
+            await self._index_tools(server_name, tools)
+
+    async def deindex_server(self, name: str) -> None:
+        """Remove all indexed tools for a server from the search index."""
+        index = self._search.get_index("mcp-tools")
+        catalog = load_all_tool_catalogs().get(name, [])
+        for tool in catalog:
+            await index.remove_file(f"{name}/{tool.name}")
+
+    async def _index_tools(self, name: str, tools: list[CachedToolInfo]) -> None:
+        """Index a server's tools for semantic search."""
+        index = self._search.get_index("mcp-tools")
+        for tool in tools:
+            await index.index_file(
+                f"{name}/{tool.name}",
+                f"{tool.name}: {tool.description}",
+            )
 
 
 manager = MCPClientManager()

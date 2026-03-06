@@ -14,7 +14,7 @@ from docketeer.brain.backend import InferenceBackend
 from docketeer.chat import ChatClient
 from docketeer.executor import CommandExecutor
 from docketeer.plugins import discover_one
-from docketeer.search import SearchIndex
+from docketeer.search import SearchCatalog
 from docketeer.vault import Vault
 
 # ContextVars — set in main() before the worker starts
@@ -23,7 +23,7 @@ _brain_var: ContextVar[Brain] = ContextVar("docketeer_brain")
 _client_var: ContextVar[ChatClient] = ContextVar("docketeer_client")
 _executor_var: ContextVar[CommandExecutor] = ContextVar("docketeer_executor")
 _vault_var: ContextVar[Vault] = ContextVar("docketeer_vault")
-_search_var: ContextVar[SearchIndex] = ContextVar("docketeer_search")
+_search_var: ContextVar[SearchCatalog] = ContextVar("docketeer_search")
 _docket_var: ContextVar[Docket] = ContextVar("docketeer_docket")
 
 
@@ -43,7 +43,7 @@ def set_vault(vault: Vault) -> None:
     _vault_var.set(vault)
 
 
-def set_search(search: SearchIndex) -> None:
+def set_search(search: SearchCatalog) -> None:
     _search_var.set(search)
 
 
@@ -91,12 +91,12 @@ def CurrentVault() -> Vault:
 
 
 class _CurrentSearch(Dependency):
-    async def __aenter__(self) -> SearchIndex:
+    async def __aenter__(self) -> SearchCatalog:
         return _search_var.get()
 
 
-def CurrentSearch() -> SearchIndex:
-    return cast(SearchIndex, _CurrentSearch())
+def CurrentSearch() -> SearchCatalog:
+    return cast(SearchCatalog, _CurrentSearch())
 
 
 class _CurrentDocket(Dependency):
