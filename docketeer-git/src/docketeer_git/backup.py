@@ -80,7 +80,7 @@ async def _has_changes(workspace: Path) -> bool:
     output = await status.stdout.read()
     assert status.stderr is not None
     stderr = await status.stderr.read()
-    log.debug(
+    log.info(
         "_has_changes: rc=%s stdout=%r stderr=%r",
         status.returncode,
         output[:500],
@@ -106,7 +106,7 @@ async def _generate_commit_message(
         )
         return summary.strip() or f"backup: {timestamp}"
     except Exception:
-        log.debug("LLM commit message failed, using timestamp", exc_info=True)
+        log.info("LLM commit message failed, using timestamp", exc_info=True)
         return f"backup: {timestamp}"
 
 
@@ -120,14 +120,14 @@ async def backup(
     backend: InferenceBackend | None = CurrentInferenceBackend(),
 ) -> None:
     """Commit workspace changes and optionally push to a remote."""
-    log.debug("backup: workspace=%s", workspace)
+    log.info("backup: workspace=%s", workspace)
 
     if not any(workspace.iterdir()):
-        log.debug("backup: workspace is empty, skipping")
+        log.info("backup: workspace is empty, skipping")
         return
 
     if not (workspace / ".git").is_dir():
-        log.debug("backup: no .git dir, initializing repo")
+        log.info("backup: no .git dir, initializing repo")
         await _init_repo(
             workspace,
             branch=branch,
@@ -137,7 +137,7 @@ async def backup(
         )
 
     has_changes = await _has_changes(workspace)
-    log.debug("backup: has_changes=%s", has_changes)
+    log.info("backup: has_changes=%s", has_changes)
     if not has_changes:
         return
 
