@@ -117,7 +117,8 @@ class _CurrentInferenceBackend(Dependency):
         if ep is None:
             return None
         factory = ep.load()
-        return factory(executor=None)
+        executor = _executor_var.get(None)
+        return factory(executor=executor)
 
 
 def CurrentInferenceBackend() -> InferenceBackend | None:

@@ -1,5 +1,6 @@
 """Tests for Docketeer's Docket dependencies."""
 
+from collections.abc import Iterator
 from datetime import timedelta
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
@@ -43,35 +44,68 @@ from docketeer.dependencies import (
     set_vault,
 )
 
+# --- Context var fixtures ---
 
-async def test_current_brain():
+
+@pytest.fixture()
+def brain_var() -> Iterator[AsyncMock]:
     brain = AsyncMock()
     token = _brain_var.set(brain)
-    try:
-        dep = _CurrentBrain()
-        assert await dep.__aenter__() is brain
-    finally:
-        _brain_var.reset(token)
+    yield brain
+    _brain_var.reset(token)
+
+
+@pytest.fixture()
+def client_var() -> Iterator[AsyncMock]:
+    client = AsyncMock()
+    token = _client_var.set(client)
+    yield client
+    _client_var.reset(token)
+
+
+@pytest.fixture()
+def executor_var() -> Iterator[AsyncMock]:
+    executor = AsyncMock()
+    token = _executor_var.set(executor)
+    yield executor
+    _executor_var.reset(token)
+
+
+@pytest.fixture()
+def vault_var() -> Iterator[AsyncMock]:
+    vault = AsyncMock()
+    token = _vault_var.set(vault)
+    yield vault
+    _vault_var.reset(token)
+
+
+@pytest.fixture()
+def search_var() -> Iterator[AsyncMock]:
+    search = AsyncMock()
+    token = _search_var.set(search)
+    yield search
+    _search_var.reset(token)
+
+
+@pytest.fixture()
+def docket_var() -> Iterator[AsyncMock]:
+    docket = AsyncMock()
+    token = _docket_var.set(docket)
+    yield docket
+    _docket_var.reset(token)
+
+
+# --- CurrentBrain ---
+
+
+async def test_current_brain(brain_var: AsyncMock):
+    dep = _CurrentBrain()
+    assert await dep.__aenter__() is brain_var
 
 
 async def test_current_brain_factory_returns_dependency():
     result = CurrentBrain()
     assert isinstance(result, _CurrentBrain)
-
-
-async def test_current_chat_client():
-    client = AsyncMock()
-    token = _client_var.set(client)
-    try:
-        dep = _CurrentChatClient()
-        assert await dep.__aenter__() is client
-    finally:
-        _client_var.reset(token)
-
-
-async def test_current_chat_client_factory_returns_dependency():
-    result = CurrentChatClient()
-    assert isinstance(result, _CurrentChatClient)
 
 
 def test_set_brain():
@@ -80,10 +114,26 @@ def test_set_brain():
     assert _brain_var.get() is brain
 
 
+# --- CurrentChatClient ---
+
+
+async def test_current_chat_client(client_var: AsyncMock):
+    dep = _CurrentChatClient()
+    assert await dep.__aenter__() is client_var
+
+
+async def test_current_chat_client_factory_returns_dependency():
+    result = CurrentChatClient()
+    assert isinstance(result, _CurrentChatClient)
+
+
 def test_set_client():
     client = AsyncMock()
     set_client(client)
     assert _client_var.get() is client
+
+
+# --- WorkspacePath ---
 
 
 async def test_workspace_path(tmp_path: Path):
@@ -186,14 +236,9 @@ def test_environment_timedelta_factory():
 # --- CurrentExecutor ---
 
 
-async def test_current_executor():
-    executor = AsyncMock()
-    token = _executor_var.set(executor)
-    try:
-        dep = _CurrentExecutor()
-        assert await dep.__aenter__() is executor
-    finally:
-        _executor_var.reset(token)
+async def test_current_executor(executor_var: AsyncMock):
+    dep = _CurrentExecutor()
+    assert await dep.__aenter__() is executor_var
 
 
 async def test_current_executor_factory_returns_dependency():
@@ -210,14 +255,9 @@ def test_set_executor():
 # --- CurrentVault ---
 
 
-async def test_current_vault():
-    vault = AsyncMock()
-    token = _vault_var.set(vault)
-    try:
-        dep = _CurrentVault()
-        assert await dep.__aenter__() is vault
-    finally:
-        _vault_var.reset(token)
+async def test_current_vault(vault_var: AsyncMock):
+    dep = _CurrentVault()
+    assert await dep.__aenter__() is vault_var
 
 
 async def test_current_vault_factory_returns_dependency():
@@ -234,14 +274,9 @@ def test_set_vault():
 # --- CurrentSearch ---
 
 
-async def test_current_search():
-    search = AsyncMock()
-    token = _search_var.set(search)
-    try:
-        dep = _CurrentSearch()
-        assert await dep.__aenter__() is search
-    finally:
-        _search_var.reset(token)
+async def test_current_search(search_var: AsyncMock):
+    dep = _CurrentSearch()
+    assert await dep.__aenter__() is search_var
 
 
 async def test_current_search_factory_returns_dependency():
@@ -258,7 +293,7 @@ def test_set_search():
 # --- CurrentInferenceBackend ---
 
 
-async def test_current_inference_backend():
+async def test_current_inference_backend(executor_var: AsyncMock):
     backend = AsyncMock()
     factory = Mock(return_value=backend)
     ep = Mock()
@@ -266,7 +301,7 @@ async def test_current_inference_backend():
     with patch("docketeer.dependencies.discover_one", return_value=ep):
         dep = _CurrentInferenceBackend()
         assert await dep.__aenter__() is backend
-    factory.assert_called_once_with(executor=None)
+    factory.assert_called_once_with(executor=executor_var)
 
 
 async def test_current_inference_backend_no_plugin():
@@ -283,14 +318,9 @@ def test_current_inference_backend_factory():
 # --- CurrentDocket ---
 
 
-async def test_current_docket():
-    docket = AsyncMock()
-    token = _docket_var.set(docket)
-    try:
-        dep = _CurrentDocket()
-        assert await dep.__aenter__() is docket
-    finally:
-        _docket_var.reset(token)
+async def test_current_docket(docket_var: AsyncMock):
+    dep = _CurrentDocket()
+    assert await dep.__aenter__() is docket_var
 
 
 async def test_current_docket_factory_returns_dependency():
