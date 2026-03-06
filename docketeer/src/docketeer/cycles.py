@@ -9,8 +9,15 @@ from docket.dependencies import Cron, Perpetual, TaskKey
 
 from docketeer import environment
 from docketeer.brain import CONSOLIDATION_MODEL, REVERIE_MODEL, Brain
-from docketeer.brain.backend import BackendAuthError
-from docketeer.dependencies import CurrentBrain, WorkspacePath
+from docketeer.brain.backend import BackendAuthError, InferenceBackend
+from docketeer.chat import ChatClient
+from docketeer.dependencies import (
+    CurrentBrain,
+    CurrentChatClient,
+    CurrentInferenceBackend,
+    WorkspacePath,
+)
+from docketeer.digest import build_conversation_digest
 from docketeer.prompt import MessageContent
 
 log = logging.getLogger(__name__)
@@ -70,10 +77,16 @@ async def reverie(
     brain: Brain = CurrentBrain(),
     workspace: Path = WorkspacePath(),
     task_key: str = TaskKey(),
+    chat: ChatClient = CurrentChatClient(),
+    backend: InferenceBackend | None = CurrentInferenceBackend(),
 ) -> None:
     """Periodic receptive internal processing cycle."""
     prompt = _build_cycle_prompt(REVERIE_PROMPT, workspace, "Reverie")
     now = datetime.now().astimezone()
+    since = now - REVERIE_INTERVAL
+    digest = await build_conversation_digest(chat, backend, since=since)
+    if digest:
+        prompt = f"{digest}\n\n---\n\n{prompt}"
     content = MessageContent(username="system", timestamp=now, text=prompt)
     try:
         response = await brain.process(

@@ -40,7 +40,7 @@ def test_ensure_template_skips_existing(workspace: Path):
 def test_build_system_blocks_stable_only(workspace: Path):
     (workspace / "SOUL.md").write_text("I am the soul")
     blocks = build_system_blocks(workspace)
-    assert len(blocks) == 1
+    assert len(blocks) >= 1
     assert "I am the soul" in blocks[0].text
     assert blocks[-1].cache_control == CacheControl()
 

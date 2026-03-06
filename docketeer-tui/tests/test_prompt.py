@@ -15,6 +15,7 @@ def test_provide_tui_context(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     assert blocks[0].cache_control is None
 
 
-def test_provide_tui_context_inactive(tmp_path: Path):
+def test_provide_tui_context_inactive(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    monkeypatch.delenv("DOCKETEER_CHAT", raising=False)
     blocks = provide_tui_context(tmp_path)
     assert blocks == []

@@ -1,5 +1,6 @@
 """Tests for the cycles module."""
 
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -7,6 +8,7 @@ import pytest
 
 from docketeer.brain import Brain
 from docketeer.brain.backend import BackendAuthError
+from docketeer.chat import RoomInfo, RoomKind, RoomMessage
 from docketeer.cycles import (
     CONSOLIDATION_PROMPT,
     REVERIE_PROMPT,
@@ -17,6 +19,7 @@ from docketeer.cycles import (
 )
 from docketeer.prompt import extract_text
 from docketeer.tasks import docketeer_tasks
+from docketeer.testing import MemoryChat
 
 from .conftest import (
     FakeMessage,
@@ -149,3 +152,52 @@ async def test_consolidation_auth_error_propagates(workspace: Path):
     brain.process.side_effect = make_backend_auth_error()
     with pytest.raises(BackendAuthError):
         await consolidation(task_key="consolidation", brain=brain, workspace=workspace)
+
+
+# --- Digest integration tests ---
+
+EST = timezone(timedelta(hours=-5))
+
+
+async def test_reverie_includes_digest(
+    brain: Brain, workspace: Path, fake_messages: Any
+):
+    chat = MemoryChat()
+    room = RoomInfo(room_id="general", kind=RoomKind.public, members=[], name="general")
+    chat._rooms = [room]
+    now = datetime.now().astimezone()
+    chat._room_messages["general"] = [
+        RoomMessage(
+            message_id="m1",
+            timestamp=now - timedelta(minutes=5),
+            username="alice",
+            display_name="Alice",
+            text="Hey everyone!",
+        ),
+    ]
+    await reverie(
+        task_key="reverie",
+        brain=brain,
+        workspace=workspace,
+        chat=chat,
+        backend=None,
+    )
+    msgs = brain._conversations["__task__:reverie"]
+    all_content = " ".join(extract_text(m.content) for m in msgs)
+    assert "#general" in all_content
+    assert "Hey everyone!" in all_content
+    assert REVERIE_PROMPT in all_content
+
+
+async def test_reverie_without_backend(
+    brain: Brain, workspace: Path, fake_messages: Any
+):
+    chat = MemoryChat()
+    await reverie(
+        task_key="reverie",
+        brain=brain,
+        workspace=workspace,
+        chat=chat,
+        backend=None,
+    )
+    assert "__task__:reverie" in brain._conversations
