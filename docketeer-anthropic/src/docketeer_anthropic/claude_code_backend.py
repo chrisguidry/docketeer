@@ -84,9 +84,13 @@ class ClaudeCodeBackend(InferenceBackend):
         thinking: bool = False,
     ) -> str:
         model_map = {
-            "smart": environment.get_str("MODEL_SMART", "claude-opus-4-6"),
-            "balanced": environment.get_str("MODEL_BALANCED", "claude-sonnet-4-6"),
-            "fast": environment.get_str("MODEL_FAST", "claude-haiku-4-5-20251001"),
+            "smart": environment.get_str("ANTHROPIC_MODEL_SMART", "claude-opus-4-6"),
+            "balanced": environment.get_str(
+                "ANTHROPIC_MODEL_BALANCED", "claude-sonnet-4-6"
+            ),
+            "fast": environment.get_str(
+                "ANTHROPIC_MODEL_FAST", "claude-haiku-4-5-20251001"
+            ),
         }
         model_id = model_map.get(tier, "claude-sonnet-4-6")
 

@@ -240,8 +240,9 @@ export DOCKETEER_DEEPINFRA_MODEL="MiniMaxAI/MiniMax-M2.5"
 Docketeer uses three model tiers — `CHAT_MODEL`, `REVERIE_MODEL`, and
 `CONSOLIDATION_MODEL` — each defaulting to `"balanced"`. Each backend maps
 tier names to its own model IDs, and the DeepInfra backend also lets you
-override per-tier with `DOCKETEER_MODEL_BALANCED`, `DOCKETEER_MODEL_FAST`,
-etc.
+override per-tier with `DOCKETEER_DEEPINFRA_MODEL_BALANCED`,
+`DOCKETEER_DEEPINFRA_MODEL_FAST`, etc. (the Anthropic backend uses
+`DOCKETEER_ANTHROPIC_MODEL_BALANCED`, `DOCKETEER_ANTHROPIC_MODEL_FAST`, etc.).
 
 Run the agent:
 

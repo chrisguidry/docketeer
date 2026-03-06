@@ -49,9 +49,13 @@ class AnthropicAPIBackend(InferenceBackend):
     ) -> str:
         # Map tier to Anthropic model
         model_map = {
-            "smart": environment.get_str("MODEL_SMART", "claude-opus-4-6"),
-            "balanced": environment.get_str("MODEL_BALANCED", "claude-sonnet-4-6"),
-            "fast": environment.get_str("MODEL_FAST", "claude-haiku-4-5-20251001"),
+            "smart": environment.get_str("ANTHROPIC_MODEL_SMART", "claude-opus-4-6"),
+            "balanced": environment.get_str(
+                "ANTHROPIC_MODEL_BALANCED", "claude-sonnet-4-6"
+            ),
+            "fast": environment.get_str(
+                "ANTHROPIC_MODEL_FAST", "claude-haiku-4-5-20251001"
+            ),
         }
         model_id = model_map.get(tier, "claude-sonnet-4-6")
         max_tokens = TIER_MAX_TOKENS.get(tier, 64_000)
@@ -116,7 +120,9 @@ class AnthropicAPIBackend(InferenceBackend):
 
         try:
             response = await self._client.messages.create(
-                model=environment.get_str("MODEL_FAST", "claude-haiku-4-5-20251001"),
+                model=environment.get_str(
+                    "ANTHROPIC_MODEL_FAST", "claude-haiku-4-5-20251001"
+                ),
                 max_tokens=max_tokens,
                 messages=[DocketeerMessageParam(role="user", content=prompt).to_dict()],  # type: ignore[arg-type]
             )

@@ -153,8 +153,6 @@ async def stream_response(
         if not line:
             continue
 
-        log.debug("stream-json raw: %s", line)
-
         try:
             event = json.loads(line)
         except json.JSONDecodeError:
