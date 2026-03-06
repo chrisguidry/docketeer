@@ -78,14 +78,6 @@ async def _has_changes(workspace: Path) -> bool:
     status = await _git(workspace, "status", "--porcelain")
     assert status.stdout is not None
     output = await status.stdout.read()
-    assert status.stderr is not None
-    stderr = await status.stderr.read()
-    log.debug(
-        "_has_changes: rc=%s stdout=%r stderr=%r",
-        status.returncode,
-        output[:500],
-        stderr[:500],
-    )
     return bool(output.strip())
 
 
@@ -120,14 +112,10 @@ async def backup(
     backend: InferenceBackend | None = CurrentInferenceBackend(),
 ) -> None:
     """Commit workspace changes and optionally push to a remote."""
-    log.debug("backup: workspace=%s", workspace)
-
     if not any(workspace.iterdir()):
-        log.debug("backup: workspace is empty, skipping")
         return
 
     if not (workspace / ".git").is_dir():
-        log.debug("backup: no .git dir, initializing repo")
         await _init_repo(
             workspace,
             branch=branch,
@@ -137,7 +125,6 @@ async def backup(
         )
 
     has_changes = await _has_changes(workspace)
-    log.debug("backup: has_changes=%s", has_changes)
     if not has_changes:
         return
 

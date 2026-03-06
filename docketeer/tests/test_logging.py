@@ -22,7 +22,14 @@ def test_configure_logging_default(monkeypatch: pytest.MonkeyPatch) -> None:
     assert logging.root.level == logging.INFO
 
     # Check that verbose packages are clamped to INFO
-    verbose_packages = ["docket", "httpx", "websockets", "httpcore", "openai"]
+    verbose_packages = [
+        "docket",
+        "httpx",
+        "websockets",
+        "httpcore",
+        "mcp.server.lowlevel",
+        "openai",
+    ]
     for package in verbose_packages:
         logger = logging.getLogger(package)
         assert logger.level == logging.INFO
@@ -42,7 +49,14 @@ def test_configure_logging_debug(monkeypatch: pytest.MonkeyPatch) -> None:
     assert logging.root.level == logging.DEBUG
 
     # Check that verbose packages are clamped to INFO (not DEBUG)
-    verbose_packages = ["docket", "httpx", "websockets", "httpcore", "openai"]
+    verbose_packages = [
+        "docket",
+        "httpx",
+        "websockets",
+        "httpcore",
+        "mcp.server.lowlevel",
+        "openai",
+    ]
     for package in verbose_packages:
         logger = logging.getLogger(package)
         assert logger.level == logging.INFO
@@ -62,7 +76,14 @@ def test_configure_logging_warning(monkeypatch: pytest.MonkeyPatch) -> None:
     assert logging.root.level == logging.WARNING
 
     # Check that verbose packages are at WARNING (not clamped)
-    verbose_packages = ["docket", "httpx", "websockets", "httpcore", "openai"]
+    verbose_packages = [
+        "docket",
+        "httpx",
+        "websockets",
+        "httpcore",
+        "mcp.server.lowlevel",
+        "openai",
+    ]
     for package in verbose_packages:
         logger = logging.getLogger(package)
         assert logger.level == logging.WARNING
@@ -82,7 +103,14 @@ def test_configure_logging_error(monkeypatch: pytest.MonkeyPatch) -> None:
     assert logging.root.level == logging.ERROR
 
     # Check that verbose packages are at ERROR (not clamped)
-    verbose_packages = ["docket", "httpx", "websockets", "httpcore", "openai"]
+    verbose_packages = [
+        "docket",
+        "httpx",
+        "websockets",
+        "httpcore",
+        "mcp.server.lowlevel",
+        "openai",
+    ]
     for package in verbose_packages:
         logger = logging.getLogger(package)
         assert logger.level == logging.ERROR
@@ -115,6 +143,7 @@ def test_verbose_packages_inheritance(monkeypatch: pytest.MonkeyPatch) -> None:
         "httpcore.http11",
         "httpcore.connection",
         "httpcore.proxy",
+        "mcp.server.lowlevel.server",
         "openai.api_requestor",
         "openai.resources",
     ]

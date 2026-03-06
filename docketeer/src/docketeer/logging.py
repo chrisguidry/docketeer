@@ -13,6 +13,7 @@ _VERBOSE_PACKAGES: Final[set[str]] = {
     "httpx",  # HTTP client
     "websockets",  # WebSocket client/server
     "httpcore",  # HTTP core library (includes http11, connection, etc.)
+    "mcp.server.lowlevel",  # MCP low-level server dispatch
     "openai",  # OpenAI API client library
 }
 
