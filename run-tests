@@ -38,7 +38,7 @@ def main() -> int:
     root_tests = root / "tests"
     if root_tests.is_dir():
         print("=== docs-sync ===", flush=True)
-        result = subprocess.run(["pytest", *extra_args], cwd=root)
+        result = subprocess.run(["pytest", "tests", *extra_args], cwd=root)
         if result.returncode != 0:
             failed.append("docs-sync")
         print(flush=True)
