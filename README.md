@@ -108,7 +108,7 @@ graph TD
         end
 
         subgraph executor ["🔌 docketeer.executor"]
-            Sandbox["bubblewrap, ..."]
+            Sandbox["bubblewrap, subprocess, ..."]
         end
         PluginTools --> Sandbox
 
@@ -204,6 +204,7 @@ your own and install them alongside Docketeer to build your perfect agent.
 | [docketeer-monty](docketeer-monty/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-monty)](https://pypi.org/project/docketeer-monty/) | Sandboxed Python execution via [Monty](https://github.com/pydantic/monty) |
 | [docketeer-rocketchat](docketeer-rocketchat/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-rocketchat)](https://pypi.org/project/docketeer-rocketchat/) | [Rocket.Chat](https://www.rocket.chat/) chat backend |
 | [docketeer-search](docketeer-search/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-search)](https://pypi.org/project/docketeer-search/) | Semantic workspace search via [fastembed](https://github.com/qdrant/fastembed) |
+| [docketeer-subprocess](docketeer-subprocess/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-subprocess)](https://pypi.org/project/docketeer-subprocess/) | Unsandboxed command execution for containers and non-Linux hosts |
 | [docketeer-tui](docketeer-tui/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-tui)](https://pypi.org/project/docketeer-tui/) | Terminal chat backend |
 | [docketeer-web](docketeer-web/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-web)](https://pypi.org/project/docketeer-web/) | Web search, HTTP requests, file downloads |
 

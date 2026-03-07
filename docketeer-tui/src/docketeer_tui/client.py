@@ -10,7 +10,6 @@ import secrets
 from collections.abc import AsyncGenerator, Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
 
 from emoji import emojize
@@ -35,23 +34,6 @@ from docketeer.chat import (
 log = logging.getLogger(__name__)
 
 ROOM_ID = "terminal"
-
-
-def _redirect_logs_to_file(data_dir: Path) -> Path:
-    """Redirect all logging to a file so the TUI stays clean."""
-    log_path = data_dir / "docketeer.log"
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-
-    root = logging.getLogger()
-    for handler in root.handlers[:]:
-        root.removeHandler(handler)
-
-    file_handler = logging.FileHandler(log_path)
-    file_handler.setFormatter(
-        logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s")
-    )
-    root.addHandler(file_handler)
-    return log_path
 
 
 @contextmanager
@@ -85,7 +67,7 @@ class TUIClient(ChatClient):
     async def __aenter__(self) -> TUIClient:
         from docketeer import environment
 
-        log_path = _redirect_logs_to_file(environment.DATA_DIR)
+        log_path = environment.DATA_DIR / "docketeer.log"
 
         history_file = environment.DATA_DIR / ".tui-history.txt"
         self._session = PromptSession(history=FileHistory(str(history_file)))

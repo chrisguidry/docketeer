@@ -11,7 +11,10 @@ from docketeer.plugins import PluginUnavailable, discover_one
 
 log = logging.getLogger(__name__)
 
-_UNAVAILABLE = "No executor plugin installed — install docketeer-bubblewrap"
+_UNAVAILABLE = (
+    "No executor plugin installed"
+    " — install docketeer-bubblewrap or docketeer-subprocess"
+)
 
 
 @dataclass

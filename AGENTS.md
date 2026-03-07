@@ -202,3 +202,10 @@ prek run ty                      # type checking passes
 - Missing `__init__.py` in `tests/` → pytest can't discover tests
 - Using `--cov-config` without pointing at the root `pyproject.toml` →
   coverage exclusions don't apply
+
+### Documentation
+
+- Always ensure that we are maintaining the most up-to-date information
+  for each plugin in its own README.md, including all of its
+  configuration variables.  Also, make sure that all plugins are
+  mentioned and linked in the main README.md.

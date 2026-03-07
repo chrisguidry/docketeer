@@ -1,4 +1,4 @@
-"""Tests for message handling, content building, response sending, and run modes."""
+"""Tests for message handling, content building, and response sending."""
 
 from datetime import UTC, datetime
 from unittest.mock import patch
@@ -9,7 +9,6 @@ from docketeer.brain import APOLOGY, Brain
 from docketeer.brain.backend import BackendAuthError
 from docketeer.chat import Attachment, IncomingMessage, RoomKind, RoomMessage
 from docketeer.handlers import build_content, handle_message, send_response
-from docketeer.main import run
 from docketeer.prompt import BrainResponse
 from docketeer.testing import MemoryChat, Reaction
 
@@ -187,17 +186,6 @@ async def test_send_response_empty_skips_message(chat: MemoryChat):
     assert chat.sent_messages == []
 
 
-def test_run_start():
-    with (
-        patch("sys.argv", ["docketeer", "start"]),
-        patch("docketeer.main.asyncio.run") as mock_run,
-    ):
-        run()
-        mock_run.assert_called_once()
-        coro = mock_run.call_args[0][0]
-        coro.close()
-
-
 async def test_handle_message_sends_typing_events(
     chat: MemoryChat, brain: Brain, fake_messages: FakeMessages
 ):
@@ -351,30 +339,6 @@ async def test_handle_message_tool_emoji_no_duplicates(
         if r.emoji == ":open_file_folder:" and r.action == "react"
     ]
     assert len(folder_reacts) == 1
-
-
-def test_run_start_dev():
-    with (
-        patch("sys.argv", ["docketeer", "start", "--dev"]),
-        patch("docketeer.main.run_dev") as mock_dev,
-    ):
-        run()
-        mock_dev.assert_called_once()
-
-
-def test_run_snapshot():
-    with (
-        patch("sys.argv", ["docketeer", "snapshot"]),
-        patch("docketeer.main.run_snapshot") as mock_snapshot,
-    ):
-        run()
-        mock_snapshot.assert_called_once()
-
-
-def test_run_no_command(capsys: pytest.CaptureFixture[str]):
-    with patch("sys.argv", ["docketeer"]):
-        run()
-    assert "snapshot" in capsys.readouterr().out
 
 
 # --- Error handling tests ---

@@ -20,6 +20,7 @@ members = [
     "docketeer-monty",
     "docketeer-rocketchat",
     "docketeer-search",
+    "docketeer-subprocess",
     "docketeer-tui",
     "docketeer-web",
 ]
@@ -38,6 +39,7 @@ dev = [
     { name = "docketeer-monty", editable = "docketeer-monty" },
     { name = "docketeer-rocketchat", editable = "docketeer-rocketchat" },
     { name = "docketeer-search", editable = "docketeer-search" },
+    { name = "docketeer-subprocess", editable = "docketeer-subprocess" },
     { name = "docketeer-tui", editable = "docketeer-tui" },
     { name = "docketeer-web", editable = "docketeer-web" },
     { name = "loq" },
@@ -639,6 +641,16 @@ requires-dist = [
     { name = "docketeer", editable = "docketeer" },
     { name = "fastembed" },
 ]
+
+[[package]]
+name = "docketeer-subprocess"
+source = { editable = "docketeer-subprocess" }
+dependencies = [
+    { name = "docketeer" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "docketeer", editable = "docketeer" }]
 
 [[package]]
 name = "docketeer-tui"

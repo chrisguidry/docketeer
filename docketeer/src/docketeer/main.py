@@ -33,13 +33,12 @@ from docketeer.dependencies import (
 )
 from docketeer.executor import discover_executor
 from docketeer.handlers import process_messages
-from docketeer.plugins import discover_all
+from docketeer.plugins import discover_all, discover_one
 from docketeer.scheduling import register_docket_tools
 from docketeer.search import discover_search
 from docketeer.tools import ToolContext, registry
 from docketeer.vault import discover_vault
 
-docketeer_logging.configure_logging()
 log = logging.getLogger(__name__)
 
 DOCKET_URL = environment.get_str("DOCKET_URL", "redis://localhost:6379/0")
@@ -290,7 +289,21 @@ def _filter_rooms(rooms: list[RoomInfo], username: str) -> list[RoomInfo]:
     ]
 
 
+def _will_use_tui() -> bool:
+    """Check if the TUI chat backend will be selected, without loading it."""
+    try:
+        ep = discover_one("docketeer.chat", "CHAT")
+    except RuntimeError:
+        return False
+    return ep is not None and ep.name == "tui"
+
+
 def run() -> None:
+    log_file = None
+    if _will_use_tui():
+        log_file = environment.DATA_DIR / "docketeer.log"
+    docketeer_logging.configure_logging(log_file=log_file)
+
     parser = argparse.ArgumentParser(description="Docketeer agent")
     subparsers = parser.add_subparsers(dest="command")
 

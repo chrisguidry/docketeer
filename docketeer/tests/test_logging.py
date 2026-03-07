@@ -1,10 +1,27 @@
 """Tests for docketeer.logging module."""
 
 import logging
+from collections.abc import Generator
+from pathlib import Path
 
 import pytest
 
 from docketeer.logging import configure_logging
+
+
+@pytest.fixture(autouse=True)
+def _isolate_logging() -> Generator[None]:
+    """Save and restore root logger state around each test."""
+    root = logging.getLogger()
+    original_handlers = root.handlers[:]
+    original_level = root.level
+    yield
+    for handler in root.handlers[:]:
+        if handler not in original_handlers:
+            handler.close()
+            root.removeHandler(handler)
+    root.handlers = original_handlers
+    root.setLevel(original_level)
 
 
 def test_configure_logging_default(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -175,3 +192,36 @@ def test_regular_loggers_unaffected(monkeypatch: pytest.MonkeyPatch) -> None:
         logger = logging.getLogger(logger_name)
         # Effective level should be DEBUG
         assert logger.getEffectiveLevel() == logging.DEBUG
+
+
+def test_configure_logging_to_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """When log_file is provided, logs go to file instead of stderr."""
+    logging.root.handlers = []
+    logging.root.setLevel(logging.NOTSET)
+    monkeypatch.delenv("DOCKETEER_LOG_LEVEL", raising=False)
+
+    log_file = tmp_path / "test.log"
+    result = configure_logging(log_file=log_file)
+
+    assert result == log_file
+
+    test_logger = logging.getLogger("test.file_logging")
+    test_logger.warning("hello from test")
+
+    for handler in logging.root.handlers:
+        handler.flush()
+
+    assert "hello from test" in log_file.read_text()
+
+
+def test_configure_logging_returns_none_without_file(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    logging.root.handlers = []
+    logging.root.setLevel(logging.NOTSET)
+    monkeypatch.delenv("DOCKETEER_LOG_LEVEL", raising=False)
+
+    result = configure_logging()
+    assert result is None

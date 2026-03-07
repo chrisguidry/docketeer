@@ -147,6 +147,15 @@ repos:
         pass_filenames: false
         require_serial: true
 
+      - id: pytest-docketeer-subprocess
+        name: pytest (docketeer-subprocess)
+        entry: uv run --no-sync --directory docketeer-subprocess pytest
+        language: system
+        types: [python]
+        files: ^docketeer/src/|^docketeer-subprocess/
+        pass_filenames: false
+        require_serial: true
+
       - id: pytest-docketeer-tui
         name: pytest (docketeer-tui)
         entry: uv run --no-sync --directory docketeer-tui pytest

@@ -2,6 +2,7 @@
 
 import logging
 import logging.config
+from pathlib import Path
 from typing import Final
 
 from docketeer.environment import get_log_level
@@ -18,12 +19,17 @@ _VERBOSE_PACKAGES: Final[set[str]] = {
     "openai",  # OpenAI API client library
 }
 
+_LOG_FORMAT: Final[str] = "%(asctime)s %(levelname)s %(name)s %(message)s"
 
-def configure_logging() -> None:
+
+def configure_logging(*, log_file: Path | None = None) -> Path | None:
     """Configure logging based on DOCKETEER_LOG_LEVEL environment variable.
 
     Sets the global logging level from DOCKETEER_LOG_LEVEL (default: INFO).
     Forces verbose packages to log at INFO minimum level.
+
+    When log_file is provided, logs go to that file instead of stderr.
+    Returns the log file path if file logging was set up.
     """
     # Get the configured log level, defaulting to INFO
     try:
@@ -35,11 +41,16 @@ def configure_logging() -> None:
         log.exception("Failed to configure logging")
         raise
 
-    # Configure the root logger with our standard format
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
-    )
+    root = logging.getLogger()
+    root.setLevel(level)
+
+    if log_file:
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        handler: logging.Handler = logging.FileHandler(log_file)
+    else:
+        handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter(_LOG_FORMAT))
+    root.addHandler(handler)
 
     # Set minimum level for verbose packages
     for package in _VERBOSE_PACKAGES:
@@ -48,3 +59,4 @@ def configure_logging() -> None:
 
     log = logging.getLogger(__name__)
     log.debug("Logging configured at level %s", logging.getLevelName(level))
+    return log_file
