@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from docketeer.people import load_person_context
+from docketeer_autonomy.people import load_person_context
 
 
 def test_load_person_context_unknown_user(tmp_path: Path):

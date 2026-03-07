@@ -13,6 +13,7 @@ members = [
     "docketeer-1password",
     "docketeer-agentskills",
     "docketeer-anthropic",
+    "docketeer-autonomy",
     "docketeer-bubblewrap",
     "docketeer-deepinfra",
     "docketeer-git",
@@ -32,6 +33,7 @@ dev = [
     { name = "docketeer-1password", editable = "docketeer-1password" },
     { name = "docketeer-agentskills", editable = "docketeer-agentskills" },
     { name = "docketeer-anthropic", editable = "docketeer-anthropic" },
+    { name = "docketeer-autonomy", editable = "docketeer-autonomy" },
     { name = "docketeer-bubblewrap", editable = "docketeer-bubblewrap" },
     { name = "docketeer-deepinfra", editable = "docketeer-deepinfra" },
     { name = "docketeer-git", editable = "docketeer-git" },
@@ -544,6 +546,20 @@ dependencies = [
 requires-dist = [
     { name = "anthropic" },
     { name = "docketeer", editable = "docketeer" },
+]
+
+[[package]]
+name = "docketeer-autonomy"
+source = { editable = "docketeer-autonomy" }
+dependencies = [
+    { name = "docketeer" },
+    { name = "pydocket" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "docketeer", editable = "docketeer" },
+    { name = "pydocket" },
 ]
 
 [[package]]

@@ -4,6 +4,7 @@ members = [
     "docketeer-1password",
     "docketeer-agentskills",
     "docketeer-anthropic",
+    "docketeer-autonomy",
     "docketeer-bubblewrap",
     "docketeer-deepinfra",
     "docketeer-git",
@@ -22,6 +23,7 @@ dev = [
     "docketeer-1password",
     "docketeer-agentskills",
     "docketeer-anthropic",
+    "docketeer-autonomy",
     "docketeer-bubblewrap",
     "docketeer-deepinfra",
     "docketeer-git",
@@ -51,6 +53,7 @@ docketeer = { workspace = true }
 docketeer-1password = { workspace = true }
 docketeer-agentskills = { workspace = true }
 docketeer-anthropic = { workspace = true }
+docketeer-autonomy = { workspace = true }
 docketeer-bubblewrap = { workspace = true }
 docketeer-deepinfra = { workspace = true }
 docketeer-git = { workspace = true }
@@ -105,7 +108,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["docketeer", "docketeer_1password", "docketeer_agentskills", "docketeer_bubblewrap", "docketeer_deepinfra", "docketeer_git", "docketeer_mcp", "docketeer_monty", "docketeer_rocketchat", "docketeer_search", "docketeer_subprocess", "docketeer_tui", "docketeer_web"]
+known-first-party = ["docketeer", "docketeer_1password", "docketeer_agentskills", "docketeer_autonomy", "docketeer_bubblewrap", "docketeer_deepinfra", "docketeer_git", "docketeer_mcp", "docketeer_monty", "docketeer_rocketchat", "docketeer_search", "docketeer_subprocess", "docketeer_tui", "docketeer_web"]
 
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**/*.py" = ["ANN201"]

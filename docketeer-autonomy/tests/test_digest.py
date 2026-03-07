@@ -6,11 +6,11 @@ from unittest.mock import AsyncMock
 import pytest
 
 from docketeer.chat import RoomInfo, RoomKind, RoomMessage
-from docketeer.digest import (
+from docketeer.testing import MemoryChat
+from docketeer_autonomy.digest import (
     _format_room_messages,
     build_conversation_digest,
 )
-from docketeer.testing import MemoryChat
 
 EST = timezone(timedelta(hours=-5))
 BASE_TIME = datetime(2026, 3, 6, 10, 0, 0, tzinfo=EST)

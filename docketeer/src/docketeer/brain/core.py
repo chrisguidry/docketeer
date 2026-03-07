@@ -27,8 +27,7 @@ from docketeer.brain.helpers import (
 )
 from docketeer.chat import RoomMessage
 from docketeer.executor import CommandExecutor
-from docketeer.people import load_person_context
-from docketeer.plugins import discover_one
+from docketeer.plugins import discover_all, discover_one
 from docketeer.prompt import (
     Base64ImageSourceParam,
     BrainResponse,
@@ -40,10 +39,8 @@ from docketeer.prompt import (
     SystemBlock,
     TextBlockParam,
     build_system_blocks,
-    ensure_template,
     format_message_time,
 )
-from docketeer.rooms import load_room_context
 from docketeer.tools import ToolContext, ToolDefinition, registry
 from docketeer.watcher import Watcher, WorkspaceWatcher, _format_workspace_pulse
 
@@ -62,8 +59,6 @@ class InferenceModel:
 # Note: Core doesn't define model mappings. Each backend registers its own
 # models via environment variables or internal defaults.
 CHAT_MODEL = environment.get_str("CHAT_MODEL", "balanced")
-REVERIE_MODEL = environment.get_str("REVERIE_MODEL", "balanced")
-CONSOLIDATION_MODEL = environment.get_str("CONSOLIDATION_MODEL", "balanced")
 
 
 CONTEXT_BUDGET = 180_000
@@ -121,14 +116,9 @@ class Brain:
         self._last_user_timestamp: dict[str, datetime] = {}
         self._profiles_loaded: dict[str, set[str]] = defaultdict(set)
         self._room_context_loaded: dict[str, bool] = {}
-
-        soul_path = self._workspace / "SOUL.md"
-        first_run = not soul_path.exists()
-        ensure_template(self._workspace, "soul.md")
-        if first_run:
-            ensure_template(self._workspace, "bootstrap.md")
-
-        ensure_template(self._workspace, "practice.md")
+        self._context_providers = [
+            factory() for factory in discover_all("docketeer.context")
+        ]
 
         self.tool_context.summarize = self._summarize_webpage
         self.tool_context.classify_response = self._classify_response
@@ -225,40 +215,19 @@ class Brain:
 
             messages = self._conversations[room_id]
 
-            # Layer B: Load user profiles on first message from each user in conversation
             current_user = content.username
             if current_user not in self._profiles_loaded[room_id]:
-                profile = load_person_context(self._workspace, current_user)
-                if profile:
-                    profile_message = (
-                        f"## What I know about @{current_user}\n\n{profile}"
-                    )
-                    log.info("→ BRAIN: [profile %s]: %.200s", current_user, profile)
-                else:
-                    profile_message = (
-                        f"I don't have a profile for @{current_user} yet. "
-                        f"I can create people/{current_user}/profile.md to "
-                        f"start one, or if I know this person under another "
-                        f"name, I can create a symlink with the create_link tool."
-                    )
-                messages.append(MessageParam(role="system", content=profile_message))
+                for provider in self._context_providers:
+                    messages.extend(provider.for_user(self._workspace, current_user))
                 self._profiles_loaded[room_id].add(current_user)
 
-            # Load room context on first message in this room
             if (
                 not room_id.startswith("__")
                 and room_id not in self._room_context_loaded
             ):
                 slug = room_slug or room_id
-                room_notes = load_room_context(self._workspace, slug)
-                if room_notes:
-                    messages.append(
-                        MessageParam(
-                            role="system",
-                            content=f"## Room notes: {slug}\n\n{room_notes}",
-                        )
-                    )
-                    log.info("→ BRAIN: [room %s]: %.200s", slug, room_notes)
+                for provider in self._context_providers:
+                    messages.extend(provider.for_room(self._workspace, slug))
                 self._room_context_loaded[room_id] = True
 
             # Workspace pulse: inject changes from other contexts
@@ -389,21 +358,18 @@ class Brain:
         room_slug: str,
     ) -> list[MessageParam]:
         """Re-read profile/room context after compaction for prepending."""
-
-        def sys(text: str) -> MessageParam:
-            return MessageParam(role="system", content=text)
-
         msgs: list[MessageParam] = []
         for username in sorted(prev_profiles):
-            profile = load_person_context(self._workspace, username)
-            if profile:
-                msgs.append(sys(f"## What I know about @{username}\n\n{profile}"))
+            for provider in self._context_providers:
+                user_msgs = provider.for_user(self._workspace, username)
+                msgs.extend(
+                    m for m in user_msgs if "don't have a profile" not in m.content
+                )
             self._profiles_loaded[room_id].add(username)
         if prev_room_loaded and not room_id.startswith("__"):
             slug = room_slug or room_id
-            room_notes = load_room_context(self._workspace, slug)
-            if room_notes:
-                msgs.append(sys(f"## Room notes: {slug}\n\n{room_notes}"))
+            for provider in self._context_providers:
+                msgs.extend(provider.for_room(self._workspace, slug))
             self._room_context_loaded[room_id] = True
         return msgs
 

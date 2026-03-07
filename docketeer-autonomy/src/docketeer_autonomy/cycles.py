@@ -8,7 +8,7 @@ from pathlib import Path
 from docket.dependencies import Cron, Perpetual, TaskKey
 
 from docketeer import environment
-from docketeer.brain import CONSOLIDATION_MODEL, REVERIE_MODEL, Brain
+from docketeer.brain import Brain
 from docketeer.brain.backend import BackendAuthError, InferenceBackend
 from docketeer.chat import ChatClient
 from docketeer.dependencies import (
@@ -17,13 +17,16 @@ from docketeer.dependencies import (
     CurrentInferenceBackend,
     WorkspacePath,
 )
-from docketeer.digest import build_conversation_digest
 from docketeer.prompt import MessageContent
+
+from .digest import build_conversation_digest
 
 log = logging.getLogger(__name__)
 
 _consecutive_failures: dict[str, int] = {}
 
+REVERIE_MODEL = environment.get_str("REVERIE_MODEL", "balanced")
+CONSOLIDATION_MODEL = environment.get_str("CONSOLIDATION_MODEL", "balanced")
 REVERIE_INTERVAL = environment.get_timedelta("REVERIE_INTERVAL", timedelta(minutes=30))
 CONSOLIDATION_CRON = environment.get_str("CONSOLIDATION_CRON", "0 3 * * *")
 

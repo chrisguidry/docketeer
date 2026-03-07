@@ -38,11 +38,14 @@ class SystemBlock:
         return d
 
 
+_prompt_providers: list[Callable[[Path], list[SystemBlock]]] | None = None
+
+
 def _load_prompt_providers() -> list[Callable[[Path], list[SystemBlock]]]:
-    return discover_all("docketeer.prompt")
-
-
-_prompt_providers = _load_prompt_providers()
+    global _prompt_providers
+    if _prompt_providers is None:
+        _prompt_providers = discover_all("docketeer.prompt")
+    return _prompt_providers
 
 
 @dataclass
@@ -95,46 +98,36 @@ class BrainResponse:
     text: str
 
 
-def ensure_template(workspace: Path, filename: str) -> None:
-    """Copy a template from the package to the workspace if it doesn't exist."""
+def ensure_template(
+    workspace: Path, filename: str, *, package: str = "docketeer"
+) -> None:
+    """Copy a template from a package to the workspace if it doesn't exist."""
     stem, ext = filename.rsplit(".", 1)
     target = workspace / f"{stem.upper()}.{ext}"
     if target.exists():
         return
-    source = importlib.resources.files("docketeer").joinpath(filename)
+    source = importlib.resources.files(package).joinpath(filename)
     target.write_text(source.read_text())
     log.info("Copied %s template to %s", filename, target)
 
 
 def build_system_blocks(workspace: Path) -> list[SystemBlock]:
-    """Build system prompt as stable content blocks for prompt caching.
+    """Build system prompt from prompt provider plugins.
 
     All content here is static between requests so that tools + system form
     a fully cacheable prefix. Dynamic per-request context (time, room, person)
     goes into the user message via _build_content().
     """
-    soul_path = workspace / "SOUL.md"
-    stable_text = soul_path.read_text()
+    blocks: list[SystemBlock] = []
 
-    practice_path = workspace / "PRACTICE.md"
-    if practice_path.exists():
-        stable_text += "\n\n" + practice_path.read_text()
-
-    bootstrap_path = workspace / "BOOTSTRAP.md"
-    if bootstrap_path.exists():
-        stable_text += "\n\n" + bootstrap_path.read_text()
-
-    blocks: list[SystemBlock] = [
-        SystemBlock(text=stable_text),
-    ]
-
-    for provider in _prompt_providers:
+    for provider in _load_prompt_providers():
         try:
             blocks.extend(provider(workspace))
         except Exception:
             log.warning("Prompt provider %s failed", provider, exc_info=True)
 
-    blocks[-1].cache_control = CacheControl()
+    if blocks:
+        blocks[-1].cache_control = CacheControl()
 
     return blocks
 

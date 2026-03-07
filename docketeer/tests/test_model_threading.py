@@ -1,26 +1,11 @@
-"""Tests for model tier threading through cycles, tasks, and handlers."""
+"""Tests for model tier threading through tasks and handlers."""
 
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
-from docketeer.brain.core import CHAT_MODEL, CONSOLIDATION_MODEL, REVERIE_MODEL
-from docketeer.cycles import consolidation, reverie
+from docketeer.brain.core import CHAT_MODEL
 from docketeer.prompt import BrainResponse
 from docketeer.tasks import nudge, nudge_every
-
-
-async def test_reverie_uses_reverie_tier(workspace: Path):
-    brain = AsyncMock()
-    brain.process.return_value = BrainResponse(text="thoughts")
-    await reverie(brain=brain, workspace=workspace)
-    assert brain.process.call_args[1]["tier"] == REVERIE_MODEL
-
-
-async def test_consolidation_uses_consolidation_tier(workspace: Path):
-    brain = AsyncMock()
-    brain.process.return_value = BrainResponse(text="reflection")
-    await consolidation(brain=brain, workspace=workspace)
-    assert brain.process.call_args[1]["tier"] == CONSOLIDATION_MODEL
 
 
 async def test_nudge_uses_chat_tier_by_default(workspace: Path, task_files: dict):

@@ -145,6 +145,12 @@ async def test_send_typing_is_noop():
 async def test_react():
     client = TUIClient()
     await client.react("msg1", ":thumbsup:")
+    assert client._reactions_printed
+    await client.react("msg1", ":brain:")
+    assert len(client._reaction_emojis) == 2
+    client._stop_reactions()
+    assert len(client._reaction_emojis) == 0
+    assert not client._reactions_printed
 
 
 async def test_unreact():

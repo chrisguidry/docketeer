@@ -9,8 +9,6 @@ from docketeer.brain.backend import (
 from docketeer.brain.core import (
     APOLOGY,
     CHAT_MODEL,
-    CONSOLIDATION_MODEL,
-    REVERIE_MODEL,
     Brain,
     InferenceModel,
     ProcessCallbacks,
@@ -19,8 +17,6 @@ from docketeer.brain.core import (
 __all__ = [
     "APOLOGY",
     "CHAT_MODEL",
-    "CONSOLIDATION_MODEL",
-    "REVERIE_MODEL",
     "BackendAuthError",
     "BackendError",
     "Brain",

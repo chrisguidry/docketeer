@@ -14,7 +14,6 @@ from docketeer import environment
 from docketeer.brain import APOLOGY, CHAT_MODEL, Brain
 from docketeer.brain.backend import BackendAuthError
 from docketeer.chat import ChatClient
-from docketeer.cycles import consolidation, reverie
 from docketeer.dependencies import CurrentBrain, CurrentChatClient
 from docketeer.prompt import BrainResponse, MessageContent
 from docketeer.tools import safe_path
@@ -164,4 +163,4 @@ async def nudge_every(
         perpetual.at(next_time)
 
 
-docketeer_tasks = [nudge, nudge_every, reverie, consolidation]
+docketeer_tasks = [nudge, nudge_every]

@@ -16,58 +16,45 @@ from docketeer.prompt import (
 )
 
 
-def test_build_system_blocks_includes_soul(workspace: Path):
-    (workspace / "SOUL.md").write_text("I am the soul.")
-    blocks = build_system_blocks(workspace)
-    assert blocks[0].text == "I am the soul."
-    assert blocks[-1].cache_control == CacheControl()
-
-
-def test_build_system_blocks_includes_bootstrap(workspace: Path):
-    (workspace / "SOUL.md").write_text("Soul.")
-    (workspace / "BOOTSTRAP.md").write_text("Bootstrap stuff.")
-    blocks = build_system_blocks(workspace)
-    assert "Bootstrap stuff." in blocks[0].text
+def test_build_system_blocks_empty_without_providers(workspace: Path):
+    with patch("docketeer.prompt._prompt_providers", []):
+        blocks = build_system_blocks(workspace)
+    assert blocks == []
 
 
 def test_build_system_blocks_calls_prompt_providers(workspace: Path):
-    (workspace / "SOUL.md").write_text("Soul.")
-
     def fake_provider(ws: Path) -> list[SystemBlock]:
         return [SystemBlock(text=f"Skills from {ws.name}")]
 
     with patch("docketeer.prompt._prompt_providers", [fake_provider]):
         blocks = build_system_blocks(workspace)
 
-    texts = [b.text for b in blocks]
-    assert any("Skills from" in t for t in texts)
+    assert blocks[0].text == f"Skills from {workspace.name}"
+    assert blocks[-1].cache_control == CacheControl()
 
 
 def test_build_system_blocks_provider_error_is_swallowed(workspace: Path):
-    (workspace / "SOUL.md").write_text("Soul.")
-
     def bad_provider(ws: Path) -> list[SystemBlock]:
         raise RuntimeError("boom")
 
     with patch("docketeer.prompt._prompt_providers", [bad_provider]):
         blocks = build_system_blocks(workspace)
 
-    assert len(blocks) >= 1
+    assert blocks == []
 
 
-def test_build_system_blocks_provider_blocks_after_stable(
-    workspace: Path,
-):
-    (workspace / "SOUL.md").write_text("Soul.")
+def test_build_system_blocks_multiple_providers(workspace: Path):
+    def provider_a(ws: Path) -> list[SystemBlock]:
+        return [SystemBlock(text="block-a")]
 
-    def provider(ws: Path) -> list[SystemBlock]:
-        return [SystemBlock(text="plugin-content")]
+    def provider_b(ws: Path) -> list[SystemBlock]:
+        return [SystemBlock(text="block-b")]
 
-    with patch("docketeer.prompt._prompt_providers", [provider]):
+    with patch("docketeer.prompt._prompt_providers", [provider_a, provider_b]):
         blocks = build_system_blocks(workspace)
 
-    assert blocks[0].text == "Soul."
-    assert blocks[1].text == "plugin-content"
+    assert blocks[0].text == "block-a"
+    assert blocks[1].text == "block-b"
     assert blocks[-1].cache_control == CacheControl()
 
 
@@ -87,11 +74,15 @@ def test_system_block_to_dict_with_cache_control():
 
 
 def test_load_prompt_providers_delegates_to_discover_all():
+    import docketeer.prompt as prompt_mod
+
     fake_provider = lambda ws: []  # noqa: E731
+    prompt_mod._prompt_providers = None
     with patch("docketeer.prompt.discover_all", return_value=[fake_provider]) as mock:
         providers = _load_prompt_providers()
     mock.assert_called_once_with("docketeer.prompt")
     assert providers == [fake_provider]
+    prompt_mod._prompt_providers = None
 
 
 # --- format_message_time ---

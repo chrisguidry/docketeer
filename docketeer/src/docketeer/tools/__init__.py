@@ -202,7 +202,6 @@ def _load_tool_plugins() -> None:
 
 
 import docketeer.tools.executor as _executor  # noqa: E402, F401
-import docketeer.tools.journal as _journal  # noqa: E402, F401
 import docketeer.tools.vault as _vault  # noqa: E402, F401
 import docketeer.tools.workspace as _workspace  # noqa: E402, F401
 

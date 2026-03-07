@@ -11,10 +11,8 @@ import pytest
 from docketeer.audit import audit_log, log_usage
 from docketeer.brain import Brain
 from docketeer.prompt import (
-    CacheControl,
     MessageContent,
     TextBlockParam,
-    build_system_blocks,
     ensure_template,
     extract_text,
 )
@@ -23,33 +21,18 @@ from ..conftest import FakeMessage, FakeUsage, make_text_block
 
 
 def test_ensure_template_copies_when_missing(workspace: Path):
-    ensure_template(workspace, "soul.md")
+    ensure_template(workspace, "soul.md", package="docketeer_autonomy")
     target = workspace / "SOUL.md"
     assert target.exists()
-    source = importlib.resources.files("docketeer").joinpath("soul.md")
+    source = importlib.resources.files("docketeer_autonomy").joinpath("soul.md")
     assert target.read_text() == source.read_text()
 
 
 def test_ensure_template_skips_existing(workspace: Path):
     target = workspace / "SOUL.md"
     target.write_text("custom soul")
-    ensure_template(workspace, "soul.md")
+    ensure_template(workspace, "soul.md", package="docketeer_autonomy")
     assert target.read_text() == "custom soul"
-
-
-def test_build_system_blocks_stable_only(workspace: Path):
-    (workspace / "SOUL.md").write_text("I am the soul")
-    blocks = build_system_blocks(workspace)
-    assert len(blocks) >= 1
-    assert "I am the soul" in blocks[0].text
-    assert blocks[-1].cache_control == CacheControl()
-
-
-def test_build_system_blocks_with_bootstrap(workspace: Path):
-    (workspace / "SOUL.md").write_text("soul")
-    (workspace / "BOOTSTRAP.md").write_text("bootstrap instructions")
-    blocks = build_system_blocks(workspace)
-    assert "bootstrap instructions" in blocks[0].text
 
 
 def testaudit_log_creates_dir_and_appends(tmp_path: Path):

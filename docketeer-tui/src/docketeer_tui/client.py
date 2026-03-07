@@ -63,6 +63,8 @@ class TUIClient(ChatClient):
             "DOCKETEER_TUI_USERNAME", getpass.getuser()
         )
         self._human_user_id = f"tui-{self._human_username}"
+        self._reaction_emojis: list[str] = []
+        self._reactions_printed = False
 
     async def __aenter__(self) -> TUIClient:
         from docketeer import environment
@@ -152,6 +154,7 @@ class TUIClient(ChatClient):
         *,
         thread_id: str = "",
     ) -> None:
+        self._stop_reactions()
         now = datetime.now(UTC)
         msg_id = secrets.token_hex(8)
         self._messages.append(
@@ -239,9 +242,19 @@ class TUIClient(ChatClient):
         ":mag:": ":magnifying_glass_tilted_left:",
     }
 
+    def _stop_reactions(self) -> None:
+        self._reaction_emojis.clear()
+        self._reactions_printed = False
+
     async def react(self, message_id: str, emoji: str) -> None:
         emoji = self._EMOJI_ALIASES.get(emoji, emoji)
-        self._console.print(Text(f"  {emojize(emoji)}", style="dim"))
+        self._reaction_emojis.append(emojize(emoji))
+        display = Text("  " + " ".join(self._reaction_emojis), style="dim")
+        if self._reactions_printed:
+            # Move cursor up one line and clear it before reprinting
+            self._console.file.write("\x1b[1A\x1b[2K")
+        self._console.print(display)
+        self._reactions_printed = True
 
     async def unreact(self, message_id: str, emoji: str) -> None:
         pass

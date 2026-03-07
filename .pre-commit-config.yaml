@@ -75,6 +75,15 @@ repos:
         pass_filenames: false
         require_serial: true
 
+      - id: pytest-docketeer-autonomy
+        name: pytest (docketeer-autonomy)
+        entry: uv run --no-sync --directory docketeer-autonomy pytest
+        language: system
+        types: [python]
+        files: ^docketeer/src/|^docketeer-autonomy/
+        pass_filenames: false
+        require_serial: true
+
       - id: pytest-docketeer-bubblewrap
         name: pytest (docketeer-bubblewrap)
         entry: uv run --no-sync --directory docketeer-bubblewrap pytest

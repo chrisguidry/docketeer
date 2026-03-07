@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from docketeer.rooms import load_room_context
+from docketeer_autonomy.rooms import load_room_context
 
 
 def test_load_room_context_no_rooms_dir(tmp_path: Path):

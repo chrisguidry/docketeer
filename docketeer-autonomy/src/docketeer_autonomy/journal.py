@@ -4,7 +4,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from . import ToolContext, registry
+from docketeer.tools import ToolContext, registry
 
 
 def _journal_dir(workspace: Path) -> Path:

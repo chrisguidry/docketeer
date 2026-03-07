@@ -303,7 +303,7 @@ async def test_nudge_every_cron_with_timezone(workspace: Path, task_files: dict)
     await nudge_every(
         prompt_file=task_files["morning_check"],
         every="0 9 * * *",
-        timezone="America/New_York",
+        timezone="Etc/UTC",
         room_id="room123",
         brain=brain,
         client=client,
