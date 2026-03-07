@@ -27,6 +27,7 @@ def audit_log(
     }
     with path.open("a") as f:
         f.write(json.dumps(record) + "\n")
+        f.flush()
 
 
 def record_usage(usage_dir: Path, model: str, usage: Usage) -> None:
@@ -45,6 +46,7 @@ def record_usage(usage_dir: Path, model: str, usage: Usage) -> None:
     }
     with path.open("a") as f:
         f.write(json.dumps(record) + "\n")
+        f.flush()
 
 
 def log_usage(model: str, usage: Usage) -> None:

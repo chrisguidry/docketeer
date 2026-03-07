@@ -141,6 +141,21 @@ def test_schema_from_hints_dict_of_strings():
     assert schema["properties"]["env"]["additionalProperties"] == {"type": "string"}
 
 
+def test_schema_from_hints_dict_with_union_values():
+    async def fn(ctx: ToolContext, env: dict[str, str | dict] | None = None) -> str:
+        """Test.
+
+        env: environment variables
+        """
+        return ""  # pragma: no cover
+
+    schema = _schema_from_hints(fn)
+    assert schema["properties"]["env"]["type"] == "object"
+    assert schema["properties"]["env"]["additionalProperties"] == {
+        "anyOf": [{"type": "string"}, {"type": "object"}]
+    }
+
+
 def test_schema_from_hints_required_vs_default():
     async def fn(
         ctx: ToolContext, required_param: str, optional_param: str = "default"

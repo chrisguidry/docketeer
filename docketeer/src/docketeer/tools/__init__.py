@@ -146,10 +146,22 @@ def _schema_from_hints(fn: Callable) -> dict:
         elif get_origin(hint) is dict:
             args = get_args(hint)
             value_type = args[1] if len(args) > 1 else str
-            prop = {
-                "type": "object",
-                "additionalProperties": {"type": TYPE_MAP.get(value_type, "string")},
-            }
+            if get_origin(value_type) is types.UnionType:
+                union_args = get_args(value_type)
+                schemas = []
+                for ua in union_args:
+                    if ua is dict or get_origin(ua) is dict:
+                        schemas.append({"type": "object"})
+                    else:
+                        schemas.append({"type": TYPE_MAP.get(ua, "string")})
+                prop = {"type": "object", "additionalProperties": {"anyOf": schemas}}
+            else:
+                prop = {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": TYPE_MAP.get(value_type, "string")
+                    },
+                }
         else:
             prop = {"type": TYPE_MAP.get(hint, "string")}
 
