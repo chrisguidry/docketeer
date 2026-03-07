@@ -33,4 +33,4 @@ def workspace(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def tool_context(workspace: Path) -> ToolContext:
-    return ToolContext(workspace=workspace, room_id="room1")
+    return ToolContext(workspace=workspace, chat_room="room1")

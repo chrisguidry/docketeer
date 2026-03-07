@@ -58,7 +58,7 @@ def register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
         if key and key in reserved_keys:
             return f'Error: "{key}" is a built-in system task and cannot be overwritten'
 
-        room_id = "" if silent else ctx.room_id
+        room_id = "" if silent else ctx.chat_room
         thread_id = "" if silent else ctx.thread_id
 
         if key:
@@ -131,7 +131,7 @@ def register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
             first_fire = datetime.now().astimezone()
             mode_desc = f"every {every}"
 
-        room_id = "" if silent else ctx.room_id
+        room_id = "" if silent else ctx.chat_room
         thread_id = "" if silent else ctx.thread_id
 
         await docket.replace(tasks.nudge_every, when=first_fire, key=key)(

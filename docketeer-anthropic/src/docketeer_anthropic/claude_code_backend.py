@@ -95,12 +95,12 @@ class ClaudeCodeBackend(InferenceBackend):
         model_id = model_map.get(tier, "claude-sonnet-4-6")
 
         system_text = "\n\n".join(block.text for block in system)
-        room_id = tool_context.room_id
-        session = self._sessions.get(room_id) if room_id else None
+        line = tool_context.line
+        session = self._sessions.get(line) if line else None
 
         log.info(
-            "run_agentic_loop: room=%s, model=%s, messages=%d, session=%s",
-            room_id or "(none)",
+            "run_agentic_loop: line=%s, model=%s, messages=%d, session=%s",
+            line or "(none)",
             model_id,
             len(messages),
             session.session_id if session else "(new)",
@@ -112,26 +112,26 @@ class ClaudeCodeBackend(InferenceBackend):
         if session and len(messages) >= session.message_count:
             resume_session_id = session.session_id
             log.info(
-                "Resuming session %s for room %s (messages %d >= stored %d)",
+                "Resuming session %s for line %s (messages %d >= stored %d)",
                 resume_session_id,
-                room_id,
+                line,
                 len(messages),
                 session.message_count,
             )
         else:
             session_id = str(uuid4())
-            if session and room_id:
+            if session and line:
                 log.info(
-                    "Compaction detected for room %s: messages %d < stored %d, "
+                    "Compaction detected for line %s: messages %d < stored %d, "
                     "discarding session %s",
-                    room_id,
+                    line,
                     len(messages),
                     session.message_count,
                     session.session_id,
                 )
-                del self._sessions[room_id]
+                del self._sessions[line]
             else:
-                log.info("New session %s for room %s", session_id, room_id or "(none)")
+                log.info("New session %s for line %s", session_id, line or "(none)")
 
         prompt = format_prompt(messages, resume=resume_session_id is not None)
         log.info("Prompt (%d chars): %.200s", len(prompt), prompt)
@@ -185,21 +185,21 @@ class ClaudeCodeBackend(InferenceBackend):
                 num_turns,
             )
 
-        if effective_session_id and room_id:
-            self._sessions[room_id] = _Session(
+        if effective_session_id and line:
+            self._sessions[line] = _Session(
                 session_id=effective_session_id,
                 message_count=len(messages) + 1,
             )
             log.info(
-                "Stored session %s for room %s (message_count=%d)",
+                "Stored session %s for line %s (message_count=%d)",
                 effective_session_id,
-                room_id,
+                line,
                 len(messages) + 1,
             )
         elif not effective_session_id:  # pragma: no cover
-            log.warning("No session_id for room %s", room_id)
-        elif not room_id:  # pragma: no cover
-            log.info("Skipping session storage (no room_id)")
+            log.warning("No session_id for line %s", line)
+        elif not line:  # pragma: no cover
+            log.info("Skipping session storage (no line)")
 
         return text
 

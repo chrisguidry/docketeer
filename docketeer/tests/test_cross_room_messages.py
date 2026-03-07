@@ -46,7 +46,7 @@ async def test_record_own_message_skips_current_processing_room(
     brain: Brain,
 ):
     """Messages to the room currently being processed are already tracked."""
-    brain.tool_context.room_id = "active-room"
+    brain.tool_context.line = "active-room"
     _preload_room(brain, "active-room")
     initial_count = len(brain._conversations["active-room"])
 

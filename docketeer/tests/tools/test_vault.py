@@ -17,7 +17,7 @@ def vault() -> MemoryVault:
 
 @pytest.fixture()
 def vault_context(workspace: Path, vault: MemoryVault) -> ToolContext:
-    return ToolContext(workspace=workspace, room_id="room1", vault=vault)
+    return ToolContext(workspace=workspace, chat_room="room1", vault=vault)
 
 
 # --- list_secrets ---

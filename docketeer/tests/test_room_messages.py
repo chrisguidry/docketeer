@@ -30,7 +30,7 @@ def workspace(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def tool_context(workspace: Path) -> ToolContext:
-    return ToolContext(workspace=workspace, room_id="room1")
+    return ToolContext(workspace=workspace, chat_room="room1")
 
 
 @pytest.fixture()
@@ -211,7 +211,7 @@ async def test_room_messages_empty(chat: MemoryChat, tool_context: ToolContext):
 
 @pytest.mark.usefixtures("_register_tool")
 async def test_room_messages_no_room_context(chat: MemoryChat, workspace: Path):
-    ctx = ToolContext(workspace=workspace, room_id="")
+    ctx = ToolContext(workspace=workspace, chat_room="")
     result = await registry.execute("room_messages", {}, ctx)
     assert "No room context" in result
 

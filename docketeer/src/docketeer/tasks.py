@@ -46,6 +46,7 @@ def parse_every(every: str) -> timedelta | None:
 
 async def nudge(
     prompt_file: Annotated[str, Logged],
+    line: Annotated[str, Logged] = "",
     room_id: Annotated[str, Logged] = "",
     thread_id: Annotated[str, Logged] = "",
     tier: Annotated[str, Logged] = "",
@@ -71,11 +72,11 @@ async def nudge(
         username="system", timestamp=now, text=prompt, thread_id=thread_id
     )
 
-    context_room = room_id or f"__task__:{task_key}"
+    target_line = line or f"__task__:{task_key}"
     key = f"nudge:{task_key}"
     try:
         response: BrainResponse = await brain.process(
-            context_room, content, tier=tier or CHAT_MODEL
+            target_line, content, tier=tier or CHAT_MODEL, chat_room=room_id
         )
     except BackendAuthError:
         raise
@@ -101,6 +102,7 @@ async def nudge_every(
     prompt_file: Annotated[str, Logged],
     every: Annotated[str, Logged] = "",
     timezone: Annotated[str, Logged] = "",
+    line: Annotated[str, Logged] = "",
     room_id: Annotated[str, Logged] = "",
     thread_id: Annotated[str, Logged] = "",
     tier: Annotated[str, Logged] = "",
@@ -130,11 +132,11 @@ async def nudge_every(
         username="system", timestamp=now, text=prompt, thread_id=thread_id
     )
 
-    context_room = room_id or f"__task__:{task_key}"
+    target_line = line or f"__task__:{task_key}"
     key = f"nudge_every:{task_key}"
     try:
         response: BrainResponse = await brain.process(
-            context_room, content, tier=tier or CHAT_MODEL
+            target_line, content, tier=tier or CHAT_MODEL, chat_room=room_id
         )
     except BackendAuthError:
         raise

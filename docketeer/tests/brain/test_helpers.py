@@ -122,14 +122,13 @@ def test_extract_text_skips_other():
     assert extract_text(blocks) == ""
 
 
-async def test_process_synthetic_room_clears_tool_room_id(
-    brain: Brain, fake_messages: Any
-):
+async def test_process_sets_line_and_empty_chat_room(brain: Brain, fake_messages: Any):
     fake_messages.responses = [FakeMessage(content=[make_text_block(text="ok")])]
     await brain.process(
         "__task__:test", MessageContent(username="system", text="reverie")
     )
-    assert brain.tool_context.room_id == ""
+    assert brain.tool_context.line == "__task__:test"
+    assert brain.tool_context.chat_room == ""
 
 
 async def test_summarize_webpage_with_purpose(brain: Brain, fake_messages: Any):

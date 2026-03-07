@@ -93,7 +93,7 @@ async def reverie(
     content = MessageContent(username="system", timestamp=now, text=prompt)
     try:
         response = await brain.process(
-            f"__task__:{task_key}", content, tier=REVERIE_MODEL
+            line=task_key, content=content, tier=REVERIE_MODEL
         )
     except BackendAuthError:
         raise
@@ -128,7 +128,7 @@ async def consolidation(
     content = MessageContent(username="system", timestamp=now, text=prompt)
     try:
         response = await brain.process(
-            f"__task__:{task_key}", content, tier=CONSOLIDATION_MODEL
+            line=task_key, content=content, tier=CONSOLIDATION_MODEL
         )
     except BackendAuthError:
         raise

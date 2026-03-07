@@ -71,14 +71,16 @@ async def test_nudge_with_room_sends_message(workspace: Path, task_files: dict):
         room_id="room123",
         brain=brain,
         client=client,
+        task_key="hey-there",
     )
 
     brain.process.assert_called_once()
     call_args = brain.process.call_args
-    assert call_args[0][0] == "room123"
+    assert call_args[0][0] == "__task__:hey-there"
     content: MessageContent = call_args[0][1]
     assert content.username == "system"
     assert content.text == "hey there"
+    assert call_args[1]["chat_room"] == "room123"
 
     client.send_message.assert_called_once_with(
         "room123", "reminder sent", thread_id=""
@@ -243,11 +245,14 @@ async def test_nudge_every_with_room_sends_message(workspace: Path, task_files: 
         brain=brain,
         client=client,
         perpetual=perpetual,
+        task_key="check-status",
     )
 
     brain.process.assert_called_once()
+    assert brain.process.call_args[0][0] == "__task__:check-status"
     content: MessageContent = brain.process.call_args[0][1]
     assert content.text == "check status"
+    assert brain.process.call_args[1]["chat_room"] == "room123"
     client.send_message.assert_called_once_with(
         "room123", "recurring reply", thread_id=""
     )

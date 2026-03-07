@@ -19,10 +19,10 @@ MIN_RECENT_MESSAGES = 6
 async def compact_history(
     backend: InferenceBackend,
     conversations: dict[str, list[MessageParam]],
-    room_id: str,
+    line: str,
 ) -> None:
     """Summarize older messages to free up context space."""
-    messages = conversations[room_id]
+    messages = conversations[line]
     if len(messages) <= MIN_RECENT_MESSAGES:
         return
 
@@ -40,10 +40,10 @@ async def compact_history(
 
     summary = await summarize_transcript(backend, transcript)
     if summary is None:
-        conversations[room_id] = recent_messages
+        conversations[line] = recent_messages
         return
 
-    conversations[room_id] = [
+    conversations[line] = [
         MessageParam(
             role="user",
             content=f"[Earlier conversation summary]\n{summary}",

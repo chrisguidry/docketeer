@@ -233,9 +233,9 @@ class MemoryWatcher:
         """Simulate external file changes."""
         self._pending.update(paths)
 
-    def drain(self, room_id: str) -> set[str]:
-        if room_id not in self._initialized:
-            self._initialized.add(room_id)
+    def drain(self, line: str) -> set[str]:
+        if line not in self._initialized:
+            self._initialized.add(line)
             return set()
         result = set(self._pending)
         self._pending.clear()

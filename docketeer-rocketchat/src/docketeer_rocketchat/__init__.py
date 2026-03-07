@@ -27,6 +27,6 @@ def register_tools(client: ChatClient, tool_context: ToolContext) -> None:
             return f"Cannot send a directory: {path}"
 
         await client.upload_file(
-            ctx.room_id, str(target), message=message, thread_id=ctx.thread_id
+            ctx.chat_room, str(target), message=message, thread_id=ctx.thread_id
         )
         return f"Sent {path} to chat"

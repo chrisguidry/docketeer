@@ -16,7 +16,7 @@ async def process_messages(client: ChatClient, brain: Brain) -> None:
     """Process incoming messages, interrupting long-running tool loops on new arrivals."""
 
     async def _on_history(room: RoomInfo, messages: list[RoomMessage]) -> None:
-        brain.load_history(room.room_id, messages)
+        brain.load_history(line=room.room_id, messages=messages)
 
     msg_iter = client.incoming_messages(on_history=_on_history).__aiter__()
     next_msg = asyncio.create_task(anext(msg_iter, None))
@@ -71,7 +71,7 @@ async def handle_message(
     if not brain.has_history(msg.room_id):
         log.info("  New room, loading history...")
         history = await client.fetch_messages(msg.room_id)
-        count = brain.load_history(msg.room_id, history)
+        count = brain.load_history(line=msg.room_id, messages=history)
         log.info("    Loaded %d messages", count)
 
     content = await build_content(client, msg)
@@ -101,12 +101,13 @@ async def handle_message(
     await client.react(msg.message_id, ":brain:")
     try:
         response = await brain.process(
-            msg.room_id,
-            content,
+            line=msg.room_id,
+            content=content,
             callbacks=callbacks,
             tier=CHAT_MODEL,
             room_context=room_ctx,
             room_slug=slug,
+            chat_room=msg.room_id,
         )
     except BackendAuthError:
         raise

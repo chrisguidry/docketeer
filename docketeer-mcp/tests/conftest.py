@@ -28,7 +28,7 @@ def workspace(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def tool_context(workspace: Path) -> ToolContext:
-    return ToolContext(workspace=workspace, room_id="room1", search=MemoryCatalog())
+    return ToolContext(workspace=workspace, chat_room="room1", search=MemoryCatalog())
 
 
 @pytest.fixture()

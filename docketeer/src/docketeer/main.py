@@ -141,7 +141,7 @@ def _register_core_chat_tools(client: ChatClient) -> None:
         after: only messages after this ISO 8601 datetime
         room_id: room to fetch from (defaults to the current room)
         """
-        target_room = room_id or ctx.room_id
+        target_room = room_id or ctx.chat_room
         if not target_room:
             return "No room context available. Specify a room_id to fetch messages."
 
@@ -180,7 +180,7 @@ def _register_core_chat_tools(client: ChatClient) -> None:
         thread_id: reply in this thread (use a message ID to start a thread from that message)
         room_id: target room (defaults to current room)
         """
-        target_room = room_id or ctx.room_id
+        target_room = room_id or ctx.chat_room
         await client.send_message(target_room, text, thread_id=thread_id)
         return f"Sent message to {target_room}"
 

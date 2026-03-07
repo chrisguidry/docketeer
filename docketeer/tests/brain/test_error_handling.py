@@ -98,7 +98,7 @@ async def test_measure_context_api_error_returns_stale_count(
     brain: Brain, fake_messages: Any
 ):
     """When count_tokens fails, _measure_context returns the last known count."""
-    brain._room_token_counts["room1"] = 5000
+    brain._token_counts["room1"] = 5000
     fake_messages.count_tokens = AsyncMock(side_effect=make_api_connection_error())
     result = await brain._measure_context("room1", [], [], "claude-haiku-4-5-20251001")
     assert result == 5000

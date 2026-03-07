@@ -1,24 +1,24 @@
-"""Room context loading."""
+"""Line context loading."""
 
 from datetime import datetime, timedelta
 from pathlib import Path
 
 
-def load_room_context(workspace: Path, room_slug: str) -> str:
-    """Build a context string with room notes and recent journal mentions.
+def load_line_context(workspace: Path, slug: str) -> str:
+    """Build a context string with line notes and recent journal mentions.
 
-    Looks for rooms/{room_slug}.md in the workspace. If it exists, returns its
-    content along with any recent journal entries that mention the room via
-    [[rooms/{room_slug}]] wikilinks.
+    Looks for lines/{slug}.md in the workspace. If it exists, returns its
+    content along with any recent journal entries that mention the line via
+    [[lines/{slug}]] wikilinks.
     """
-    room_file = workspace / "rooms" / f"{room_slug}.md"
-    if not room_file.is_file():
+    line_file = workspace / "lines" / f"{slug}.md"
+    if not line_file.is_file():
         return ""
 
     parts: list[str] = []
-    parts.append(room_file.read_text().rstrip())
+    parts.append(line_file.read_text().rstrip())
 
-    wikilink_pattern = f"[[rooms/{room_slug}]]".lower()
+    wikilink_pattern = f"[[lines/{slug}]]".lower()
 
     journal_dir = workspace / "journal"
     if journal_dir.is_dir():

@@ -49,7 +49,8 @@ class ToolContext:
     workspace: Path
     username: str = ""
     agent_username: str = ""
-    room_id: str = ""
+    line: str = ""
+    chat_room: str = ""
     thread_id: str = ""
     message_id: str = ""
     summarize: Callable[[str, str], Awaitable[str]] | None = None

@@ -22,7 +22,7 @@ class Watcher(Protocol):
 
     async def __aenter__(self) -> Watcher: ...
     async def __aexit__(self, *exc: object) -> None: ...
-    def drain(self, room_id: str) -> set[str]: ...
+    def drain(self, line: str) -> set[str]: ...
 
 
 def _workspace_filter(_change: Change, path: str) -> bool:
@@ -40,13 +40,13 @@ def _format_workspace_pulse(changed: set[str]) -> str:
 
 
 class WorkspaceWatcher:
-    """Watches the workspace for filesystem changes and provides per-room drains."""
+    """Watches the workspace for filesystem changes and provides per-line drains."""
 
     def __init__(self, workspace: Path) -> None:
         self._workspace = workspace
         self._sequence = 0
         self._changes: dict[str, int] = {}
-        self._room_seqs: dict[str, int] = {}
+        self._line_seqs: dict[str, int] = {}
         self._stop = asyncio.Event()
         self._task: asyncio.Task[None] | None = None
 
@@ -76,13 +76,13 @@ class WorkspaceWatcher:
                 self._sequence += 1
                 self._changes[relative] = self._sequence
 
-    def drain(self, room_id: str) -> set[str]:
-        """Return paths changed since this room's last drain.
+    def drain(self, line: str) -> set[str]:
+        """Return paths changed since this line's last drain.
 
-        First call for a room returns empty (catches up to current sequence).
+        First call for a line returns empty (catches up to current sequence).
         """
-        last_seq = self._room_seqs.get(room_id)
-        self._room_seqs[room_id] = self._sequence
+        last_seq = self._line_seqs.get(line)
+        self._line_seqs[line] = self._sequence
 
         if last_seq is None:
             return set()

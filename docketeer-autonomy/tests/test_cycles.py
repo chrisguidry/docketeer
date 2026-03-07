@@ -106,8 +106,8 @@ def test_build_cycle_prompt_without_guidance(workspace: Path):
 
 async def test_reverie_calls_brain(brain: Brain, workspace: Path, fake_messages: Any):
     await reverie(task_key="reverie", brain=brain, workspace=workspace)
-    assert "__task__:reverie" in brain._conversations
-    msgs = brain._conversations["__task__:reverie"]
+    assert "reverie" in brain._conversations
+    msgs = brain._conversations["reverie"]
     assert any(REVERIE_PROMPT in extract_text(m.content) for m in msgs)
 
 
@@ -115,8 +115,8 @@ async def test_consolidation_calls_brain(
     brain: Brain, workspace: Path, fake_messages: Any
 ):
     await consolidation(task_key="consolidation", brain=brain, workspace=workspace)
-    assert "__task__:consolidation" in brain._conversations
-    msgs = brain._conversations["__task__:consolidation"]
+    assert "consolidation" in brain._conversations
+    msgs = brain._conversations["consolidation"]
     assert any(CONSOLIDATION_PROMPT in extract_text(m.content) for m in msgs)
 
 
@@ -128,7 +128,7 @@ async def test_reverie_empty_response(
         FakeMessage(content=[]),
     ]
     await reverie(task_key="reverie", brain=brain, workspace=workspace)
-    assert "__task__:reverie" in brain._conversations
+    assert "reverie" in brain._conversations
 
 
 async def test_consolidation_empty_response(
@@ -139,7 +139,7 @@ async def test_consolidation_empty_response(
         FakeMessage(content=[]),
     ]
     await consolidation(task_key="consolidation", brain=brain, workspace=workspace)
-    assert "__task__:consolidation" in brain._conversations
+    assert "consolidation" in brain._conversations
 
 
 def test_cycle_handlers_in_task_collection():
@@ -206,7 +206,7 @@ async def test_reverie_includes_digest(
         chat=chat,
         backend=None,
     )
-    msgs = brain._conversations["__task__:reverie"]
+    msgs = brain._conversations["reverie"]
     all_content = " ".join(extract_text(m.content) for m in msgs)
     assert "#general" in all_content
     assert "Hey everyone!" in all_content
@@ -224,7 +224,7 @@ async def test_reverie_without_backend(
         chat=chat,
         backend=None,
     )
-    assert "__task__:reverie" in brain._conversations
+    assert "reverie" in brain._conversations
 
 
 # --- Configuration tests ---

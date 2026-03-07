@@ -35,7 +35,7 @@ def workspace(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def tool_context(workspace: Path) -> ToolContext:
-    return ToolContext(workspace=workspace, room_id="room1")
+    return ToolContext(workspace=workspace, chat_room="room1")
 
 
 @pytest.fixture()
@@ -251,7 +251,7 @@ def test_format_room_message_without_thread():
 
 @pytest.mark.usefixtures("_register_tools")
 async def test_send_message_tool_to_thread(chat: MemoryChat, tool_context: ToolContext):
-    tool_context.room_id = "room1"
+    tool_context.chat_room = "room1"
     result = await registry.execute(
         "send_message", {"text": "hello", "thread_id": "t1"}, tool_context
     )
@@ -264,7 +264,7 @@ async def test_send_message_tool_to_thread(chat: MemoryChat, tool_context: ToolC
 async def test_send_message_tool_to_channel(
     chat: MemoryChat, tool_context: ToolContext
 ):
-    tool_context.room_id = "room1"
+    tool_context.chat_room = "room1"
     result = await registry.execute("send_message", {"text": "hello"}, tool_context)
     assert "Sent" in result
     assert chat.sent_messages[0].thread_id == ""
@@ -274,7 +274,7 @@ async def test_send_message_tool_to_channel(
 async def test_send_message_tool_custom_room(
     chat: MemoryChat, tool_context: ToolContext
 ):
-    tool_context.room_id = "room1"
+    tool_context.chat_room = "room1"
     result = await registry.execute(
         "send_message", {"text": "hello", "room_id": "other-room"}, tool_context
     )

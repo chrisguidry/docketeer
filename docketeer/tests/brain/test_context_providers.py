@@ -29,13 +29,13 @@ class FakeContextProvider:
             )
         ]
 
-    def for_room(self, workspace: Path, room_slug: str) -> list[MessageParam]:
-        room_file = workspace / "rooms" / f"{room_slug}.md"
-        if room_file.is_file():
+    def for_line(self, workspace: Path, slug: str) -> list[MessageParam]:
+        line_file = workspace / "lines" / f"{slug}.md"
+        if line_file.is_file():
             return [
                 MessageParam(
                     role="system",
-                    content=f"## Room notes: {room_slug}\n\n{room_file.read_text()}",
+                    content=f"## Line notes: {slug}\n\n{line_file.read_text()}",
                 )
             ]
         return []
@@ -76,12 +76,12 @@ async def test_context_provider_for_user_not_reloaded(
     assert len(system_msgs) == 1
 
 
-async def test_context_provider_for_room_called(
+async def test_context_provider_for_line_called(
     brain: Brain, fake_messages: Any, tool_context: ToolContext
 ):
-    rooms = tool_context.workspace / "rooms"
-    rooms.mkdir()
-    (rooms / "general.md").write_text("Weekly sync")
+    lines = tool_context.workspace / "lines"
+    lines.mkdir()
+    (lines / "general.md").write_text("Weekly sync")
     brain._context_providers = [FakeContextProvider()]
     fake_messages.responses = [FakeMessage(content=[make_text_block(text="Hi!")])]
     await brain.process(
@@ -89,42 +89,42 @@ async def test_context_provider_for_room_called(
     )
 
     messages = brain._conversations["room1"]
-    room_msg = next(
-        (m for m in messages if m.role == "system" and "Room notes:" in m.content),
+    line_msg = next(
+        (m for m in messages if m.role == "system" and "Line notes:" in m.content),
         None,
     )
-    assert room_msg is not None
-    assert "Weekly sync" in room_msg.content
+    assert line_msg is not None
+    assert "Weekly sync" in line_msg.content
 
 
-async def test_context_provider_room_skipped_for_dunder_rooms(
+async def test_context_provider_line_loaded_for_task_lines(
     brain: Brain, fake_messages: Any, tool_context: ToolContext
 ):
-    rooms = tool_context.workspace / "rooms"
-    rooms.mkdir()
-    (rooms / "reverie.md").write_text("Should not load")
+    lines = tool_context.workspace / "lines"
+    lines.mkdir()
+    (lines / "reverie.md").write_text("Reverie context")
     brain._context_providers = [FakeContextProvider()]
     fake_messages.responses = [FakeMessage(content=[make_text_block(text="ok")])]
     await brain.process(
-        "__task__:reverie",
+        "reverie",
         MessageContent(username="system", text="think"),
-        room_slug="reverie",
     )
 
-    messages = brain._conversations["__task__:reverie"]
-    room_messages = [
-        m for m in messages if m.role == "system" and "Room notes:" in m.content
+    messages = brain._conversations["reverie"]
+    line_messages = [
+        m for m in messages if m.role == "system" and "Line notes:" in m.content
     ]
-    assert len(room_messages) == 0
+    assert len(line_messages) == 1
+    assert "Reverie context" in line_messages[0].content
 
 
 async def test_context_reinjected_after_compaction(
     brain: Brain, fake_messages: Any, tool_context: ToolContext
 ):
     (tool_context.workspace / "people" / "chris").mkdir(parents=True)
-    rooms = tool_context.workspace / "rooms"
-    rooms.mkdir()
-    (rooms / "general.md").write_text("Weekly sync")
+    lines = tool_context.workspace / "lines"
+    lines.mkdir()
+    (lines / "general.md").write_text("Weekly sync")
     brain._context_providers = [FakeContextProvider()]
 
     fake_messages.responses = [
@@ -143,7 +143,7 @@ async def test_context_reinjected_after_compaction(
             room_slug="general",
         )
 
-    brain._room_token_counts["room1"] = 150_000
+    brain._token_counts["room1"] = 150_000
 
     await brain.process(
         "room1",
@@ -157,10 +157,10 @@ async def test_context_reinjected_after_compaction(
         for i, m in enumerate(messages)
         if m.role == "system" and "What I know about @chris" in m.content
     )
-    room_idx = next(
+    line_idx = next(
         i
         for i, m in enumerate(messages)
-        if m.role == "system" and "Room notes: general" in m.content
+        if m.role == "system" and "Line notes: general" in m.content
     )
     summary_idx = next(
         i
@@ -169,7 +169,7 @@ async def test_context_reinjected_after_compaction(
     )
 
     assert profile_idx < summary_idx
-    assert room_idx < summary_idx
+    assert line_idx < summary_idx
 
 
 async def test_no_providers_means_no_context(

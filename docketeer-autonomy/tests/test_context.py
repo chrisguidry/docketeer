@@ -31,20 +31,20 @@ def test_for_user_without_profile(tmp_path: Path):
     assert "people/unknown/profile.md" in msgs[0].content
 
 
-def test_for_room_with_notes(tmp_path: Path):
+def test_for_line_with_notes(tmp_path: Path):
     provider = AutonomyContextProvider()
-    rooms = tmp_path / "rooms"
-    rooms.mkdir()
-    (rooms / "general.md").write_text("Weekly sync every Monday")
+    lines = tmp_path / "lines"
+    lines.mkdir()
+    (lines / "general.md").write_text("Weekly sync every Monday")
 
-    msgs = provider.for_room(tmp_path, "general")
+    msgs = provider.for_line(tmp_path, "general")
     assert len(msgs) == 1
     assert msgs[0].role == "system"
-    assert "Room notes: general" in msgs[0].content
+    assert "Line notes: general" in msgs[0].content
     assert "Weekly sync" in msgs[0].content
 
 
-def test_for_room_without_notes(tmp_path: Path):
+def test_for_line_without_notes(tmp_path: Path):
     provider = AutonomyContextProvider()
-    msgs = provider.for_room(tmp_path, "general")
+    msgs = provider.for_line(tmp_path, "general")
     assert len(msgs) == 0

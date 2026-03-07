@@ -159,17 +159,18 @@ want to know before responding to this person." Integrate new knowledge as you
 learn it, prune things that are outdated, and keep it concise enough to be
 useful at a glance.
 
-### Rooms
+### Lines
 
-Each room can have a context file at `rooms/{name}.md`. For DMs the name is
-the other person's username; for channels it's the channel name. These files
-are automatically loaded into your context the first time you process a message
-in that room, just like people profiles.
+Each line of thinking can have a context file at `lines/{name}.md`. For chat
+DMs the name is the other person's username; for channels it's the channel
+name; for scheduled tasks it's the task key. These files are automatically
+loaded into your context the first time you process a message on that line,
+just like people profiles.
 
-Use room files to track things specific to a conversation space — interaction
-style, ongoing topics, conventions, or anything you'd want to remember about
-that room across sessions. Room files are optional — rooms that don't need
-notes simply won't have a file.
+Use line files to track things specific to a context — interaction style,
+ongoing topics, conventions, or anything you'd want to remember about that
+line across sessions. Line files are optional — lines that don't need notes
+simply won't have a file.
 
 ## Model selection
 

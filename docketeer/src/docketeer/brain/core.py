@@ -112,10 +112,10 @@ class Brain:
         self._conversation_locks: defaultdict[str, asyncio.Lock] = defaultdict(
             asyncio.Lock
         )
-        self._room_token_counts: dict[str, int] = {}
+        self._token_counts: dict[str, int] = {}
         self._last_user_timestamp: dict[str, datetime] = {}
         self._profiles_loaded: dict[str, set[str]] = defaultdict(set)
-        self._room_context_loaded: dict[str, bool] = {}
+        self._line_context_loaded: dict[str, bool] = {}
         self._context_providers = [
             factory() for factory in discover_all("docketeer.context")
         ]
@@ -132,10 +132,10 @@ class Brain:
     async def __aexit__(self, *exc: object) -> None:
         await self._stack.aclose()
 
-    def load_history(self, room_id: str, messages: list[RoomMessage]) -> int:
-        """Load conversation history for a room. Returns count loaded."""
+    def load_history(self, line: str, messages: list[RoomMessage]) -> int:
+        """Load conversation history for a line. Returns count loaded."""
         agent = self.tool_context.agent_username
-        previous: datetime | None = self._last_user_timestamp.get(room_id)
+        previous: datetime | None = self._last_user_timestamp.get(line)
         for msg in messages:
             role = "assistant" if msg.username == agent else "user"
             if role == "user":
@@ -144,24 +144,22 @@ class Brain:
                 previous = msg.timestamp
             else:
                 content = msg.text
-            self._conversations[room_id].append(
-                MessageParam(role=role, content=content)
-            )
+            self._conversations[line].append(MessageParam(role=role, content=content))
         if previous is not None:
-            self._last_user_timestamp[room_id] = previous
+            self._last_user_timestamp[line] = previous
         return len(messages)
 
-    def has_history(self, room_id: str) -> bool:
-        """Check if we have history for a room."""
-        return room_id in self._conversations
+    def has_history(self, line: str) -> bool:
+        """Check if we have history for a line."""
+        return line in self._conversations
 
-    async def record_own_message(self, room_id: str, text: str) -> None:
-        """Record a message sent by the agent to a room's conversation history."""
-        if room_id == self.tool_context.room_id:
+    async def record_own_message(self, line: str, text: str) -> None:
+        """Record a message sent by the agent to a line's conversation history."""
+        if line == self.tool_context.line:
             return
-        if not self.has_history(room_id):
+        if not self.has_history(line):
             return
-        messages = self._conversations[room_id]
+        messages = self._conversations[line]
         if (
             messages
             and messages[-1].role == "assistant"
@@ -172,13 +170,14 @@ class Brain:
 
     async def process(
         self,
-        room_id: str,
+        line: str,
         content: MessageContent,
         callbacks: ProcessCallbacks | None = None,
         tier: str = "",
         thinking: bool = False,
         room_context: str = "",
         room_slug: str = "",
+        chat_room: str = "",
     ) -> BrainResponse:
         """Process a message and return a response with tool call info."""
         tier = tier or CHAT_MODEL
@@ -191,47 +190,45 @@ class Brain:
             tools[-1].cache_control = CacheControl()
 
         self.tool_context.username = content.username
-        self.tool_context.room_id = room_id if not room_id.startswith("__") else ""
+        self.tool_context.line = line
+        self.tool_context.chat_room = chat_room
         self.tool_context.thread_id = content.thread_id
         self.tool_context.message_id = content.message_id
 
-        async with self._conversation_locks[room_id]:
-            if self._room_token_counts.get(room_id, 0) > COMPACT_THRESHOLD:
-                prev_profiles = set(self._profiles_loaded[room_id])
-                prev_room_loaded = room_id in self._room_context_loaded
+        async with self._conversation_locks[line]:
+            if self._token_counts.get(line, 0) > COMPACT_THRESHOLD:
+                prev_profiles = set(self._profiles_loaded[line])
+                prev_line_loaded = line in self._line_context_loaded
 
-                await self._compact_history(room_id, system, tools, tier)
-                self._profiles_loaded[room_id].clear()
-                self._room_context_loaded.pop(room_id, None)
+                await self._compact_history(line, system, tools, tier)
+                self._profiles_loaded[line].clear()
+                self._line_context_loaded.pop(line, None)
 
                 context_msgs = self._reinject_context(
-                    room_id,
+                    line,
                     prev_profiles,
-                    prev_room_loaded,
+                    prev_line_loaded,
                     room_slug,
                 )
                 if context_msgs:
-                    self._conversations[room_id][0:0] = context_msgs
+                    self._conversations[line][0:0] = context_msgs
 
-            messages = self._conversations[room_id]
+            messages = self._conversations[line]
 
             current_user = content.username
-            if current_user not in self._profiles_loaded[room_id]:
+            if current_user not in self._profiles_loaded[line]:
                 for provider in self._context_providers:
                     messages.extend(provider.for_user(self._workspace, current_user))
-                self._profiles_loaded[room_id].add(current_user)
+                self._profiles_loaded[line].add(current_user)
 
-            if (
-                not room_id.startswith("__")
-                and room_id not in self._room_context_loaded
-            ):
-                slug = room_slug or room_id
+            if line not in self._line_context_loaded:
+                slug = room_slug or line
                 for provider in self._context_providers:
-                    messages.extend(provider.for_room(self._workspace, slug))
-                self._room_context_loaded[room_id] = True
+                    messages.extend(provider.for_line(self._workspace, slug))
+                self._line_context_loaded[line] = True
 
             # Workspace pulse: inject changes from other contexts
-            changed = self._watcher.drain(room_id)
+            changed = self._watcher.drain(line)
             if changed:
                 messages.append(
                     MessageParam(
@@ -241,12 +238,12 @@ class Brain:
                 )
 
             # Layer C: Per-message context - JSON metadata + @username: message
-            user_content = self._build_content(content, room_id, room_context)
-            self._conversations[room_id].append(
+            user_content = self._build_content(content, line, room_context)
+            self._conversations[line].append(
                 MessageParam(role="user", content=user_content)
             )
 
-            messages = self._conversations[room_id]
+            messages = self._conversations[line]
 
             log.debug("Processing message with %d history messages", len(messages))
 
@@ -268,8 +265,8 @@ class Brain:
                 )
             except ContextTooLargeError:
                 log.warning("Request too large, compacting and retrying", exc_info=True)
-                await self._compact_history(room_id, system, tools, tier)
-                messages = self._conversations[room_id]
+                await self._compact_history(line, system, tools, tier)
+                messages = self._conversations[line]
                 try:
                     reply = await self._backend.run_agentic_loop(
                         tier,
@@ -292,59 +289,57 @@ class Brain:
                 return BrainResponse(text=APOLOGY)
 
             if reply:
-                self._conversations[room_id].append(
+                self._conversations[line].append(
                     MessageParam(role="assistant", content=reply)
                 )
                 log.info("← BRAIN: %s", reply)
 
             # Absorb this turn's own tool changes so they don't echo back
             # as a false pulse on the next turn.
-            self._watcher.drain(room_id)
+            self._watcher.drain(line)
 
-            tokens = await self._measure_context(room_id, system, tools, tier)
+            tokens = await self._measure_context(line, system, tools, tier)
             log.info(
-                "Context: %d / %d tokens for room %s",
+                "Context: %d / %d tokens for line %s",
                 tokens,
                 CONTEXT_BUDGET,
-                room_id,
+                line,
             )
 
             return BrainResponse(text=reply)
 
     async def _measure_context(
         self,
-        room_id: str,
+        line: str,
         system: list[SystemBlock],
         tools: list[ToolDefinition],
         tier: str,
     ) -> int:
         """Count tokens for the current conversation state."""
         count = await self._backend.count_tokens(
-            tier, system, tools, self._conversations[room_id]
+            tier, system, tools, self._conversations[line]
         )
         if count < 0:
-            log.warning(
-                "Token counting failed for room %s, using cached value", room_id
-            )
-            return self._room_token_counts.get(room_id, 0)
-        self._room_token_counts[room_id] = count
+            log.warning("Token counting failed for line %s, using cached value", line)
+            return self._token_counts.get(line, 0)
+        self._token_counts[line] = count
         return count
 
     async def _compact_history(
         self,
-        room_id: str,
+        line: str,
         system: list[SystemBlock],
         tools: list[ToolDefinition],
         tier: str,
     ) -> None:
-        old_count = len(self._conversations[room_id])
-        await compact_history(self._backend, self._conversations, room_id)
-        new_count = len(self._conversations[room_id])
+        old_count = len(self._conversations[line])
+        await compact_history(self._backend, self._conversations, line)
+        new_count = len(self._conversations[line])
         if new_count < old_count:
-            tokens = await self._measure_context(room_id, system, tools, tier)
+            tokens = await self._measure_context(line, system, tools, tier)
             log.info(
-                "Compacted room %s: %d → %d messages (%d tokens)",
-                room_id,
+                "Compacted line %s: %d → %d messages (%d tokens)",
+                line,
                 old_count,
                 new_count,
                 tokens,
@@ -352,12 +347,12 @@ class Brain:
 
     def _reinject_context(
         self,
-        room_id: str,
+        line: str,
         prev_profiles: set[str],
-        prev_room_loaded: bool,
+        prev_line_loaded: bool,
         room_slug: str,
     ) -> list[MessageParam]:
-        """Re-read profile/room context after compaction for prepending."""
+        """Re-read profile/line context after compaction for prepending."""
         msgs: list[MessageParam] = []
         for username in sorted(prev_profiles):
             for provider in self._context_providers:
@@ -365,12 +360,12 @@ class Brain:
                 msgs.extend(
                     m for m in user_msgs if "don't have a profile" not in m.content
                 )
-            self._profiles_loaded[room_id].add(username)
-        if prev_room_loaded and not room_id.startswith("__"):
-            slug = room_slug or room_id
+            self._profiles_loaded[line].add(username)
+        if prev_line_loaded:
+            slug = room_slug or line
             for provider in self._context_providers:
-                msgs.extend(provider.for_room(self._workspace, slug))
-            self._room_context_loaded[room_id] = True
+                msgs.extend(provider.for_line(self._workspace, slug))
+            self._line_context_loaded[line] = True
         return msgs
 
     async def _summarize_webpage(self, text: str, purpose: str) -> str:
@@ -384,7 +379,7 @@ class Brain:
     def _build_content(
         self,
         content: MessageContent,
-        room_id: str = "",
+        line: str = "",
         room_context: str = "",
     ) -> list[ContentBlockParam] | str:
         """Build content blocks for Claude."""
@@ -403,9 +398,9 @@ class Brain:
 
         # Track delta timestamps for history formatting
         if content.timestamp:
-            previous = self._last_user_timestamp.get(room_id)
+            previous = self._last_user_timestamp.get(line)
             meta["delta"] = format_message_time(content.timestamp, previous)
-            self._last_user_timestamp[room_id] = content.timestamp
+            self._last_user_timestamp[line] = content.timestamp
 
         meta_line = json.dumps(meta)
         message_line = (

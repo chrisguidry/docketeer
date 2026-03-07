@@ -85,7 +85,7 @@ def _mock_tool_context(
     room_id: str = "room-1", workspace: Path | None = None
 ) -> AsyncMock:
     ctx = AsyncMock()
-    ctx.room_id = room_id
+    ctx.line = room_id
     ctx.workspace = workspace or Path("/data/workspace")
     return ctx
 

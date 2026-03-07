@@ -185,7 +185,7 @@ async def test_process_tool_only_returns_empty(brain: Brain, fake_messages: Any)
 
 
 async def test_process_triggers_compaction(brain: Brain, fake_messages: Any):
-    brain._room_token_counts["room1"] = 150_000
+    brain._token_counts["room1"] = 150_000
     for i in range(10):
         brain._conversations["room1"].append(
             MessageParam(role="user" if i % 2 == 0 else "assistant", content=f"msg {i}")
