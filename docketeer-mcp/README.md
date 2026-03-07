@@ -10,8 +10,9 @@ any MCP-compatible server so new capabilities are config, not code.
 |------|---------|
 | `list_mcp_servers` | Show configured and connected servers |
 | `connect_mcp_server` | Connect to a configured server |
+| `mcp_oauth_complete` | Complete an OAuth flow for a server |
 | `disconnect_mcp_server` | Disconnect from a server |
-| `search_mcp_tools` | Search connected servers' tools by keyword |
+| `search_mcp_tools` | Semantic search across MCP server tools |
 | `use_mcp_tool` | Call a tool on a connected server |
 | `add_mcp_server` | Save a new server configuration |
 | `remove_mcp_server` | Delete a server configuration |

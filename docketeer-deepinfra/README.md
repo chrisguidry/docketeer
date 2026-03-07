@@ -2,7 +2,7 @@
 
 DeepInfra inference backend plugin for Docketeer.
 
-This plugin provides inference through the DeepInfra native API.
+This plugin provides inference through the DeepInfra API (OpenAI-compatible).
 
 ## Installation
 
@@ -12,32 +12,17 @@ pip install docketeer-deepinfra
 
 ## Configuration
 
-Configure the DeepInfra backend with environment variables:
-
-```bash
-# Required: Your DeepInfra API key
-export DOCKETEER_DEEPINFRA_API_KEY=your-api-key-here
-
-# Optional: Override the API base URL (defaults to https://api.deepinfra.com)
-export DOCKETEER_DEEPINFRA_BASE_URL=https://api.deepinfra.com
-
-# Optional: Set the default model (defaults to meta-llama/Llama-3.3-70B-Instruct)
-export DOCKETEER_DEEPINFRA_MODEL=meta-llama/Llama-3.3-70B-Instruct
-```
+| Variable | Default | Description |
+|---|---|---|
+| `DOCKETEER_DEEPINFRA_API_KEY` | _(required)_ | DeepInfra API key |
+| `DOCKETEER_DEEPINFRA_BASE_URL` | `https://api.deepinfra.com/v1/openai` | API base URL |
+| `DOCKETEER_DEEPINFRA_MODEL` | `MiniMaxAI/MiniMax-M2.5` | Default model for all tiers |
+| `DOCKETEER_DEEPINFRA_MODEL_SMART` | _(falls back to MODEL)_ | Model for the `smart` tier |
+| `DOCKETEER_DEEPINFRA_MODEL_BALANCED` | _(falls back to MODEL)_ | Model for the `balanced` tier |
+| `DOCKETEER_DEEPINFRA_MODEL_FAST` | _(falls back to MODEL)_ | Model for the `fast` tier |
 
 Then configure Docketeer to use the DeepInfra inference plugin:
 
 ```bash
 export DOCKETEER_INFERENCE=deepinfra
 ```
-
-## Supported Models
-
-Any model available on DeepInfra can be used. Common models include:
-
-- `meta-llama/Llama-3.3-70B-Instruct` (default)
-- `meta-llama/Llama-3.1-405B-Instruct`
-- `Qwen/Qwen2.5-72B-Instruct`
-- `deepseek-ai/DeepSeek-V3`
-
-Set the model using `DOCKETEER_DEEPINFRA_MODEL` or by specifying the model in your Docketeer configuration.

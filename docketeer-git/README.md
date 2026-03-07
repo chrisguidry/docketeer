@@ -21,9 +21,11 @@ No agent-facing tools are added — the agent doesn't know about backups.
 ## How it works
 
 A periodic docket task checks the workspace for uncommitted changes every 5
-minutes (configurable). If anything changed, it stages everything and commits
-with a timestamped message. If `DOCKETEER_GIT_REMOTE` is set, it pushes after
-each commit. Push failures are logged but don't crash the agent.
+minutes (configurable). If anything changed, it stages everything and commits.
+When an inference backend is available, the commit message is generated from
+the diff by the LLM; otherwise it falls back to a timestamped message. If
+`DOCKETEER_GIT_REMOTE` is set, it pushes after each commit. Push failures are
+logged but don't crash the agent.
 
 The git repo is initialized automatically on first run. You can browse the
 history with standard git tools (`git log`, `git diff`, etc.) in the workspace

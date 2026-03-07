@@ -233,16 +233,15 @@ export DOCKETEER_ANTHROPIC_API_KEY="sk-ant-..."
 
 # For the DeepInfra backend:
 export DOCKETEER_DEEPINFRA_API_KEY="..."
-# Optionally override the default model:
-export DOCKETEER_DEEPINFRA_MODEL="MiniMaxAI/MiniMax-M2.5"
 ```
 
-Docketeer uses three model tiers — `CHAT_MODEL`, `REVERIE_MODEL`, and
-`CONSOLIDATION_MODEL` — each defaulting to `"balanced"`. Each backend maps
-tier names to its own model IDs, and the DeepInfra backend also lets you
-override per-tier with `DOCKETEER_DEEPINFRA_MODEL_BALANCED`,
-`DOCKETEER_DEEPINFRA_MODEL_FAST`, etc. (the Anthropic backend uses
-`DOCKETEER_ANTHROPIC_MODEL_BALANCED`, `DOCKETEER_ANTHROPIC_MODEL_FAST`, etc.).
+Docketeer uses three model tiers — `DOCKETEER_CHAT_MODEL`,
+`DOCKETEER_REVERIE_MODEL`, and `DOCKETEER_CONSOLIDATION_MODEL` — each
+defaulting to `"balanced"`. Each backend maps tier names (`smart`,
+`balanced`, `fast`) to its own model IDs. You can override the model for
+each tier per backend with variables like `DOCKETEER_ANTHROPIC_MODEL_SMART`,
+`DOCKETEER_DEEPINFRA_MODEL_BALANCED`, etc. See each backend's README for
+defaults.
 
 Run the agent:
 
