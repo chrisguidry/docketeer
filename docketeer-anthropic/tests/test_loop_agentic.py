@@ -4,12 +4,11 @@ import asyncio
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from docketeer_anthropic.loop import MAX_TOOL_ROUNDS, agentic_loop
-
 from docketeer.prompt import MessageParam
 from docketeer.tools import WRAP_UP_TOOL_NAME, ToolContext
+from docketeer_anthropic.loop import MAX_TOOL_ROUNDS, agentic_loop
 
-from .conftest import (
+from .helpers import (
     MODEL,
     FakeStream,
     make_response,

@@ -16,14 +16,14 @@ plugin tests when modifying public interfaces.
 - **`vault.py`** — the `Vault` ABC. Vault plugins (1password) implement this.
 - **`executor.py`** — the `CommandExecutor` ABC. Executor plugins (bubblewrap)
   implement this.
-- **`tools/`** — built-in tool implementations (workspace files, journal,
-  vault, executor). The `__init__.py` has the tool registry and `ToolContext`.
+- **`tools/`** — built-in tool implementations (workspace files, vault,
+  executor). The `__init__.py` has the tool registry and `ToolContext`.
 - **`plugins.py`** — entry point discovery. `discover_one()` for single-select
   plugins, `discover_all()` for multi-load.
 - **`prompt.py`** — system prompt assembly from prompt providers.
-- **`tasks.py`** — Docket task definitions (nudge, reverie, consolidation).
+- **`tasks.py`** — Docket task definitions (nudge).
 - **`handlers.py`** — message handling and the bridge between chat and brain.
-- **`people.py`** — per-person profile management in the workspace.
+
 - **`environment.py`** — configuration from environment variables.
 - **`watcher.py`** — workspace filesystem watcher. Detects external changes
   and provides a `drain()` interface for injecting workspace pulse messages.

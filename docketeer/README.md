@@ -7,7 +7,7 @@ Docketeer is a small, opinionated toolkit for running an AI agent that can
 manage its own memory, schedule its own future work, and extend itself through
 plugins. The inference backend is pluggable — bring your own LLM provider. The
 core package provides the agent loop, a persistent workspace for the agent's
-files and journal, and a plugin system based on standard Python
+files, and a plugin system based on standard Python
 [entry points](https://packaging.python.org/en/latest/specifications/entry-points/).
 
 ## Tools
@@ -22,11 +22,6 @@ files and journal, and a plugin system based on standard Python
 - **`create_link`** — create a symbolic link in the workspace
 - **`read_link`** — read the target of a symbolic link
 - **`search_files`** — semantic search across workspace files (falls back to keyword grep without docketeer-search)
-
-### Journal
-
-- **`journal_add`** — add a timestamped entry to today's journal
-- **`journal_entries`** — read journal entries for a day or date range
 
 ### Scheduling
 
@@ -64,10 +59,7 @@ files and journal, and a plugin system based on standard Python
 | `DOCKETEER_DOCKET_URL` | `redis://localhost:6379/0` | Redis connection for task scheduling |
 | `DOCKETEER_DOCKET_NAME` | `docketeer` | Name of the Docket instance |
 | `DOCKETEER_CHAT_MODEL` | `balanced` | Model tier for chat conversations |
-| `DOCKETEER_REVERIE_MODEL` | `balanced` | Model tier for background thinking |
-| `DOCKETEER_CONSOLIDATION_MODEL` | `balanced` | Model tier for memory consolidation |
-| `DOCKETEER_REVERIE_INTERVAL` | `PT30M` (30 min) | Background thinking cycle interval |
-| `DOCKETEER_CONSOLIDATION_CRON` | `0 3 * * *` | Cron schedule for daily memory consolidation |
+| `DOCKETEER_LOG_LEVEL` | `INFO` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`) |
 | `DOCKETEER_CHAT` | _(auto)_ | Entry point name to select when multiple chat plugins are installed |
 | `DOCKETEER_INFERENCE` | _(auto)_ | Entry point name to select when multiple inference plugins are installed |
 | `DOCKETEER_EXECUTOR` | _(auto)_ | Entry point name to select when multiple executor plugins are installed |
@@ -92,6 +84,7 @@ Available plugins:
 - [docketeer-1password](https://pypi.org/project/docketeer-1password/) — 1Password secret vault
 - [docketeer-agentskills](https://pypi.org/project/docketeer-agentskills/) — Agent Skills support
 - [docketeer-anthropic](https://pypi.org/project/docketeer-anthropic/) — Anthropic inference backend
+- [docketeer-autonomy](https://pypi.org/project/docketeer-autonomy/) — autonomous inner life (reverie, consolidation, journaling, profiles)
 - [docketeer-bubblewrap](https://pypi.org/project/docketeer-bubblewrap/) — sandboxed command execution via bubblewrap
 - [docketeer-deepinfra](https://pypi.org/project/docketeer-deepinfra/) — DeepInfra inference backend
 - [docketeer-git](https://pypi.org/project/docketeer-git/) — automatic git-backed workspace backups
@@ -99,5 +92,6 @@ Available plugins:
 - [docketeer-monty](https://pypi.org/project/docketeer-monty/) — sandboxed Python execution
 - [docketeer-rocketchat](https://pypi.org/project/docketeer-rocketchat/) — Rocket.Chat backend
 - [docketeer-search](https://pypi.org/project/docketeer-search/) — semantic workspace search via fastembed
+- [docketeer-subprocess](https://pypi.org/project/docketeer-subprocess/) — unsandboxed command execution for containers and non-Linux hosts
 - [docketeer-tui](https://pypi.org/project/docketeer-tui/) — terminal chat backend
 - [docketeer-web](https://pypi.org/project/docketeer-web/) — web search, HTTP requests, file downloads

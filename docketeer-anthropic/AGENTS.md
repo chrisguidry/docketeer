@@ -22,10 +22,11 @@ the `DOCKETEER_ANTHROPIC_BACKEND` environment variable:
 ## Testing
 
 Tests are split into focused files per concern (streaming, tool execution,
-cache breakpoints, etc.). The `conftest.py` provides shared helpers:
-`make_response`, `make_text_block`, `make_tool_block`, `FakeStream`, and
-the `MODEL` constant. Use these rather than defining local copies in test
-files.
+cache breakpoints, etc.). The `tests/helpers.py` module provides shared
+builder functions and test doubles: `make_response`, `make_text_block`,
+`make_tool_block`, `FakeStream`, and the `MODEL` constant. Import these
+from `.helpers`, not from `.conftest`. The `conftest.py` is reserved for
+`@pytest.fixture` functions only.
 
 All Anthropic API calls must be faked in tests — `respx` or direct mocking.
 The 1-second timeout means no real HTTP.

@@ -1,4 +1,4 @@
-"""Claude reasoning loop with tool use."""
+"""Agentic reasoning loop with tool use."""
 
 from docketeer.brain.backend import (
     BackendAuthError,

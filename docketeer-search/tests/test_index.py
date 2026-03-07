@@ -11,7 +11,7 @@ from docketeer_search.index import (
     FastembedCatalog,
     FastembedIndex,
 )
-from tests.conftest import FakeEmbedder
+from tests.helpers import FakeEmbedder
 
 
 @pytest.fixture()

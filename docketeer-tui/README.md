@@ -16,3 +16,8 @@ are installed, set:
 ```sh
 export DOCKETEER_CHAT=tui
 ```
+
+| Variable | Default | Description |
+|---|---|---|
+| `DOCKETEER_CHAT` | _(auto)_ | Set to `tui` when multiple chat backends are installed |
+| `DOCKETEER_TUI_USERNAME` | current OS user | Username shown in the TUI conversation |

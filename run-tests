@@ -35,6 +35,14 @@ def main() -> int:
             failed.append(pkg)
         print(flush=True)
 
+    root_tests = root / "tests"
+    if root_tests.is_dir():
+        print("=== docs-sync ===", flush=True)
+        result = subprocess.run(["pytest", *extra_args], cwd=root)
+        if result.returncode != 0:
+            failed.append("docs-sync")
+        print(flush=True)
+
     if failed:
         print(f"FAILED: {', '.join(failed)}")
         return 1

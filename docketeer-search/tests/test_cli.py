@@ -7,7 +7,7 @@ import pytest
 
 from docketeer_search.cli import _is_text_file, _walk_workspace, main, reindex
 from docketeer_search.store import VectorStore
-from tests.conftest import FakeEmbedder
+from tests.helpers import FakeEmbedder
 
 
 def test_is_text_file(workspace: Path):

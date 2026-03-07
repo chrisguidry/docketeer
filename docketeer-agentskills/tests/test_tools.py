@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from docketeer.tools import ToolContext, registry
 
-from .conftest import make_skill
+from .helpers import make_skill
 
 
 async def test_list_skills_none(tool_context: ToolContext):

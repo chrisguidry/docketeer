@@ -1,4 +1,4 @@
-"""Docketeer: Lightweight agentic system using Claude, pydocket, and Rocket Chat."""
+"""Docketeer: Lightweight agentic toolkit built on pydocket."""
 
 from importlib.metadata import version
 

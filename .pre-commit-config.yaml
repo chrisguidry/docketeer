@@ -173,3 +173,12 @@ repos:
         files: ^docketeer/src/|^docketeer-tui/
         pass_filenames: false
         require_serial: true
+
+      - id: pytest-root
+        name: pytest (root)
+        entry: uv run --no-sync pytest tests/
+        language: system
+        types_or: [python, toml, markdown, yaml]
+        files: ^(pyproject\.toml|README\.md|\.pre-commit-config\.yaml|docketeer.*/pyproject\.toml|docketeer.*/README\.md|docketeer.*/src/)
+        pass_filenames: false
+        require_serial: true

@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 from docketeer_deepinfra.loop import build_reply
 
-from .conftest import make_response
+from .helpers import make_response
 
 
 def test_basic_content():

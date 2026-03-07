@@ -1,12 +1,20 @@
 """Tests for the 1Password vault implementation."""
 
 import json
+from typing import cast
 
 import pytest
 
 from docketeer_1password.vault import OnePasswordVault
 
-from .conftest import OpCLI, OpResponse
+from .helpers import OpCLI, OpResponse
+
+
+@pytest.fixture()
+def op_cli(monkeypatch: pytest.MonkeyPatch) -> OpCLI:
+    cli = OpCLI()
+    monkeypatch.setattr("asyncio.create_subprocess_exec", cli.exec)
+    return cli
 
 
 @pytest.fixture()
@@ -28,7 +36,7 @@ async def test_op_receives_service_account_token(
     op_cli(json.dumps([]))
     await vault.list_secrets()
 
-    env: dict[str, str] = op_cli.calls[0].kwargs.get("env", {})  # type: ignore[assignment]
+    env = cast(dict[str, str], op_cli.calls[0].kwargs.get("env", {}))
     assert env["OP_SERVICE_ACCOUNT_TOKEN"] == "test-sa-token"
     assert "PATH" in env
 

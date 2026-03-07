@@ -7,7 +7,7 @@ from docketeer.prompt import MessageParam, SystemBlock
 from docketeer.tools import ToolDefinition
 from docketeer_deepinfra.loop import stream_message
 
-from .conftest import MODEL, make_chunks, make_tc_delta, make_usage
+from .helpers import MODEL, make_chunks, make_tc_delta, make_usage
 
 
 async def test_basic_content(mock_client: MagicMock):

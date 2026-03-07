@@ -9,13 +9,13 @@ import pytest
 from anthropic import APIError, AuthenticationError
 from anthropic._exceptions import PermissionDeniedError, RequestTooLargeError
 from anthropic.types import TextBlock
-from docketeer_anthropic.api_backend import AnthropicAPIBackend
 
 from docketeer.brain.backend import BackendAuthError, BackendError, ContextTooLargeError
 from docketeer.prompt import CacheControl, MessageParam, SystemBlock
 from docketeer.tools import ToolContext
+from docketeer_anthropic.api_backend import AnthropicAPIBackend
 
-from .conftest import FakeStream, make_response
+from .helpers import FakeStream, make_response
 
 
 @pytest.fixture()

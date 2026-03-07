@@ -1,11 +1,11 @@
 """Tests for the cycles module."""
 
 import logging
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from docket.dependencies import Cron, Perpetual
@@ -15,7 +15,8 @@ from docketeer.brain import Brain
 from docketeer.brain.backend import BackendAuthError
 from docketeer.chat import RoomInfo, RoomKind, RoomMessage
 from docketeer.prompt import extract_text
-from docketeer.testing import MemoryChat
+from docketeer.testing import MemoryChat, MemoryWatcher
+from docketeer.tools import ToolContext
 from docketeer_autonomy.cycles import (
     CONSOLIDATION_CRON,
     CONSOLIDATION_MODEL,
@@ -30,11 +31,37 @@ from docketeer_autonomy.cycles import (
 )
 from docketeer_autonomy.tasks import _autonomy_tasks
 
-from .conftest import (
+from .helpers import (
     FakeMessage,
+    FakeMessages,
     make_backend_auth_error,
     make_tool_use_block,
 )
+
+
+@pytest.fixture()
+def fake_messages() -> FakeMessages:
+    return FakeMessages()
+
+
+@pytest.fixture()
+def mock_anthropic(fake_messages: Any) -> Iterator[MagicMock]:
+    mock_client = MagicMock()
+    mock_client.messages = fake_messages
+    from docketeer_anthropic.api_backend import AnthropicAPIBackend
+
+    backend = AnthropicAPIBackend.__new__(AnthropicAPIBackend)
+    backend._client = mock_client
+    with patch("docketeer.brain.core._create_backend", return_value=backend):
+        yield mock_client
+
+
+@pytest.fixture()
+async def brain(
+    tool_context: ToolContext, mock_anthropic: MagicMock
+) -> AsyncIterator[Brain]:
+    async with Brain(tool_context, watcher=MemoryWatcher()) as brain:
+        yield brain
 
 
 def test_read_cycle_guidance_extracts_section(workspace: Path):

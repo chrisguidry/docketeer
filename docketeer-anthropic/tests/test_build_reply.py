@@ -2,7 +2,7 @@
 
 from docketeer_anthropic.loop import build_reply
 
-from .conftest import make_response, make_text_block
+from .helpers import make_response, make_text_block
 
 
 def test_build_reply_with_text() -> None:

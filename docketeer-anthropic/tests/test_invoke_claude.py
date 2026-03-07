@@ -8,10 +8,10 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from docketeer_anthropic.claude_code_backend import _build_claude_args, _invoke_claude
 
 from docketeer.brain.backend import BackendAuthError, BackendError
 from docketeer.executor import ClaudeInvocation, RunningProcess
+from docketeer_anthropic.claude_code_backend import _build_claude_args, _invoke_claude
 
 
 def _mock_executor(proc: RunningProcess) -> AsyncMock:

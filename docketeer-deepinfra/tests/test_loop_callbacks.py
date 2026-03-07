@@ -7,7 +7,7 @@ from docketeer.prompt import MessageParam
 from docketeer.tools import ToolContext
 from docketeer_deepinfra.loop import agentic_loop
 
-from .conftest import MODEL, make_response, make_tool_call
+from .helpers import MODEL, make_response, make_tool_call
 
 
 async def test_tool_start_and_end_callbacks(tool_context: ToolContext, tmp_path: Path):

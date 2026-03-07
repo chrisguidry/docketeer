@@ -497,7 +497,6 @@ dependencies = [
     { name = "croniter" },
     { name = "mcp" },
     { name = "pydocket" },
-    { name = "pyyaml" },
     { name = "watchfiles" },
 ]
 
@@ -506,7 +505,6 @@ requires-dist = [
     { name = "croniter" },
     { name = "mcp" },
     { name = "pydocket", specifier = ">=0.17.8" },
-    { name = "pyyaml" },
     { name = "watchfiles" },
 ]
 

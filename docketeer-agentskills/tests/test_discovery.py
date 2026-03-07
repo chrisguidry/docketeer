@@ -10,7 +10,7 @@ from docketeer_agentskills.discovery import (
     parse_skill,
 )
 
-from .conftest import make_skill
+from .helpers import make_skill
 
 
 def test_parse_skill(skills_dir: Path):

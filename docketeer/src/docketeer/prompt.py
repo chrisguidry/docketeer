@@ -50,7 +50,7 @@ def _load_prompt_providers() -> list[Callable[[Path], list[SystemBlock]]]:
 
 @dataclass
 class MessageContent:
-    """Content to send to Claude - text and/or images."""
+    """Content to send to the inference backend — text and/or images."""
 
     username: str
     message_id: str = ""

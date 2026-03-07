@@ -3,12 +3,12 @@
 from unittest.mock import MagicMock
 
 from anthropic.types import TextBlock, ToolUseBlock
-from docketeer_anthropic.loop import _dump_content_block, stream_message
 
 from docketeer.brain.core import InferenceModel
 from docketeer.prompt import MessageParam, SystemBlock
+from docketeer_anthropic.loop import _dump_content_block, stream_message
 
-from .conftest import (
+from .helpers import (
     MODEL,
     FakeStream,
     make_response,

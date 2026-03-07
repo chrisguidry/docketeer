@@ -7,9 +7,9 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from docketeer_anthropic.claude_code_backend import ClaudeCodeBackend
 
 from docketeer.prompt import MessageParam
+from docketeer_anthropic.claude_code_backend import ClaudeCodeBackend
 
 TIER = "smart"
 

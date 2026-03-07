@@ -3,6 +3,9 @@
 import json
 
 import pytest
+
+from docketeer.brain.backend import BackendAuthError, BackendError, ContextTooLargeError
+from docketeer.prompt import MessageParam, TextBlockParam
 from docketeer_anthropic.claude_code_output import (
     check_error,
     check_process_exit,
@@ -10,9 +13,6 @@ from docketeer_anthropic.claude_code_output import (
     format_prompt,
     parse_response,
 )
-
-from docketeer.brain.backend import BackendAuthError, BackendError, ContextTooLargeError
-from docketeer.prompt import MessageParam, TextBlockParam
 
 # -- extract_text --
 

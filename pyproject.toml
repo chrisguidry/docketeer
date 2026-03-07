@@ -108,7 +108,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["docketeer", "docketeer_1password", "docketeer_agentskills", "docketeer_autonomy", "docketeer_bubblewrap", "docketeer_deepinfra", "docketeer_git", "docketeer_mcp", "docketeer_monty", "docketeer_rocketchat", "docketeer_search", "docketeer_subprocess", "docketeer_tui", "docketeer_web"]
+known-first-party = ["docketeer", "docketeer_1password", "docketeer_agentskills", "docketeer_anthropic", "docketeer_autonomy", "docketeer_bubblewrap", "docketeer_deepinfra", "docketeer_git", "docketeer_mcp", "docketeer_monty", "docketeer_rocketchat", "docketeer_search", "docketeer_subprocess", "docketeer_tui", "docketeer_web"]
 
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**/*.py" = ["ANN201"]

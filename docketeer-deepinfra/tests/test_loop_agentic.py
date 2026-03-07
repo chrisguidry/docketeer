@@ -10,7 +10,7 @@ from docketeer.prompt import MessageParam, SystemBlock
 from docketeer.tools import WRAP_UP_TOOL_NAME, ToolContext
 from docketeer_deepinfra.loop import agentic_loop
 
-from .conftest import (
+from .helpers import (
     MODEL,
     FakeAsyncStream,
     make_chunks,

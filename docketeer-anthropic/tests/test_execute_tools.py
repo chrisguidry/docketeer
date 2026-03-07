@@ -3,11 +3,10 @@
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
+from docketeer.tools import ToolContext
 from docketeer_anthropic.loop import execute_tools
 
-from docketeer.tools import ToolContext
-
-from .conftest import make_tool_block
+from .helpers import make_tool_block
 
 
 async def test_execute_tools_success(tmp_path: Path) -> None:

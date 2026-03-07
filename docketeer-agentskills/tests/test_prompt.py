@@ -4,7 +4,7 @@ from pathlib import Path
 
 from docketeer_agentskills.prompt import provide_skill_catalog
 
-from .conftest import make_skill
+from .helpers import make_skill
 
 
 def test_provide_skill_catalog_no_skills_dir(workspace: Path):

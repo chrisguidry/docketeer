@@ -1,9 +1,9 @@
 """Tests for update_cache_breakpoints function."""
 
 from anthropic.types import ToolResultBlockParam
-from docketeer_anthropic.loop import update_cache_breakpoints
 
 from docketeer.prompt import CacheControl, MessageParam
+from docketeer_anthropic.loop import update_cache_breakpoints
 
 
 def test_update_cache_breakpoints_removes_old() -> None:

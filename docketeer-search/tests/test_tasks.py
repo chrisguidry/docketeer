@@ -10,7 +10,7 @@ from docketeer_search.tasks import (
     deindex,
     index,
 )
-from tests.conftest import FakeEmbedder
+from tests.helpers import FakeEmbedder
 
 
 def test_db_path_default():

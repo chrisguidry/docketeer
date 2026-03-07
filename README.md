@@ -29,14 +29,16 @@ agent a Docket of its own, on which it can schedule its own future work. As of
 today, the agent can use a tool to schedule a `nudge` Docket task to prompt
 itself at any future time.
 
-Additionally, two built-in `Perpetual` Docket tasks `reverie` and
-`consolidation` give the agent recurring opportunities throughout the day to
-evaluate the world, reflect on what's been going on recently, schedule new
-tasks, and to update its own memory and knowledge base.
+The `docketeer-autonomy` plugin builds on this with recurring `reverie` and
+`consolidation` cycles that give the agent opportunities throughout the day to
+evaluate the world, reflect on recent events, schedule new tasks, and update
+its own memory and knowledge base. It also adds journaling, per-person
+profiles, and room context — install it for the full "inner life" experience,
+or leave it out for a plain chatbot.
 
 Most importantly, the agent can direct itself by updating markdown files in its
-own workspace for those prompts. This self-prompting and the ability to
-self-improve its prompts are the heart of Docketeer's autonomy.
+own workspace. This self-prompting and the ability to self-improve its prompts
+are the heart of Docketeer's autonomy.
 
 ## Standards
 
@@ -85,7 +87,7 @@ graph TD
         Brain <-- "memory" --> Workspace["📂 Workspace"]
         Brain <-- "scheduling" --> Docket["⏰ Docket"]
 
-        Docket -- triggers --> CoreTasks["nudge · reverie · consolidation"]
+        Docket -- triggers --> CoreTasks["nudge"]
         CoreTasks --> Brain
 
         subgraph prompt ["🔌 docketeer.prompt"]
@@ -104,7 +106,7 @@ graph TD
 
         Docket -- triggers --> PluginTasks
         subgraph tasks ["🔌 docketeer.tasks"]
-            PluginTasks["git backup, ..."]
+            PluginTasks["git backup, reverie, consolidation, ..."]
         end
 
         subgraph executor ["🔌 docketeer.executor"]
@@ -138,18 +140,17 @@ either feeds into the Brain or is called by it.
 
 ### Workspace
 
-The agent's persistent filesystem — its long-term memory. Contains `SOUL.md`
-(the agent's personality and instructions), a daily journal, per-person profiles,
-installed skills, and anything else the agent writes for itself. The Brain reads
-`SOUL.md` and person context into the system prompt on every turn, and workspace
-tools let the agent read and write its own files.
+The agent's persistent filesystem — its long-term memory. Plugins can populate
+it with whatever files they need; for example, the `docketeer-autonomy` plugin
+writes `SOUL.md`, a daily journal, and per-person profiles here. Workspace tools
+let the agent read and write its own files.
 
 ### Docket
 
 A [Redis-backed task scheduler](https://github.com/chrisguidry/docket) that
-gives the agent autonomy. The agent can schedule future nudges for itself, and
-three built-in recurring tasks — `nudge`, `reverie`, and `consolidation` — let
-it think on its own, reflect on recent events, and summarize its journal.
+gives the agent autonomy. The built-in `nudge` task lets the agent schedule
+future prompts for itself. Task plugins (like `docketeer-autonomy`) can add
+their own recurring tasks.
 
 ### Vault
 
@@ -180,6 +181,7 @@ are available. Multi-plugin groups (`docketeer.tools`,
 | `docketeer.executor` | single, optional | Command executor — sandboxed process execution on the host |
 | `docketeer.vault` | single, optional | Secrets vault — store and resolve secrets without exposing values to the agent |
 | `docketeer.search` | single, optional | Search index — semantic search over workspace files |
+| `docketeer.context` | multiple | Context providers — inject per-user and per-room context into conversations |
 | `docketeer.tools` | multiple | Tool plugins — capabilities the agent can use during its agentic loop |
 | `docketeer.prompt` | multiple | Prompt providers — contribute blocks to the system prompt |
 | `docketeer.tasks` | multiple | Task plugins — background work run by the Docket scheduler |
@@ -193,10 +195,11 @@ your own and install them alongside Docketeer to build your perfect agent.
 
 | Package | PyPI | Description |
 |---------|------|-------------|
-| [docketeer](docketeer/) | [![PyPI](https://img.shields.io/pypi/v/docketeer)](https://pypi.org/project/docketeer/) | Core agent engine — workspace, journal, scheduling, plugin discovery |
+| [docketeer](docketeer/) | [![PyPI](https://img.shields.io/pypi/v/docketeer)](https://pypi.org/project/docketeer/) | Core agent engine — workspace, scheduling, plugin discovery |
 | [docketeer-1password](docketeer-1password/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-1password)](https://pypi.org/project/docketeer-1password/) | [1Password](https://1password.com/) secret vault — store, generate, and resolve secrets |
 | [docketeer-agentskills](docketeer-agentskills/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-agentskills)](https://pypi.org/project/docketeer-agentskills/) | [Agent Skills](https://agentskills.io/specification) — install, manage, and use packaged agent expertise |
 | [docketeer-anthropic](docketeer-anthropic/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-anthropic)](https://pypi.org/project/docketeer-anthropic/) | Anthropic inference backend |
+| [docketeer-autonomy](docketeer-autonomy/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-autonomy)](https://pypi.org/project/docketeer-autonomy/) | Autonomous personality — reverie, consolidation, journaling, profiles |
 | [docketeer-bubblewrap](docketeer-bubblewrap/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-bubblewrap)](https://pypi.org/project/docketeer-bubblewrap/) | Sandboxed command execution via [bubblewrap](https://github.com/containers/bubblewrap) |
 | [docketeer-deepinfra](docketeer-deepinfra/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-deepinfra)](https://pypi.org/project/docketeer-deepinfra/) | [DeepInfra](https://deepinfra.com/) inference backend |
 | [docketeer-git](docketeer-git/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-git)](https://pypi.org/project/docketeer-git/) | Automatic git-backed workspace backups |
@@ -236,13 +239,12 @@ export DOCKETEER_ANTHROPIC_API_KEY="sk-ant-..."
 export DOCKETEER_DEEPINFRA_API_KEY="..."
 ```
 
-Docketeer uses three model tiers — `DOCKETEER_CHAT_MODEL`,
-`DOCKETEER_REVERIE_MODEL`, and `DOCKETEER_CONSOLIDATION_MODEL` — each
-defaulting to `"balanced"`. Each backend maps tier names (`smart`,
-`balanced`, `fast`) to its own model IDs. You can override the model for
-each tier per backend with variables like `DOCKETEER_ANTHROPIC_MODEL_SMART`,
-`DOCKETEER_DEEPINFRA_MODEL_BALANCED`, etc. See each backend's README for
-defaults.
+Docketeer uses `DOCKETEER_CHAT_MODEL` (defaulting to `"balanced"`) to select a
+model tier for conversations. Each backend maps tier names (`smart`, `balanced`,
+`fast`) to its own model IDs, and you can override per backend with variables
+like `DOCKETEER_ANTHROPIC_MODEL_SMART` or `DOCKETEER_DEEPINFRA_MODEL_BALANCED`.
+Plugins may add their own model tier variables — see each package's README for
+details.
 
 Run the agent:
 

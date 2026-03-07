@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 
 from docketeer_search import create_search, task_collections
 from docketeer_search.index import FastembedCatalog
-from tests.conftest import FakeEmbedder
+from tests.helpers import FakeEmbedder
 
 
 def test_create_search(tmp_path: Path):
