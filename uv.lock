@@ -13,6 +13,7 @@ members = [
     "docketeer-1password",
     "docketeer-agentskills",
     "docketeer-anthropic",
+    "docketeer-atproto",
     "docketeer-autonomy",
     "docketeer-bubblewrap",
     "docketeer-deepinfra",
@@ -24,6 +25,7 @@ members = [
     "docketeer-subprocess",
     "docketeer-tui",
     "docketeer-web",
+    "docketeer-wicket",
 ]
 
 [manifest.dependency-groups]
@@ -33,6 +35,7 @@ dev = [
     { name = "docketeer-1password", editable = "docketeer-1password" },
     { name = "docketeer-agentskills", editable = "docketeer-agentskills" },
     { name = "docketeer-anthropic", editable = "docketeer-anthropic" },
+    { name = "docketeer-atproto", editable = "docketeer-atproto" },
     { name = "docketeer-autonomy", editable = "docketeer-autonomy" },
     { name = "docketeer-bubblewrap", editable = "docketeer-bubblewrap" },
     { name = "docketeer-deepinfra", editable = "docketeer-deepinfra" },
@@ -44,6 +47,7 @@ dev = [
     { name = "docketeer-subprocess", editable = "docketeer-subprocess" },
     { name = "docketeer-tui", editable = "docketeer-tui" },
     { name = "docketeer-web", editable = "docketeer-web" },
+    { name = "docketeer-wicket", editable = "docketeer-wicket" },
     { name = "loq" },
     { name = "prek" },
     { name = "pytest" },
@@ -547,6 +551,20 @@ requires-dist = [
 ]
 
 [[package]]
+name = "docketeer-atproto"
+source = { editable = "docketeer-atproto" }
+dependencies = [
+    { name = "docketeer" },
+    { name = "websockets" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "docketeer", editable = "docketeer" },
+    { name = "websockets" },
+]
+
+[[package]]
 name = "docketeer-autonomy"
 source = { editable = "docketeer-autonomy" }
 dependencies = [
@@ -687,6 +705,20 @@ requires-dist = [
 [[package]]
 name = "docketeer-web"
 source = { editable = "docketeer-web" }
+dependencies = [
+    { name = "docketeer" },
+    { name = "httpx" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "docketeer", editable = "docketeer" },
+    { name = "httpx" },
+]
+
+[[package]]
+name = "docketeer-wicket"
+source = { editable = "docketeer-wicket" }
 dependencies = [
     { name = "docketeer" },
     { name = "httpx" },

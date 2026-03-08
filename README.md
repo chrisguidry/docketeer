@@ -109,6 +109,11 @@ graph TD
             PluginTasks["git backup, reverie, consolidation, ..."]
         end
 
+        subgraph bands ["🔌 docketeer.bands"]
+            Bands["wicket, atproto, ..."]
+        end
+        Bands -- signals --> Brain
+
         subgraph executor ["🔌 docketeer.executor"]
             Sandbox["bubblewrap, subprocess, ..."]
         end
@@ -124,7 +129,7 @@ graph TD
 
     classDef plugin fill:#f0f4ff,stroke:#4a6fa5
     classDef core fill:#fff4e6,stroke:#c77b2a
-    class API,ChatClient,Prompts,PluginTools,Sandbox,Secrets,PluginTasks plugin
+    class API,ChatClient,Prompts,PluginTools,Sandbox,Secrets,PluginTasks,Bands plugin
     class Brain core
 ```
 
@@ -172,7 +177,8 @@ Single-plugin groups (`docketeer.inference`, `docketeer.chat`,
 `docketeer.executor`, `docketeer.vault`, `docketeer.search`) auto-select when
 only one is installed, or can be chosen with an environment variable when several
 are available. Multi-plugin groups (`docketeer.tools`,
-`docketeer.prompt`, `docketeer.tasks`) load everything they find.
+`docketeer.prompt`, `docketeer.tasks`, `docketeer.bands`) load everything
+they find.
 
 | Entry point group | Cardinality | Purpose |
 |-------------------|-------------|---------|
@@ -185,6 +191,7 @@ are available. Multi-plugin groups (`docketeer.tools`,
 | `docketeer.tools` | multiple | Tool plugins — capabilities the agent can use during its agentic loop |
 | `docketeer.prompt` | multiple | Prompt providers — contribute blocks to the system prompt |
 | `docketeer.tasks` | multiple | Task plugins — background work run by the Docket scheduler |
+| `docketeer.bands` | multiple | Band plugins — realtime event stream sources (SSE, WebSocket, etc.) |
 
 ## Packages
 
@@ -199,6 +206,7 @@ your own and install them alongside Docketeer to build your perfect agent.
 | [docketeer-1password](docketeer-1password/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-1password)](https://pypi.org/project/docketeer-1password/) | [1Password](https://1password.com/) secret vault — store, generate, and resolve secrets |
 | [docketeer-agentskills](docketeer-agentskills/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-agentskills)](https://pypi.org/project/docketeer-agentskills/) | [Agent Skills](https://agentskills.io/specification) — install, manage, and use packaged agent expertise |
 | [docketeer-anthropic](docketeer-anthropic/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-anthropic)](https://pypi.org/project/docketeer-anthropic/) | Anthropic inference backend |
+| [docketeer-atproto](docketeer-atproto/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-atproto)](https://pypi.org/project/docketeer-atproto/) | ATProto Jetstream band — realtime Bluesky events via WebSocket |
 | [docketeer-autonomy](docketeer-autonomy/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-autonomy)](https://pypi.org/project/docketeer-autonomy/) | Autonomous personality — reverie, consolidation, journaling, profiles |
 | [docketeer-bubblewrap](docketeer-bubblewrap/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-bubblewrap)](https://pypi.org/project/docketeer-bubblewrap/) | Sandboxed command execution via [bubblewrap](https://github.com/containers/bubblewrap) |
 | [docketeer-deepinfra](docketeer-deepinfra/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-deepinfra)](https://pypi.org/project/docketeer-deepinfra/) | [DeepInfra](https://deepinfra.com/) inference backend |
@@ -210,6 +218,7 @@ your own and install them alongside Docketeer to build your perfect agent.
 | [docketeer-subprocess](docketeer-subprocess/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-subprocess)](https://pypi.org/project/docketeer-subprocess/) | Unsandboxed command execution for containers and non-Linux hosts |
 | [docketeer-tui](docketeer-tui/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-tui)](https://pypi.org/project/docketeer-tui/) | Terminal chat backend |
 | [docketeer-web](docketeer-web/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-web)](https://pypi.org/project/docketeer-web/) | Web search, HTTP requests, file downloads |
+| [docketeer-wicket](docketeer-wicket/) | [![PyPI](https://img.shields.io/pypi/v/docketeer-wicket)](https://pypi.org/project/docketeer-wicket/) | Wicket SSE band — realtime events via Server-Sent Events |
 
 Each package's README lists its tools and configuration variables.
 

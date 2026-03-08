@@ -178,11 +178,14 @@ class Brain:
         room_context: str = "",
         room_slug: str = "",
         chat_room: str = "",
+        system_context: list[SystemBlock] | None = None,
     ) -> BrainResponse:
         """Process a message and return a response with tool call info."""
         tier = tier or CHAT_MODEL
 
         system = build_system_blocks(self._workspace)
+        if system_context:
+            system = [*system, *system_context]
 
         tools = registry.definitions()
         if tools:

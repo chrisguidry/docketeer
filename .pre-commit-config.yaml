@@ -75,6 +75,15 @@ repos:
         pass_filenames: false
         require_serial: true
 
+      - id: pytest-docketeer-atproto
+        name: pytest (docketeer-atproto)
+        entry: uv run --no-sync --directory docketeer-atproto pytest
+        language: system
+        types: [python]
+        files: ^docketeer/src/|^docketeer-atproto/
+        pass_filenames: false
+        require_serial: true
+
       - id: pytest-docketeer-autonomy
         name: pytest (docketeer-autonomy)
         entry: uv run --no-sync --directory docketeer-autonomy pytest
@@ -162,6 +171,15 @@ repos:
         language: system
         types: [python]
         files: ^docketeer/src/|^docketeer-subprocess/
+        pass_filenames: false
+        require_serial: true
+
+      - id: pytest-docketeer-wicket
+        name: pytest (docketeer-wicket)
+        entry: uv run --no-sync --directory docketeer-wicket pytest
+        language: system
+        types: [python]
+        files: ^docketeer/src/|^docketeer-wicket/
         pass_filenames: false
         require_serial: true
 

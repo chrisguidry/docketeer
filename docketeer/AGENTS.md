@@ -23,12 +23,18 @@ plugin tests when modifying public interfaces.
 - **`prompt.py`** — system prompt assembly from prompt providers.
 - **`tasks.py`** — Docket task definitions (nudge).
 - **`handlers.py`** — message handling and the bridge between chat and brain.
+- **`antenna.py`** — the realtime event feed system. Defines the `Band` ABC,
+  `Signal`, `SignalFilter`, `Tuning` data types, filter evaluation, and
+  tuning persistence. Band plugins (wicket, atproto) implement the `Band` ABC.
+- **`signal_loop.py`** — runs one async task per tuning, filtering signals
+  and delivering batches to lines via `brain.process()`.
 
 - **`environment.py`** — configuration from environment variables.
 - **`watcher.py`** — workspace filesystem watcher. Detects external changes
   and provides a `drain()` interface for injecting workspace pulse messages.
 - **`testing.py`** — in-memory test doubles (`MemoryChat`, `MemoryVault`,
-  `MemoryWatcher`, etc.). Excluded from coverage. Used by plugin test suites.
+  `MemoryWatcher`, `MemoryBand`, etc.). Excluded from coverage. Used by
+  plugin test suites.
 
 ## The protocol ABCs
 
@@ -37,8 +43,9 @@ implement. When modifying these, you're changing the interface for every plugin
 that implements them. Check all implementers before changing a method signature.
 
 `ToolContext` is the dataclass that gets passed to every tool function. It
-carries the workspace path, room_id, and references to chat/vault/executor.
-Tools declare what they need through their type hints.
+carries the workspace path, `line` (the conversation context), `chat_room`
+(the chat room to post to, empty for non-chat lines), and references to
+chat/vault/executor. Tools declare what they need through their type hints.
 
 ## Testing
 

@@ -4,6 +4,7 @@ members = [
     "docketeer-1password",
     "docketeer-agentskills",
     "docketeer-anthropic",
+    "docketeer-atproto",
     "docketeer-autonomy",
     "docketeer-bubblewrap",
     "docketeer-deepinfra",
@@ -15,6 +16,7 @@ members = [
     "docketeer-subprocess",
     "docketeer-tui",
     "docketeer-web",
+    "docketeer-wicket",
 ]
 
 [dependency-groups]
@@ -23,6 +25,7 @@ dev = [
     "docketeer-1password",
     "docketeer-agentskills",
     "docketeer-anthropic",
+    "docketeer-atproto",
     "docketeer-autonomy",
     "docketeer-bubblewrap",
     "docketeer-deepinfra",
@@ -34,6 +37,7 @@ dev = [
     "docketeer-subprocess",
     "docketeer-tui",
     "docketeer-web",
+    "docketeer-wicket",
     "codespell",
     "loq",
     "prek",
@@ -53,6 +57,7 @@ docketeer = { workspace = true }
 docketeer-1password = { workspace = true }
 docketeer-agentskills = { workspace = true }
 docketeer-anthropic = { workspace = true }
+docketeer-atproto = { workspace = true }
 docketeer-autonomy = { workspace = true }
 docketeer-bubblewrap = { workspace = true }
 docketeer-deepinfra = { workspace = true }
@@ -64,6 +69,7 @@ docketeer-search = { workspace = true }
 docketeer-subprocess = { workspace = true }
 docketeer-tui = { workspace = true }
 docketeer-web = { workspace = true }
+docketeer-wicket = { workspace = true }
 
 [tool.ruff]
 target-version = "py312"
@@ -108,7 +114,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["docketeer", "docketeer_1password", "docketeer_agentskills", "docketeer_anthropic", "docketeer_autonomy", "docketeer_bubblewrap", "docketeer_deepinfra", "docketeer_git", "docketeer_mcp", "docketeer_monty", "docketeer_rocketchat", "docketeer_search", "docketeer_subprocess", "docketeer_tui", "docketeer_web"]
+known-first-party = ["docketeer", "docketeer_1password", "docketeer_agentskills", "docketeer_anthropic", "docketeer_atproto", "docketeer_autonomy", "docketeer_bubblewrap", "docketeer_deepinfra", "docketeer_git", "docketeer_mcp", "docketeer_monty", "docketeer_rocketchat", "docketeer_search", "docketeer_subprocess", "docketeer_tui", "docketeer_web", "docketeer_wicket"]
 
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**/*.py" = ["ANN201"]

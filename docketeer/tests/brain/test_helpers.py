@@ -131,6 +131,19 @@ async def test_process_sets_line_and_empty_chat_room(brain: Brain, fake_messages
     assert brain.tool_context.chat_room == ""
 
 
+async def test_process_appends_system_context(brain: Brain, fake_messages: Any):
+    from docketeer.prompt import SystemBlock
+
+    fake_messages.responses = [FakeMessage(content=[make_text_block(text="ok")])]
+    ctx = [SystemBlock(text="Extra context for this line.")]
+    await brain.process(
+        "test-line",
+        MessageContent(username="system", text="hello"),
+        system_context=ctx,
+    )
+    assert brain.tool_context.line == "test-line"
+
+
 async def test_summarize_webpage_with_purpose(brain: Brain, fake_messages: Any):
     fake_messages.responses = [FakeMessage(content=[make_text_block(text="Summary!")])]
     result = await brain._summarize_webpage("page content", "find pricing info")

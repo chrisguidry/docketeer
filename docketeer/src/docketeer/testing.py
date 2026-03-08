@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from docketeer.antenna import Band, Signal, SignalFilter
 from docketeer.chat import (
     ChatClient,
     IncomingMessage,
@@ -240,3 +241,37 @@ class MemoryWatcher:
         result = set(self._pending)
         self._pending.clear()
         return result
+
+
+class MemoryBand(Band):
+    """In-memory Band for tests — push signals directly."""
+
+    def __init__(self, name: str = "memory") -> None:
+        self.name = name
+        self._queue: asyncio.Queue[Signal | None] = asyncio.Queue()
+
+    async def __aenter__(self) -> MemoryBand:
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        pass
+
+    def emit(self, signal: Signal) -> None:
+        """Push a signal from test code."""
+        self._queue.put_nowait(signal)
+
+    def stop(self) -> None:
+        """Signal the listener to stop."""
+        self._queue.put_nowait(None)
+
+    async def listen(
+        self,
+        topic: str,
+        filters: list[SignalFilter],
+        last_signal_id: str = "",
+    ) -> AsyncGenerator[Signal, None]:
+        while True:
+            signal = await self._queue.get()
+            if signal is None:
+                break
+            yield signal
