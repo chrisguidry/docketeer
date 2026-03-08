@@ -5,6 +5,8 @@ produce Signals.  Tunings tie a band + topic + filters to a line of
 thinking.  The Antenna owns bands and tunings and routes signals to lines.
 """
 
+import asyncio
+import contextlib
 import json
 import logging
 from abc import ABC, abstractmethod
@@ -12,11 +14,25 @@ from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from docketeer.plugins import discover_all
+from docketeer.prompt import BrainResponse, MessageContent, SystemBlock
 
 log = logging.getLogger(__name__)
+
+
+class ProcessFn(Protocol):
+    """The contract for delivering messages to a line of thinking."""
+
+    async def __call__(
+        self,
+        line: str,
+        content: MessageContent,
+        *,
+        tier: str = "",
+        system_context: list[SystemBlock] | None = None,
+    ) -> BrainResponse: ...
 
 
 # --- Data types ---
@@ -182,6 +198,98 @@ def _tuning_to_dict(t: Tuning) -> dict[str, Any]:
         "batch_window": t.batch_window,
         "max_batch": t.max_batch,
     }
+
+
+class Antenna:
+    """Orchestrator — owns bands, tunings, and signal routing tasks."""
+
+    def __init__(
+        self,
+        process_fn: ProcessFn,
+        data_dir: Path,
+        workspace: Path,
+    ) -> None:
+        self._process_fn = process_fn
+        self._data_dir = data_dir
+        self._workspace = workspace
+        self._bands: dict[str, Band] = {}
+        self._tunings: dict[str, Tuning] = {}
+        self._tasks: dict[str, asyncio.Task[None]] = {}
+
+    async def __aenter__(self) -> "Antenna":
+        self._bands = discover_bands()
+        for band in self._bands.values():
+            await band.__aenter__()
+
+        for tuning in load_tunings(self._data_dir):
+            self._tunings[tuning.name] = tuning
+            self._start_task(tuning)
+
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        for task in self._tasks.values():
+            task.cancel()
+        for task in self._tasks.values():
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+        self._tasks.clear()
+
+        for band in self._bands.values():
+            await band.__aexit__(None, None, None)
+
+    def _start_task(self, tuning: Tuning) -> None:
+        from docketeer.signal_loop import run_tuning
+
+        band = self._bands.get(tuning.band)
+        if band is None:
+            log.warning(
+                "Tuning '%s' references unknown band '%s', skipping",
+                tuning.name,
+                tuning.band,
+            )
+            return
+
+        self._tasks[tuning.name] = asyncio.create_task(
+            run_tuning(band, tuning, self._process_fn, self._workspace),
+            name=f"antenna:{tuning.name}",
+        )
+
+    async def _stop_task(self, name: str) -> None:
+        task = self._tasks.pop(name, None)
+        if task is not None:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+
+    async def tune(self, tuning: Tuning) -> None:
+        """Add or replace a tuning. Starts listening immediately."""
+        if tuning.band not in self._bands:
+            raise ValueError(
+                f"Unknown band '{tuning.band}'. Available: {sorted(self._bands)}"
+            )
+
+        await self._stop_task(tuning.name)
+        self._tunings[tuning.name] = tuning
+        self._start_task(tuning)
+        save_tunings(self._data_dir, list(self._tunings.values()))
+
+    async def detune(self, name: str) -> None:
+        """Remove a tuning and stop its task."""
+        if name not in self._tunings:
+            raise KeyError(f"No tuning named '{name}'")
+
+        await self._stop_task(name)
+        del self._tunings[name]
+        save_tunings(self._data_dir, list(self._tunings.values()))
+
+    def list_tunings(self) -> list[Tuning]:
+        """Return all active tunings."""
+        return list(self._tunings.values())
+
+    def list_bands(self) -> list[str]:
+        """Return names of all discovered bands."""
+        return sorted(self._bands)
 
 
 def _tuning_from_dict(d: dict[str, Any]) -> Tuning:

@@ -105,6 +105,24 @@ async def test_nudge_silent_uses_tasks_room(workspace: Path, task_files: dict):
     client.send_message.assert_not_called()
 
 
+async def test_nudge_with_explicit_line(workspace: Path, task_files: dict):
+    brain = AsyncMock()
+    brain.process.return_value = BrainResponse(text="done")
+    client = AsyncMock()
+
+    await nudge(
+        prompt_file=task_files["hey_there"],
+        line="research",
+        room_id="room123",
+        brain=brain,
+        client=client,
+        task_key="hey-there",
+    )
+
+    brain.process.assert_called_once()
+    assert brain.process.call_args[0][0] == "research"
+
+
 async def test_nudge_no_send_on_empty_response(workspace: Path, task_files: dict):
     brain = AsyncMock()
     brain.process.return_value = BrainResponse(text="")

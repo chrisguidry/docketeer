@@ -260,6 +260,15 @@ async def main() -> None:  # pragma: no cover
         docket.register_collection("docketeer.tasks:docketeer_tasks")
         _register_task_plugins(docket)
 
+        # Start antenna (realtime event feeds)
+        from docketeer.antenna import Antenna
+        from docketeer.antenna_tools import register_antenna_tools
+
+        antenna = await stack.enter_async_context(
+            Antenna(brain.process, environment.DATA_DIR, environment.WORKSPACE_PATH)
+        )
+        register_antenna_tools(antenna)
+
         # Register tools (core chat + provider-specific + docket)
         _register_core_chat_tools(client)
         register_chat_tools(client, tool_context)

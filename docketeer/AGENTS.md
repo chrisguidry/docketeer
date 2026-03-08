@@ -24,8 +24,11 @@ plugin tests when modifying public interfaces.
 - **`tasks.py`** — Docket task definitions (nudge).
 - **`handlers.py`** — message handling and the bridge between chat and brain.
 - **`antenna.py`** — the realtime event feed system. Defines the `Band` ABC,
-  `Signal`, `SignalFilter`, `Tuning` data types, filter evaluation, and
-  tuning persistence. Band plugins (wicket, atproto) implement the `Band` ABC.
+  `Signal`, `SignalFilter`, `Tuning` data types, filter evaluation, tuning
+  persistence, and the `Antenna` orchestrator class. Band plugins (wicket,
+  atproto) implement the `Band` ABC.
+- **`antenna_tools.py`** — agent-facing tools for managing tunings at runtime
+  (`tune`, `detune`, `list_tunings`, `list_bands`).
 - **`signal_loop.py`** — runs one async task per tuning, filtering signals
   and delivering batches to lines via `brain.process()`.
 

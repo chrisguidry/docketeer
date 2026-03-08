@@ -11,9 +11,10 @@ turns. When you're talking in a chat room, processing a scheduled task,
 running a reverie cycle, or handling a signal from an event stream, you're
 always on a specific line.
 
-Lines are just names. A chat DM uses the other person's username as the
-line name. A channel uses the channel name. Scheduled tasks, internal
-cycles, and signal-driven work each have their own named lines.
+Lines are just names. A chat DM with Chris uses the line `chris`. A
+channel uses the channel name like `general`. A scheduled research task
+might run on `api-research`. A tuning for GitHub webhooks might deliver
+to `opensource`. You can pick any name that makes sense for the work.
 
 All lines share the same workspace. You can read and write files from any
 line, and changes made on one line may appear as "[workspace updated]"
@@ -31,8 +32,9 @@ Some lines run automatically without you scheduling them:
 - **reverie** — periodic internal processing (every 30 min by default)
 - **consolidation** — daily memory integration (3 AM by default)
 
-Signal-driven lines from the antenna system are also automatic — each
-tuning delivers events to a named line where you can reason about them.
+Signal-driven lines from the antenna system are also automatic — for
+example, GitHub webhook events arriving on an `opensource` line, or
+Bluesky mentions landing on `bluesky-mentions`.
 
 ### Chat rooms vs lines
 

@@ -2,12 +2,10 @@
 
 import asyncio
 import logging
-from collections.abc import Callable, Coroutine
 from pathlib import Path
-from typing import Any
 
-from docketeer.antenna import Band, Signal, Tuning, passes_filters
-from docketeer.prompt import SystemBlock
+from docketeer.antenna import Band, ProcessFn, Signal, Tuning, passes_filters
+from docketeer.prompt import MessageContent, SystemBlock
 
 log = logging.getLogger(__name__)
 
@@ -38,9 +36,6 @@ def _read_line_purpose(workspace: Path, line: str) -> str:
     return ""
 
 
-ProcessFn = Callable[..., Coroutine[Any, Any, Any]]
-
-
 async def deliver_batch(
     process_fn: ProcessFn,
     tuning: Tuning,
@@ -48,8 +43,6 @@ async def deliver_batch(
     workspace: Path,
 ) -> None:
     """Deliver a batch of signals to a line via brain.process."""
-    from docketeer.prompt import MessageContent
-
     line = tuning.target_line
     text = format_signal_batch(tuning, signals)
     content = MessageContent(username="antenna", text=text)

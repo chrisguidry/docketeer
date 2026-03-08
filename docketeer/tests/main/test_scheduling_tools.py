@@ -100,6 +100,24 @@ async def test_schedule_rejects_builtin_task_key(
     mock_docket.replace.assert_not_called()
 
 
+async def test_schedule_with_line(mock_docket: AsyncMock, tool_context: ToolContext):
+    register_docket_tools(mock_docket, tool_context)
+    result = await registry.execute(
+        "schedule",
+        {
+            "prompt_file": "tasks/research.md",
+            "when": "2026-12-25T10:00:00-05:00",
+            "key": "research",
+            "line": "api-research",
+        },
+        tool_context,
+    )
+    assert "research" in result
+    assert "api-research" in result
+    call_kwargs = mock_docket.replace.return_value.call_args[1]
+    assert call_kwargs["line"] == "api-research"
+
+
 async def test_schedule_silent(mock_docket: AsyncMock, tool_context: ToolContext):
     register_docket_tools(mock_docket, tool_context)
     result = await registry.execute(
@@ -212,6 +230,25 @@ async def test_schedule_every_invalid_timezone(
         tool_context,
     )
     assert "error" in result.lower()
+
+
+async def test_schedule_every_with_line(
+    mock_docket: AsyncMock, tool_context: ToolContext
+):
+    register_docket_tools(mock_docket, tool_context)
+    result = await registry.execute(
+        "schedule_every",
+        {
+            "prompt_file": "tasks/monitor.md",
+            "every": "PT30M",
+            "key": "monitor",
+            "line": "monitoring",
+        },
+        tool_context,
+    )
+    assert "monitor" in result
+    call_kwargs = mock_docket.replace.return_value.call_args[1]
+    assert call_kwargs["line"] == "monitoring"
 
 
 async def test_schedule_every_silent_clears_room(

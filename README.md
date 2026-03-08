@@ -133,10 +133,29 @@ graph TD
     class Brain core
 ```
 
+### Lines
+
+Everything the agent does happens on a **line** — a named, persistent context of
+reasoning with its own conversation history. Chat conversations, scheduled tasks,
+background research, and realtime event streams each run on their own lines.
+Lines are just names: a DM with `chris` uses the line `chris`, a channel uses
+`general`, reverie runs on `reverie`. A few more examples:
+
+- The agent schedules a task to research an API — it runs on the line `api-research`
+  and builds up context across multiple tool-use turns without cluttering any chat.
+- A tuning watches GitHub webhooks for PRs across several repos — signals arrive
+  on the line `opensource`, where the agent has ongoing context about each project.
+- The agent notices a thread worth following up on tomorrow — it schedules a nudge
+  on the line `chris` so the reply lands in the same conversation.
+
+All lines share the same workspace. Each line can have a context file at
+`lines/{name}.md` that gets loaded into the system prompt whenever that line
+is active, giving the agent standing instructions for that context.
+
 ### Brain
 
 The Brain is the agentic loop at the center of Docketeer. It receives messages
-from the chat backend, builds a system prompt, manages conversation history, and
+on a line, builds a system prompt, manages per-line conversation history, and
 runs a multi-turn tool-use loop against the configured inference backend. Each
 turn sends the conversation, system prompt blocks, and available tool definitions
 to the LLM and gets back text and/or tool calls — looping until the model
@@ -154,8 +173,24 @@ let the agent read and write its own files.
 
 A [Redis-backed task scheduler](https://github.com/chrisguidry/docket) that
 gives the agent autonomy. The built-in `nudge` task lets the agent schedule
-future prompts for itself. Task plugins (like `docketeer-autonomy`) can add
-their own recurring tasks.
+future prompts for itself — each scheduled task runs on its own line with
+persistent conversation history. Task plugins (like `docketeer-autonomy`) can
+add their own recurring tasks.
+
+### Antenna
+
+The realtime event feed system. Bands are persistent streaming connections to
+external services — `docketeer-wicket` connects to an SSE endpoint,
+`docketeer-atproto` connects to the Bluesky Jetstream WebSocket relay. Each
+band produces signals: structured events with a topic, timestamp, and payload.
+
+Tunings tell the Antenna what to listen for and where to send it. For example,
+you might tune into your Wicket band filtered to `pull_request` events and
+route them to the `opensource` line, where the agent already has context about
+your projects. Or tune into the ATProto Jetstream filtered to mentions of your
+DID and route those to a `bluesky-mentions` line. The agent can set up and
+tear down tunings at runtime with `tune`, `detune`, `list_tunings`, and
+`list_bands` tools — no restarts needed.
 
 ### Vault
 
@@ -187,7 +222,7 @@ they find.
 | `docketeer.executor` | single, optional | Command executor — sandboxed process execution on the host |
 | `docketeer.vault` | single, optional | Secrets vault — store and resolve secrets without exposing values to the agent |
 | `docketeer.search` | single, optional | Search index — semantic search over workspace files |
-| `docketeer.context` | multiple | Context providers — inject per-user and per-room context into conversations |
+| `docketeer.context` | multiple | Context providers — inject per-user and per-line context into conversations |
 | `docketeer.tools` | multiple | Tool plugins — capabilities the agent can use during its agentic loop |
 | `docketeer.prompt` | multiple | Prompt providers — contribute blocks to the system prompt |
 | `docketeer.tasks` | multiple | Task plugins — background work run by the Docket scheduler |

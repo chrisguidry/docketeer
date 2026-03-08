@@ -33,6 +33,7 @@ def register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
         prompt_file: str,
         when: str,
         key: str = "",
+        line: str = "",
         silent: bool = False,
         tier: str = "",
     ) -> str:
@@ -45,6 +46,9 @@ def register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
             This lets you write longer prompts, review and edit them, and discuss them with the user.
         when: ISO 8601 datetime in the future (e.g. 2026-02-07T15:00:00-05:00)
         key: unique identifier for cancellation/rescheduling (e.g. "remind-chris-dentist")
+        line: which line to think on. Use this to continue an existing conversation
+            (e.g. line="chris" to reply in context) or to group related work on a
+            shared line (e.g. line="research"). Default: a private line for this task.
         silent: if true, work silently without sending a message (default: false)
         tier: intelligence tier — "smart", "balanced", or "fast" (default: chat tier)
         """
@@ -64,6 +68,7 @@ def register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
         if key:
             await docket.replace(tasks.nudge, when=fire_at, key=key)(
                 prompt_file=prompt_file,
+                line=line,
                 room_id=room_id,
                 thread_id=thread_id,
                 tier=tier,
@@ -72,6 +77,7 @@ def register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
             key = f"task-{fire_at.strftime('%Y%m%d-%H%M%S')}"
             await docket.add(tasks.nudge, when=fire_at, key=key)(
                 prompt_file=prompt_file,
+                line=line,
                 room_id=room_id,
                 thread_id=thread_id,
                 tier=tier,
@@ -79,7 +85,8 @@ def register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
 
         local = fire_at.astimezone().isoformat(timespec="seconds")
         mode = "silently" if silent else "in this room"
-        return f'Scheduled "{key}" for {local} ({mode})'
+        line_desc = f", line '{line}'" if line else ""
+        return f'Scheduled "{key}" for {local} ({mode}{line_desc})'
 
     @registry.tool(emoji=":alarm_clock:")
     async def schedule_every(
@@ -87,6 +94,7 @@ def register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
         prompt_file: str,
         every: str,
         key: str,
+        line: str = "",
         timezone: str = "",
         silent: bool = False,
         tier: str = "",
@@ -100,6 +108,9 @@ def register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
             and modify the behavior of the recurring nudge without rescheduling it.
         every: ISO 8601 duration (PT30M, PT2H, P1D) or cron expression (0 9 * * 1-5, @daily)
         key: required — stable identifier for cancellation (e.g. "daily-standup")
+        line: which line to think on. Each run builds on the same conversation history,
+            so use a consistent line for recurring work that accumulates context.
+            Default: a private line for this task.
         timezone: timezone for cron expressions (default: system timezone, ignored for durations)
         silent: if true, work silently without sending a message (default: false)
         tier: intelligence tier — "smart", "balanced", or "fast" (default: chat tier)
@@ -138,6 +149,7 @@ def register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
             prompt_file=prompt_file,
             every=every,
             timezone=timezone,
+            line=line,
             room_id=room_id,
             thread_id=thread_id,
             tier=tier,
@@ -145,7 +157,8 @@ def register_docket_tools(docket: Docket, tool_context: ToolContext) -> None:
 
         local = first_fire.astimezone().isoformat(timespec="seconds")
         mode = "silently" if silent else "in this room"
-        return f'Scheduled "{key}" ({mode_desc}, {mode}), first run {local}'
+        line_desc = f", line '{line}'" if line else ""
+        return f'Scheduled "{key}" ({mode_desc}, {mode}{line_desc}), first run {local}'
 
     @registry.tool(emoji=":alarm_clock:")
     async def cancel_task(ctx: ToolContext, key: str) -> str:
