@@ -99,7 +99,7 @@ class DeepInfraAPIBackend(InferenceBackend):
 
     async def count_tokens(
         self,
-        model_id: str,
+        tier: str,
         system: list[SystemBlock],
         tools: list[ToolDefinition],
         messages: list[MessageParam],

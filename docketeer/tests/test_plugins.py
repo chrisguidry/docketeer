@@ -64,6 +64,39 @@ def test_multiple_plugins_bad_env_var_name():
             discover_one("test.group", "TEST")
 
 
+def test_multiple_plugins_with_default():
+    ep_a = _make_ep("alpha")
+    ep_b = _make_ep("beta")
+    with (
+        patch("docketeer.plugins.entry_points", return_value=[ep_a, ep_b]),
+        patch.dict("os.environ", {}, clear=True),
+    ):
+        result = discover_one("test.group", "TEST", default="beta")
+    assert result is ep_b
+
+
+def test_multiple_plugins_default_not_installed():
+    ep_a = _make_ep("alpha")
+    ep_b = _make_ep("beta")
+    with (
+        patch("docketeer.plugins.entry_points", return_value=[ep_a, ep_b]),
+        patch.dict("os.environ", {}, clear=True),
+    ):
+        with pytest.raises(RuntimeError, match="alpha.*beta"):
+            discover_one("test.group", "TEST", default="gamma")
+
+
+def test_multiple_plugins_env_var_overrides_default():
+    ep_a = _make_ep("alpha")
+    ep_b = _make_ep("beta")
+    with (
+        patch("docketeer.plugins.entry_points", return_value=[ep_a, ep_b]),
+        patch.dict("os.environ", {"DOCKETEER_TEST": "alpha"}),
+    ):
+        result = discover_one("test.group", "TEST", default="beta")
+    assert result is ep_a
+
+
 # --- discover_all ---
 
 

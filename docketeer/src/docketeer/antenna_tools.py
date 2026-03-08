@@ -42,8 +42,8 @@ def register_antenna_tools(antenna: Antenna) -> None:
             Use the same line for related tunings so you build up shared context.
         filters: optional list of filters to narrow events, each with path/op/value keys.
             ops: eq, ne, contains, icontains (case-insensitive), startswith, exists
-            (e.g. {"path": "payload.action", "op": "eq", "value": "opened"})
-            (e.g. {"path": "payload.record.text", "op": "icontains", "value": "cat"})
+            (e.g. {{"path": "payload.action", "op": "eq", "value": "opened"}})
+            (e.g. {{"path": "payload.record.text", "op": "icontains", "value": "cat"}})
         secret: name of a vault secret for authentication (e.g. "wicket/github-token").
             The secret is resolved when the tuning connects.
         """

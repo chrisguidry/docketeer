@@ -104,7 +104,7 @@ def _patch_invoke(
 
 
 async def test_count_tokens_returns_negative_one_initially(backend: ClaudeCodeBackend):
-    assert await backend.count_tokens("model", [], [], []) == -1
+    assert await backend.count_tokens("balanced", [], [], []) == -1
 
 
 async def test_count_tokens_returns_context_after_invocation(
@@ -132,7 +132,7 @@ async def test_count_tokens_returns_context_after_invocation(
             Path("/tmp"),
             None,
         )
-    assert await backend.count_tokens("model", [], [], []) == 8100
+    assert await backend.count_tokens("balanced", [], [], []) == 8100
 
 
 # -- utility_complete --

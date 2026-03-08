@@ -241,6 +241,17 @@ async def main() -> None:  # pragma: no cover
 
         search = discover_search(docket=docket)
 
+        # Set tool description template vars based on executor type
+        from docketeer.tools.executor import SCRATCH_TARGET, WORKSPACE_TARGET
+
+        if executor.remaps_paths:
+            registry.template_vars["workspace"] = str(WORKSPACE_TARGET)
+            registry.template_vars["scratch"] = str(SCRATCH_TARGET)
+        else:
+            workspace = environment.WORKSPACE_PATH
+            registry.template_vars["workspace"] = str(workspace)
+            registry.template_vars["scratch"] = str(workspace / "tmp")
+
         # Create tool context
         tool_context = ToolContext(
             workspace=environment.WORKSPACE_PATH,

@@ -23,12 +23,14 @@ def discover_all(group: str) -> list[Any]:
     return loaded
 
 
-def discover_one(group: str, env_name: str) -> EntryPoint | None:
+def discover_one(group: str, env_name: str, *, default: str = "") -> EntryPoint | None:
     """Find the single active entry point for a plugin group.
 
     If exactly one plugin is installed, it's auto-selected. If multiple are
-    installed, ``DOCKETEER_{env_name}`` must name which one to use. Returns
-    ``None`` when no plugins are installed.
+    installed, ``DOCKETEER_{env_name}`` must name which one to use. When
+    ``default`` is provided and matches an installed plugin, it is used as
+    the fallback when no env var is set. Returns ``None`` when no plugins
+    are installed.
     """
     eps = list(entry_points(group=group))
 
@@ -42,6 +44,11 @@ def discover_one(group: str, env_name: str) -> EntryPoint | None:
     if selected:
         for ep in eps:
             if ep.name == selected:
+                return ep
+
+    if default:
+        for ep in eps:
+            if ep.name == default:
                 return ep
 
     names = ", ".join(sorted(ep.name for ep in eps))

@@ -401,7 +401,7 @@ async def add_mcp_server(
     time — you never need to read or handle the raw secret values yourself.
 
     Workflow: use list_secrets to find available credentials, then pass
-    them as {"secret": "vault/path"} in env. For bearer-token auth, set
+    them as {{"secret": "vault/path"}} in env. For bearer-token auth, set
     the auth field on the server config (done automatically by OAuth, or
     manually via store_secret + config update).
 
@@ -409,8 +409,8 @@ async def add_mcp_server(
     command: executable to run (for stdio servers)
     args: command arguments
     env: environment variables — values are either plain strings or
-        {"secret": "vault/path"} objects for vault-backed secrets. Example:
-        {"TZ": "UTC", "API_KEY": {"secret": "mcp/my-server/api-key"}}
+        {{"secret": "vault/path"}} objects for vault-backed secrets. Example:
+        {{"TZ": "UTC", "API_KEY": {{"secret": "mcp/my-server/api-key"}}}}
     url: server URL (for HTTP servers)
     headers: HTTP headers
     network_access: whether the server needs network access (stdio only)

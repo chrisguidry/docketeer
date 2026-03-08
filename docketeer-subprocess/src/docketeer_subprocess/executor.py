@@ -19,6 +19,8 @@ _MCP_BRIDGE_PATH = Path(__file__).resolve().parent / "mcp_bridge.py"
 class SubprocessExecutor(CommandExecutor):
     """Runs commands as plain subprocesses with no sandboxing."""
 
+    remaps_paths = False
+
     async def start(
         self,
         command: list[str],
@@ -29,6 +31,9 @@ class SubprocessExecutor(CommandExecutor):
         username: str | None = None,
     ) -> RunningProcess:
         merged_env = dict(os.environ)
+        if mounts:
+            for mount in mounts:
+                merged_env[mount.target.name.upper()] = str(mount.source)
         if env:
             merged_env.update(env)
 

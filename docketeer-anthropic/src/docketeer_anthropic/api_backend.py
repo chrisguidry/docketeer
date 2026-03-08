@@ -4,12 +4,19 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import anthropic
 from anthropic import APIError, AuthenticationError, PermissionDeniedError
 from anthropic._exceptions import RequestTooLargeError
-from anthropic.types import TextBlock
+from anthropic.types import (
+    MessageParam as AnthropicMessageParam,
+)
+from anthropic.types import (
+    TextBlock,
+    TextBlockParam,
+)
+from anthropic.types.message_count_tokens_tool_param import MessageCountTokensToolParam
 
 from docketeer import environment
 from docketeer.brain.backend import (
@@ -20,7 +27,7 @@ from docketeer.brain.backend import (
 )
 from docketeer.brain.core import InferenceModel
 from docketeer_anthropic import TIER_MAX_TOKENS
-from docketeer_anthropic.loop import agentic_loop
+from docketeer_anthropic.loop import _partition_system_messages, agentic_loop
 
 if TYPE_CHECKING:
     from docketeer.brain.core import InferenceModel, ProcessCallbacks
@@ -92,18 +99,33 @@ class AnthropicAPIBackend(InferenceBackend):
 
     async def count_tokens(
         self,
-        model_id: str,
+        tier: str,
         system: list[SystemBlock],
         tools: list[ToolDefinition],
         messages: list,
     ) -> int:
+        model_map = {
+            "smart": environment.get_str("ANTHROPIC_MODEL_SMART", "claude-opus-4-6"),
+            "balanced": environment.get_str(
+                "ANTHROPIC_MODEL_BALANCED", "claude-sonnet-4-6"
+            ),
+            "fast": environment.get_str(
+                "ANTHROPIC_MODEL_FAST", "claude-haiku-4-5-20251001"
+            ),
+        }
+        model_id = model_map.get(tier, "claude-sonnet-4-6")
+        system, messages = _partition_system_messages(system, messages)
         try:
-            serialized_messages = [msg.to_dict() for msg in messages]
             result = await self._client.messages.count_tokens(
                 model=model_id,
-                system=[self._system_to_dict(b) for b in system],  # type: ignore[arg-type]
-                tools=[self._tool_to_dict(t) for t in tools],  # type: ignore[arg-type]
-                messages=serialized_messages,
+                system=[cast(TextBlockParam, self._system_to_dict(b)) for b in system],
+                tools=[
+                    cast(MessageCountTokensToolParam, self._tool_to_dict(t))
+                    for t in tools
+                ],
+                messages=[
+                    cast(AnthropicMessageParam, msg.to_dict()) for msg in messages
+                ],
             )
         except APIError:
             log.warning("Token counting failed", exc_info=True)

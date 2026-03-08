@@ -140,6 +140,29 @@ async def agentic_loop(
     return build_reply(response, used_tools, rounds)
 
 
+def _partition_system_messages(
+    system: list[SystemBlock],
+    messages: list[MessageParam],
+) -> tuple[list[SystemBlock], list[MessageParam]]:
+    """Move role="system" messages out of the conversation into system blocks.
+
+    The Anthropic Messages API rejects role="system" in the messages array —
+    system content must go in the top-level system parameter. Context providers
+    may inject system-role messages, so we lift them out here.
+    """
+    extra_system: list[SystemBlock] = []
+    filtered: list[MessageParam] = []
+    for msg in messages:
+        if msg.role == "system":
+            text = msg.content if isinstance(msg.content, str) else str(msg.content)
+            extra_system.append(SystemBlock(text=text))
+        else:
+            filtered.append(msg)
+    if extra_system:
+        return [*system, *extra_system], filtered
+    return system, messages
+
+
 async def stream_message(
     client: anthropic.AsyncAnthropic,
     model: InferenceModel,
@@ -151,6 +174,7 @@ async def stream_message(
     thinking: bool = False,
 ) -> anthropic.types.Message:
     """Stream a response from Claude, optionally firing a callback on first text."""
+    system, messages = _partition_system_messages(system, messages)
     thinking_config: ThinkingConfigEnabledParam | anthropic.Omit = (
         ThinkingConfigEnabledParam(type="enabled", budget_tokens=model.thinking_budget)
         if thinking and model.thinking_budget

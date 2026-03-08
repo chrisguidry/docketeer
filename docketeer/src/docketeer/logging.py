@@ -10,6 +10,7 @@ from docketeer.environment import get_log_level
 # Packages that should have their minimum logging level set to INFO
 # These packages have extremely verbose DEBUG logging that's not useful for normal operation
 _VERBOSE_PACKAGES: Final[set[str]] = {
+    "anthropic._base_client",  # Anthropic SDK HTTP debug logging
     "docket",  # pydocket scheduling library
     "httpx",  # HTTP client
     "websockets",  # WebSocket client/server

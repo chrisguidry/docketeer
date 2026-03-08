@@ -33,6 +33,45 @@ def test_tool_registration():
     assert reg._schemas["greet"].description == "Say hello.\n\nname: person to greet"
 
 
+def test_template_vars_applied_in_definitions():
+    reg = ToolRegistry()
+
+    @reg.tool
+    async def find(ctx: ToolContext, pattern: str) -> str:
+        """Search files in {workspace}.
+
+        pattern: glob pattern
+        """
+        return pattern  # pragma: no cover
+
+    # Raw description preserved at registration time
+    assert reg._schemas["find"].description == (
+        "Search files in {workspace}.\n\npattern: glob pattern"
+    )
+
+    # Formatted when definitions() is called with template_vars set
+    reg.template_vars["workspace"] = "/workspace"
+    defs = {d.name: d for d in reg.definitions()}
+    assert defs["find"].description == (
+        "Search files in /workspace.\n\npattern: glob pattern"
+    )
+
+
+def test_template_vars_can_change_between_calls():
+    reg = ToolRegistry()
+
+    @reg.tool
+    async def ls(ctx: ToolContext) -> str:
+        """List {workspace}."""
+        return ""  # pragma: no cover
+
+    reg.template_vars["workspace"] = "/workspace"
+    assert reg.definitions()[0].description == "List /workspace."
+
+    reg.template_vars["workspace"] = "/home/chris/data"
+    assert reg.definitions()[0].description == "List /home/chris/data."
+
+
 def test_definitions_returns_all():
     reg = ToolRegistry()
 

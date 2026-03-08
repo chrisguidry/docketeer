@@ -64,20 +64,29 @@ class ToolRegistry:
     def __init__(self) -> None:
         self._tools: dict[str, Callable] = {}
         self._schemas: dict[str, ToolDefinition] = {}
+        self._description_templates: dict[str, str] = {}
+        self.template_vars: dict[str, str] = {}
 
     def tool[F: FunctionType](self, fn: F | None = None, *, emoji: str = "") -> F:
         """Decorator that registers a tool and derives its schema.
 
         Supports both ``@registry.tool`` and ``@registry.tool(emoji=":mag:")``.
+
+        Tool descriptions are formatted with ``str.format_map(template_vars)``
+        at definition time, not registration time — so executors can set
+        ``template_vars`` after import. Use ``{var}`` for substitution and
+        ``{{`` / ``}}`` to produce literal braces.
         """
 
         def _register(fn: F) -> F:
             name = fn.__name__
             schema = _schema_from_hints(fn)
+            description = inspect.cleandoc(fn.__doc__ or "")
             self._tools[name] = fn
+            self._description_templates[name] = description
             self._schemas[name] = ToolDefinition(
                 name=name,
-                description=inspect.cleandoc(fn.__doc__ or ""),
+                description=description,
                 input_schema=schema,
                 emoji=emoji,
             )
@@ -99,8 +108,14 @@ class ToolRegistry:
         return defn.emoji if defn else ""
 
     def definitions(self) -> list[ToolDefinition]:
-        """Return tool definitions."""
-        return list(self._schemas.values())
+        """Return tool definitions, with template_vars applied to descriptions."""
+        defs = list(self._schemas.values())
+        if self.template_vars:
+            for d in defs:
+                d.description = self._description_templates[d.name].format_map(
+                    self.template_vars
+                )
+        return defs
 
     async def execute(self, name: str, args: dict[str, Any], ctx: ToolContext) -> str:
         """Execute a tool by name, passing context and args."""

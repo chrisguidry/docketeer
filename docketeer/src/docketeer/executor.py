@@ -99,6 +99,13 @@ class RunningProcess:
 class CommandExecutor(ABC):
     """Abstract base for sandboxed command execution."""
 
+    remaps_paths: bool = True
+    """Whether this executor remaps mount targets into a sandbox namespace.
+
+    When True (bubblewrap), the agent sees mount targets like /workspace.
+    When False (subprocess), the agent sees the real source paths.
+    """
+
     @abstractmethod
     async def start(
         self,

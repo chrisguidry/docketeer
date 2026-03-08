@@ -74,6 +74,23 @@ async def test_start_uses_first_mount_as_cwd(mock_process: AsyncMock, tmp_path: 
     assert call_kwargs["cwd"] == tmp_path
 
 
+async def test_start_sets_mount_env_vars(mock_process: AsyncMock, tmp_path: Path):
+    executor = SubprocessExecutor()
+    mounts = [
+        Mount(source=tmp_path, target=Path("/workspace")),
+        Mount(source=tmp_path / "scratch", target=Path("/tmp"), writable=True),
+    ]
+    with patch("docketeer_subprocess.executor.asyncio") as mock_asyncio:
+        mock_asyncio.subprocess = asyncio.subprocess
+        mock_asyncio.create_subprocess_exec = AsyncMock(return_value=mock_process)
+
+        await executor.start(["ls"], mounts=mounts)
+
+    call_kwargs = mock_asyncio.create_subprocess_exec.call_args[1]
+    assert call_kwargs["env"]["WORKSPACE"] == str(tmp_path)
+    assert call_kwargs["env"]["TMP"] == str(tmp_path / "scratch")
+
+
 async def test_start_no_cwd_without_mounts(mock_process: AsyncMock):
     executor = SubprocessExecutor()
     with patch("docketeer_subprocess.executor.asyncio") as mock_asyncio:

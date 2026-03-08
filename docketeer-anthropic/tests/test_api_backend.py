@@ -199,9 +199,11 @@ class TestCountTokens:
         tools: list[Any] = []
         messages = [MessageParam(role="user", content="hello")]
 
-        result = await backend.count_tokens("model-id", system, tools, messages)
+        result = await backend.count_tokens("balanced", system, tools, messages)
         assert result == 42
         mock_client.messages.count_tokens.assert_called_once()
+        call_kwargs = mock_client.messages.count_tokens.call_args[1]
+        assert call_kwargs["model"] != "balanced"
 
     async def test_count_tokens_serializes_messageparam(
         self, backend: AnthropicAPIBackend, mock_client: MagicMock
@@ -212,8 +214,28 @@ class TestCountTokens:
         mock_client.messages.count_tokens.return_value = mock_result
 
         messages = [MessageParam(role="user", content="hello")]
-        result = await backend.count_tokens("model-id", [], [], messages)
+        result = await backend.count_tokens("balanced", [], [], messages)
         assert result == 10
+
+    async def test_count_tokens_partitions_system_messages(
+        self, backend: AnthropicAPIBackend, mock_client: MagicMock
+    ) -> None:
+        """count_tokens moves system-role messages to the system parameter."""
+        mock_result = MagicMock()
+        mock_result.input_tokens = 20
+        mock_client.messages.count_tokens.return_value = mock_result
+
+        messages = [
+            MessageParam(role="system", content="context"),
+            MessageParam(role="user", content="hello"),
+        ]
+        result = await backend.count_tokens("balanced", [], [], messages)
+        assert result == 20
+        call_kwargs = mock_client.messages.count_tokens.call_args[1]
+        assert len(call_kwargs["system"]) == 1
+        assert call_kwargs["system"][0]["text"] == "context"
+        assert len(call_kwargs["messages"]) == 1
+        assert call_kwargs["messages"][0]["role"] == "user"
 
     async def test_count_tokens_api_error_returns_minus_one(
         self, backend: AnthropicAPIBackend, mock_client: MagicMock
@@ -225,7 +247,7 @@ class TestCountTokens:
             "error", _FAKE_REQUEST, body=None
         )
 
-        result = await backend.count_tokens("model-id", [], [], [])
+        result = await backend.count_tokens("balanced", [], [], [])
         assert result == -1
 
 

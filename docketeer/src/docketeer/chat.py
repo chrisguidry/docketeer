@@ -160,7 +160,7 @@ def _noop_register_tools(_client: ChatClient, _ctx: ToolContext) -> None:
 
 def discover_chat_backend() -> tuple[ChatClient, RegisterToolsFn]:
     """Discover the chat backend via entry_points."""
-    ep = discover_one("docketeer.chat", "CHAT")
+    ep = discover_one("docketeer.chat", "CHAT", default="tui")
     if ep is None:
         raise RuntimeError("No chat backend installed")
     module = ep.load()

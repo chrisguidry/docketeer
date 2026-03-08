@@ -6,7 +6,11 @@ from anthropic.types import TextBlock, ToolUseBlock
 
 from docketeer.brain.core import InferenceModel
 from docketeer.prompt import MessageParam, SystemBlock
-from docketeer_anthropic.loop import _dump_content_block, stream_message
+from docketeer_anthropic.loop import (
+    _dump_content_block,
+    _partition_system_messages,
+    stream_message,
+)
 
 from .helpers import (
     MODEL,
@@ -170,6 +174,61 @@ async def test_stream_message_empty_text_stream(mock_client: MagicMock) -> None:
     )
     assert result is not None
     assert callback_calls == []
+
+
+def test_partition_system_messages_extracts_system_role():
+    """System-role messages are moved to the system blocks list."""
+    system = [SystemBlock(text="original")]
+    messages = [
+        MessageParam(role="system", content="injected context"),
+        MessageParam(role="user", content="hello"),
+        MessageParam(role="system", content="more context"),
+        MessageParam(role="assistant", content="hi"),
+    ]
+    new_system, new_messages = _partition_system_messages(system, messages)
+    assert len(new_system) == 3
+    assert new_system[0].text == "original"
+    assert new_system[1].text == "injected context"
+    assert new_system[2].text == "more context"
+    assert len(new_messages) == 2
+    assert new_messages[0].role == "user"
+    assert new_messages[1].role == "assistant"
+
+
+def test_partition_system_messages_no_system_is_noop():
+    """When there are no system-role messages, inputs pass through unchanged."""
+    system = [SystemBlock(text="original")]
+    messages = [MessageParam(role="user", content="hello")]
+    new_system, new_messages = _partition_system_messages(system, messages)
+    assert new_system is system
+    assert new_messages is messages
+
+
+async def test_stream_message_moves_system_messages_to_system_param(
+    mock_client: MagicMock,
+) -> None:
+    """System-role messages in the conversation are sent as top-level system blocks."""
+    text_block = make_text_block("Hello!")
+    response = make_response([text_block])
+    mock_client.messages.stream.return_value = FakeStream(response)
+
+    messages = [
+        MessageParam(role="system", content="injected context"),
+        MessageParam(role="user", content="hello"),
+    ]
+    await stream_message(
+        client=mock_client,
+        model=MODEL,
+        system=[SystemBlock(text="original")],
+        messages=messages,
+        tools=[],
+    )
+    call_kwargs = mock_client.messages.stream.call_args[1]
+    assert len(call_kwargs["system"]) == 2
+    assert call_kwargs["system"][0]["text"] == "original"
+    assert call_kwargs["system"][1]["text"] == "injected context"
+    assert len(call_kwargs["messages"]) == 1
+    assert call_kwargs["messages"][0]["role"] == "user"
 
 
 def test_dump_content_block_strips_extra_fields():

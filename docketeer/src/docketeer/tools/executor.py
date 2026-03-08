@@ -7,13 +7,16 @@ from docketeer.vault import SecretEnvRef, SecretResolutionError, resolve_env
 
 from . import ToolContext, registry
 
+WORKSPACE_TARGET = Path("/workspace")
+SCRATCH_TARGET = Path("/tmp")
+
 
 def _sandbox_mounts(ctx: ToolContext) -> list[Mount]:
     scratch = ctx.workspace / "tmp"
     scratch.mkdir(exist_ok=True)
     return [
-        Mount(source=ctx.workspace, target=Path("/workspace")),
-        Mount(source=scratch, target=Path("/tmp"), writable=True),
+        Mount(source=ctx.workspace, target=WORKSPACE_TARGET),
+        Mount(source=scratch, target=SCRATCH_TARGET, writable=True),
     ]
 
 
@@ -46,15 +49,15 @@ async def run(
     env: dict[str, str | dict] | None = None,
 ) -> str:
     """Run a program directly in a sandboxed environment. Your workspace is
-    mounted read-only at /workspace and a scratch space is writable at /tmp.
-    Write any output files to /tmp — they persist in your workspace's
-    tmp/ directory.
+    mounted read-only at {workspace} and a scratch space is writable at
+    {scratch}. Write any output files to {scratch} — they persist in your
+    workspace's tmp/ directory.
 
-    args: the program and its arguments (e.g. ["grep", "-r", "TODO", "/workspace"])
+    args: the program and its arguments (e.g. ["grep", "-r", "TODO", "{workspace}"])
     network: allow network access (default: false)
     env: environment variables — values are either plain strings or
-        {"secret": "vault/path"} objects for vault-backed secrets. Example:
-        {"HOME": "/tmp", "API_KEY": {"secret": "my-api-key"}}
+        {{"secret": "vault/path"}} objects for vault-backed secrets. Example:
+        {{"HOME": "/tmp", "API_KEY": {{"secret": "my-api-key"}}}}
     """
     resolved: dict[str, str] | None = None
     if env:
@@ -82,15 +85,15 @@ async def shell(
     env: dict[str, str | dict] | None = None,
 ) -> str:
     """Run a shell command in a sandboxed environment. Supports pipes, redirects,
-    and other shell features. Your workspace is mounted read-only at /workspace
-    and a scratch space is writable at /tmp. Write any output files to /tmp —
-    they persist in your workspace's tmp/ directory.
+    and other shell features. Your workspace is mounted read-only at {workspace}
+    and a scratch space is writable at {scratch}. Write any output files to
+    {scratch} — they persist in your workspace's tmp/ directory.
 
-    command: the shell command to run (e.g. "ls -la /workspace | grep py")
+    command: the shell command to run (e.g. "ls -la {workspace} | grep py")
     network: allow network access (default: false)
     env: environment variables — values are either plain strings or
-        {"secret": "vault/path"} objects for vault-backed secrets. Example:
-        {"HOME": "/tmp", "API_KEY": {"secret": "my-api-key"}}
+        {{"secret": "vault/path"}} objects for vault-backed secrets. Example:
+        {{"HOME": "/tmp", "API_KEY": {{"secret": "my-api-key"}}}}
     """
     resolved: dict[str, str] | None = None
     if env:

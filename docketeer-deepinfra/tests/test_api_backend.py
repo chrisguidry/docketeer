@@ -235,7 +235,7 @@ class TestCountTokens:
         from docketeer.prompt import MessageParam, SystemBlock
 
         result = await backend.count_tokens(
-            "some-model",
+            "balanced",
             [SystemBlock(text="You are a helpful assistant.")],
             [],
             [MessageParam(role="user", content="Hello, how are you?")],
@@ -246,7 +246,7 @@ class TestCountTokens:
         self, backend: DeepInfraAPIBackend
     ) -> None:
         """count_tokens with no system/messages returns a small positive value."""
-        result = await backend.count_tokens("some-model", [], [], [])
+        result = await backend.count_tokens("balanced", [], [], [])
         assert result >= 0
 
 
