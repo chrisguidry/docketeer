@@ -192,7 +192,8 @@ class Brain:
             tools = [*tools]
             tools[-1].cache_control = CacheControl()
 
-        self.tool_context.username = content.username
+        if content.username:
+            self.tool_context.username = content.username
         self.tool_context.line = line
         self.tool_context.chat_room = chat_room
         self.tool_context.thread_id = content.thread_id
@@ -218,11 +219,12 @@ class Brain:
 
             messages = self._conversations[line]
 
-            current_user = content.username
-            if current_user not in self._profiles_loaded[line]:
+            if content.username and content.username not in self._profiles_loaded[line]:
                 for provider in self._context_providers:
-                    messages.extend(provider.for_user(self._workspace, current_user))
-                self._profiles_loaded[line].add(current_user)
+                    messages.extend(
+                        provider.for_user(self._workspace, content.username)
+                    )
+                self._profiles_loaded[line].add(content.username)
 
             if line not in self._line_context_loaded:
                 slug = room_slug or line
@@ -406,11 +408,14 @@ class Brain:
             self._last_user_timestamp[line] = content.timestamp
 
         meta_line = json.dumps(meta)
-        message_line = (
-            f"@{content.username}: {content.text}"
-            if content.text
-            else f"@{content.username}: (empty message)"
-        )
+        if content.username:
+            message_line = (
+                f"@{content.username}: {content.text}"
+                if content.text
+                else f"@{content.username}: (empty message)"
+            )
+        else:
+            message_line = content.text or "(empty message)"
 
         for media_type, data in content.images:
             blocks.append(

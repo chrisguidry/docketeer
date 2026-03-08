@@ -9,9 +9,10 @@ from docketeer.antenna import (
     Signal,
     SignalFilter,
     Tuning,
+    delete_tuning,
     discover_bands,
     load_tunings,
-    save_tunings,
+    save_tuning,
 )
 from docketeer.testing import MemoryBand
 
@@ -44,24 +45,27 @@ def test_tuning_target_line_uses_explicit():
 
 
 def test_save_and_load_tunings(tmp_path: Path):
-    tunings = [
-        Tuning(
-            name="github-prs",
-            band="wicket",
-            topic="github/pulls",
-            filters=[SignalFilter(path="payload.action", op="eq", value="opened")],
-            line="opensource",
-            batch_window=10.0,
-            max_batch=5,
-        ),
-        Tuning(name="bluesky", band="atproto", topic="posts"),
-    ]
-    save_tunings(tmp_path, tunings)
+    tuning1 = Tuning(
+        name="github-prs",
+        band="wicket",
+        topic="github/pulls",
+        filters=[SignalFilter(path="payload.action", op="eq", value="opened")],
+        line="opensource",
+    )
+    tuning2 = Tuning(name="bluesky", band="atproto", topic="posts")
+    save_tuning(tmp_path, tuning1)
+    save_tuning(tmp_path, tuning2)
 
     loaded = load_tunings(tmp_path)
     assert len(loaded) == 2
 
-    t = loaded[0]
+    # sorted by filename, so bluesky comes first
+    t2 = loaded[0]
+    assert t2.name == "bluesky"
+    assert t2.line == ""
+    assert t2.target_line == "bluesky"
+
+    t = loaded[1]
     assert t.name == "github-prs"
     assert t.band == "wicket"
     assert t.topic == "github/pulls"
@@ -70,30 +74,59 @@ def test_save_and_load_tunings(tmp_path: Path):
     assert t.filters[0].op == "eq"
     assert t.filters[0].value == "opened"
     assert t.line == "opensource"
-    assert t.batch_window == 10.0
-    assert t.max_batch == 5
-
-    t2 = loaded[1]
-    assert t2.name == "bluesky"
-    assert t2.line == ""
-    assert t2.target_line == "bluesky"
 
 
-def test_load_tunings_no_file(tmp_path: Path):
+def test_save_and_load_tuning_with_secret(tmp_path: Path):
+    save_tuning(
+        tmp_path,
+        Tuning(
+            name="secure",
+            band="wicket",
+            topic="hooks",
+            secret="wicket/github-token",
+        ),
+    )
+
+    loaded = load_tunings(tmp_path)
+    assert len(loaded) == 1
+    assert loaded[0].secret == "wicket/github-token"
+
+
+def test_load_tuning_without_secret_defaults_to_none(tmp_path: Path):
+    save_tuning(tmp_path, Tuning(name="t", band="b", topic="x"))
+
+    loaded = load_tunings(tmp_path)
+    assert loaded[0].secret is None
+
+
+def test_load_tunings_no_dir(tmp_path: Path):
     assert load_tunings(tmp_path) == []
 
 
-def test_save_tunings_creates_dir(tmp_path: Path):
+def test_save_tuning_creates_dir(tmp_path: Path):
     data_dir = tmp_path / "nested" / "data"
-    save_tunings(data_dir, [Tuning(name="t", band="b", topic="x")])
-    assert (data_dir / "tunings.json").exists()
+    save_tuning(data_dir, Tuning(name="t", band="b", topic="x"))
+    assert (data_dir / "tunings" / "t.json").exists()
 
 
 def test_tuning_json_format(tmp_path: Path):
-    save_tunings(tmp_path, [Tuning(name="t", band="b", topic="x")])
-    data = json.loads((tmp_path / "tunings.json").read_text())
-    assert isinstance(data, list)
-    assert data[0]["name"] == "t"
+    save_tuning(tmp_path, Tuning(name="t", band="b", topic="x"))
+    data = json.loads((tmp_path / "tunings" / "t.json").read_text())
+    assert isinstance(data, dict)
+    assert data["name"] == "t"
+
+
+def test_delete_tuning_removes_file(tmp_path: Path):
+    save_tuning(tmp_path, Tuning(name="t", band="b", topic="x"))
+    assert (tmp_path / "tunings" / "t.json").exists()
+
+    delete_tuning(tmp_path, "t")
+    assert not (tmp_path / "tunings" / "t.json").exists()
+
+
+def test_delete_tuning_missing_is_ok(tmp_path: Path):
+    (tmp_path / "tunings").mkdir()
+    delete_tuning(tmp_path, "nonexistent")
 
 
 def test_discover_bands_empty():

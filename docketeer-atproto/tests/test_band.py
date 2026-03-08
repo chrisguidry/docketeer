@@ -9,7 +9,14 @@ from unittest.mock import patch
 
 from docketeer.antenna import SignalFilter
 from docketeer_atproto import create_band
-from docketeer_atproto.band import JetstreamBand, _message_to_signal
+from docketeer_atproto.band import (
+    DEFAULT_RELAY_URLS,
+    JetstreamBand,
+    _account_to_signal,
+    _commit_to_signal,
+    _identity_to_signal,
+    _message_to_signal,
+)
 
 
 def test_create_band() -> None:
@@ -18,7 +25,10 @@ def test_create_band() -> None:
     assert band.name == "atproto"
 
 
-def _sample_message(
+# --- Sample message builders ---
+
+
+def _sample_commit(
     *,
     time_us: int = 1_700_000_000_000_000,
     did: str = "did:plc:abc123",
@@ -28,11 +38,53 @@ def _sample_message(
     return {
         "time_us": time_us,
         "did": did,
+        "kind": "commit",
         "commit": {
             "collection": collection,
             "operation": operation,
         },
     }
+
+
+def _sample_identity(
+    *,
+    time_us: int = 1_700_000_000_000_000,
+    did: str = "did:plc:abc123",
+    handle: str = "alice.bsky.social",
+) -> dict[str, Any]:
+    return {
+        "time_us": time_us,
+        "did": did,
+        "kind": "identity",
+        "identity": {
+            "did": did,
+            "handle": handle,
+            "seq": 12345,
+            "time": "2023-11-14T22:13:20Z",
+        },
+    }
+
+
+def _sample_account(
+    *,
+    time_us: int = 1_700_000_000_000_000,
+    did: str = "did:plc:abc123",
+    active: bool = False,
+) -> dict[str, Any]:
+    return {
+        "time_us": time_us,
+        "did": did,
+        "kind": "account",
+        "account": {
+            "active": active,
+            "did": did,
+            "seq": 12346,
+            "time": "2023-11-14T22:13:20Z",
+        },
+    }
+
+
+# --- Remote filter hints ---
 
 
 class TestRemoteFilterHints:
@@ -77,26 +129,146 @@ class TestRemoteFilterHints:
         assert hints == [collection_filter, did_filter]
 
 
-class TestMessageToSignal:
-    def test_basic_message(self) -> None:
-        msg = _sample_message()
-        signal = _message_to_signal(msg)
+# --- Message to signal conversion ---
+
+
+class TestCommitToSignal:
+    def test_basic_commit(self) -> None:
+        msg = _sample_commit()
+        signal = _commit_to_signal(
+            msg, "did:plc:abc123", datetime(2023, 11, 14, 22, 13, 20, tzinfo=UTC)
+        )
 
         assert signal.band == "atproto"
         assert signal.signal_id == "1700000000000000"
-        assert signal.timestamp == datetime(2023, 11, 14, 22, 13, 20, tzinfo=UTC)
         assert signal.topic == "app.bsky.feed.post"
-        assert signal.payload == msg
+        assert signal.payload["did"] == "did:plc:abc123"
+        assert signal.payload["operation"] == "create"
+        assert signal.payload["collection"] == "app.bsky.feed.post"
         assert signal.summary == "did:plc:abc123 create app.bsky.feed.post"
 
-    def test_missing_fields(self) -> None:
-        msg: dict[str, Any] = {}
-        signal = _message_to_signal(msg)
+    def test_commit_with_record_text(self) -> None:
+        msg = _sample_commit()
+        msg["commit"]["record"] = {"$type": "app.bsky.feed.post", "text": "hello world"}
+        signal = _commit_to_signal(
+            msg, "did:plc:abc123", datetime(2023, 11, 14, 22, 13, 20, tzinfo=UTC)
+        )
+
+        assert "hello world" in signal.summary
+        assert signal.payload["record"]["text"] == "hello world"
+
+    def test_commit_with_non_dict_record(self) -> None:
+        msg = _sample_commit()
+        msg["commit"]["record"] = "just a string"
+        signal = _commit_to_signal(
+            msg, "did:plc:abc123", datetime(2023, 11, 14, 22, 13, 20, tzinfo=UTC)
+        )
+
+        assert "record" not in signal.payload
+        assert "just a string" not in signal.summary
+
+    def test_missing_commit_fields(self) -> None:
+        msg: dict[str, Any] = {"kind": "commit"}
+        signal = _commit_to_signal(msg, "", datetime(1970, 1, 1, tzinfo=UTC))
 
         assert signal.signal_id == "0"
         assert signal.topic == ""
         assert signal.summary == " unknown "
-        assert signal.timestamp == datetime(1970, 1, 1, tzinfo=UTC)
+        assert signal.payload["rkey"] == ""
+        assert signal.payload["rev"] == ""
+
+
+class TestIdentityToSignal:
+    def test_handle_change(self) -> None:
+        msg = _sample_identity(handle="alice.newdomain.com")
+        signal = _identity_to_signal(
+            msg, "did:plc:abc123", datetime(2023, 11, 14, 22, 13, 20, tzinfo=UTC)
+        )
+
+        assert signal.topic == "identity"
+        assert signal.summary == "did:plc:abc123 is now @alice.newdomain.com"
+        assert signal.payload == msg
+
+    def test_missing_handle(self) -> None:
+        msg = _sample_identity()
+        msg["identity"] = {"did": "did:plc:abc123", "seq": 1, "time": ""}
+        signal = _identity_to_signal(
+            msg, "did:plc:abc123", datetime(2023, 11, 14, 22, 13, 20, tzinfo=UTC)
+        )
+
+        assert signal.summary == "did:plc:abc123 identity updated"
+
+    def test_missing_identity_block(self) -> None:
+        msg: dict[str, Any] = {"kind": "identity", "time_us": 0}
+        signal = _identity_to_signal(msg, "", datetime(1970, 1, 1, tzinfo=UTC))
+
+        assert signal.topic == "identity"
+        assert signal.summary == " identity updated"
+
+
+class TestAccountToSignal:
+    def test_deactivated(self) -> None:
+        msg = _sample_account(active=False)
+        signal = _account_to_signal(
+            msg, "did:plc:abc123", datetime(2023, 11, 14, 22, 13, 20, tzinfo=UTC)
+        )
+
+        assert signal.topic == "account"
+        assert signal.summary == "did:plc:abc123 account deactivated"
+        assert signal.payload == msg
+
+    def test_active(self) -> None:
+        msg = _sample_account(active=True)
+        signal = _account_to_signal(
+            msg, "did:plc:abc123", datetime(2023, 11, 14, 22, 13, 20, tzinfo=UTC)
+        )
+
+        assert signal.summary == "did:plc:abc123 account active"
+
+    def test_missing_account_block(self) -> None:
+        msg: dict[str, Any] = {"kind": "account", "time_us": 0}
+        signal = _account_to_signal(msg, "", datetime(1970, 1, 1, tzinfo=UTC))
+
+        assert signal.topic == "account"
+        assert signal.summary == " account active"
+
+
+class TestMessageToSignal:
+    def test_dispatches_commit(self) -> None:
+        msg = _sample_commit()
+        signal = _message_to_signal(msg)
+        assert signal.topic == "app.bsky.feed.post"
+
+    def test_dispatches_identity(self) -> None:
+        msg = _sample_identity()
+        signal = _message_to_signal(msg)
+        assert signal.topic == "identity"
+        assert "alice.bsky.social" in signal.summary
+
+    def test_dispatches_account(self) -> None:
+        msg = _sample_account()
+        signal = _message_to_signal(msg)
+        assert signal.topic == "account"
+        assert "deactivated" in signal.summary
+
+    def test_unknown_kind_treated_as_account(self) -> None:
+        msg: dict[str, Any] = {"kind": "unknown_future_type", "time_us": 0, "did": ""}
+        signal = _message_to_signal(msg)
+        assert signal.topic == "account"
+
+    def test_missing_kind_defaults_to_commit(self) -> None:
+        msg: dict[str, Any] = {"time_us": 0}
+        signal = _message_to_signal(msg)
+        assert signal.topic == ""
+        assert "unknown" in signal.summary
+
+    def test_timestamp_parsing(self) -> None:
+        msg = _sample_commit(time_us=1_700_000_000_000_000)
+        signal = _message_to_signal(msg)
+        assert signal.timestamp == datetime(2023, 11, 14, 22, 13, 20, tzinfo=UTC)
+
+
+# --- Context manager ---
 
 
 class TestContextManager:
@@ -104,6 +276,9 @@ class TestContextManager:
         band = JetstreamBand()
         async with band as b:
             assert b is band
+
+
+# --- WebSocket listen ---
 
 
 class FakeWebSocket:
@@ -130,8 +305,8 @@ async def fake_connect(
 
 
 class TestListen:
-    async def test_yields_signals(self) -> None:
-        messages = [_sample_message(), _sample_message(operation="delete")]
+    async def test_yields_commit_signals(self) -> None:
+        messages = [_sample_commit(), _sample_commit(operation="delete")]
 
         with patch(
             "docketeer_atproto.band.websockets.connect",
@@ -145,6 +320,27 @@ class TestListen:
         assert len(signals) == 2
         assert signals[0].summary == "did:plc:abc123 create app.bsky.feed.post"
         assert signals[1].summary == "did:plc:abc123 delete app.bsky.feed.post"
+
+    async def test_yields_mixed_event_types(self) -> None:
+        messages = [
+            _sample_commit(),
+            _sample_identity(),
+            _sample_account(),
+        ]
+
+        with patch(
+            "docketeer_atproto.band.websockets.connect",
+            return_value=fake_connect("unused", messages),
+        ):
+            band = JetstreamBand()
+            signals = []
+            async for signal in band.listen("app.bsky.feed.post", []):
+                signals.append(signal)
+
+        assert len(signals) == 3
+        assert signals[0].topic == "app.bsky.feed.post"
+        assert signals[1].topic == "identity"
+        assert signals[2].topic == "account"
 
     async def test_cursor_from_last_signal_id(self) -> None:
         captured_urls: list[str] = []
@@ -236,10 +432,15 @@ class TestListen:
         assert "cursor" not in captured_urls[0]
 
 
+# --- Relay URL config ---
+
+
 class TestRelayUrlConfig:
-    def test_default_relay_url(self) -> None:
+    def test_default_relay_urls(self) -> None:
         band = JetstreamBand()
-        assert "jetstream2.us-east.bsky.network" in band._relay_url
+        assert len(band._relay_urls) == 2
+        assert "jetstream1" in band._relay_urls[0]
+        assert "jetstream2" in band._relay_urls[1]
 
     def test_custom_relay_url(self) -> None:
         with patch.dict(
@@ -247,4 +448,47 @@ class TestRelayUrlConfig:
             {"DOCKETEER_ATPROTO_RELAY_URL": "wss://custom.example.com/subscribe"},
         ):
             band = JetstreamBand()
-            assert band._relay_url == "wss://custom.example.com/subscribe"
+            assert band._relay_urls == ["wss://custom.example.com/subscribe"]
+
+    def test_round_robin_across_calls(self) -> None:
+        band = JetstreamBand()
+        first = band._pick_relay()
+        second = band._pick_relay()
+        third = band._pick_relay()
+
+        assert first == DEFAULT_RELAY_URLS[0]
+        assert second == DEFAULT_RELAY_URLS[1]
+        assert third == DEFAULT_RELAY_URLS[0]
+
+    def test_round_robin_single_relay(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {"DOCKETEER_ATPROTO_RELAY_URL": "wss://only.one/subscribe"},
+        ):
+            band = JetstreamBand()
+            assert band._pick_relay() == "wss://only.one/subscribe"
+            assert band._pick_relay() == "wss://only.one/subscribe"
+
+    async def test_listen_uses_picked_relay(self) -> None:
+        captured_urls: list[str] = []
+
+        original_fake = fake_connect
+
+        def capturing_connect(url: str) -> Any:
+            captured_urls.append(url)
+            return original_fake(url, [])
+
+        band = JetstreamBand()
+        with patch(
+            "docketeer_atproto.band.websockets.connect",
+            side_effect=capturing_connect,
+        ):
+            async for _ in band.listen("app.bsky.feed.post", []):
+                pass  # pragma: no cover
+
+            async for _ in band.listen("app.bsky.feed.post", []):
+                pass  # pragma: no cover
+
+        assert len(captured_urls) == 2
+        assert "jetstream1" in captured_urls[0]
+        assert "jetstream2" in captured_urls[1]

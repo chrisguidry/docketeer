@@ -12,6 +12,7 @@ from docketeer.tools import (
     _load_tool_plugins,
     _parse_param_docs,
     _schema_from_hints,
+    _type_to_schema,
     safe_path,
 )
 
@@ -112,6 +113,72 @@ def test_schema_from_hints_list_of_strings():
     schema = _schema_from_hints(fn)
     assert schema["properties"]["items"]["type"] == "array"
     assert schema["properties"]["items"]["items"] == {"type": "string"}
+
+
+def test_schema_from_hints_list_of_bare_dicts():
+    async def fn(ctx: ToolContext, items: list[dict]) -> str:
+        """Test.
+
+        items: the items
+        """
+        return ""  # pragma: no cover
+
+    schema = _schema_from_hints(fn)
+    assert schema["properties"]["items"]["items"] == {"type": "object"}
+
+
+def test_schema_from_hints_list_of_dicts():
+    async def fn(ctx: ToolContext, filters: list[dict[str, str]]) -> str:
+        """Test.
+
+        filters: the filters
+        """
+        return ""  # pragma: no cover
+
+    schema = _schema_from_hints(fn)
+    assert schema["properties"]["filters"]["type"] == "array"
+    assert schema["properties"]["filters"]["items"] == {
+        "type": "object",
+        "additionalProperties": {"type": "string"},
+    }
+
+
+def test_type_to_schema_literal_strings():
+    from typing import Literal
+
+    schema = _type_to_schema(Literal["a", "b", "c"])
+    assert schema == {"type": "string", "enum": ["a", "b", "c"]}
+
+
+def test_type_to_schema_literal_ints():
+    from typing import Literal
+
+    schema = _type_to_schema(Literal[1, 2, 3])
+    assert schema == {"enum": [1, 2, 3]}
+
+
+def test_type_to_schema_typeddict():
+    from typing import TypedDict
+
+    class MyTD(TypedDict, total=False):
+        name: str
+        count: int
+
+    schema = _type_to_schema(MyTD)
+    assert schema["type"] == "object"
+    assert schema["properties"]["name"] == {"type": "string"}
+    assert schema["properties"]["count"] == {"type": "integer"}
+    assert "required" not in schema
+
+
+def test_type_to_schema_typeddict_with_required():
+    from typing import TypedDict
+
+    class MyTD(TypedDict):
+        name: str
+
+    schema = _type_to_schema(MyTD)
+    assert schema["required"] == ["name"]
 
 
 def test_schema_from_hints_optional_dict():

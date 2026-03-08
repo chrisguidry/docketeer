@@ -90,7 +90,7 @@ async def reverie(
     digest = await build_conversation_digest(chat, backend, since=since)
     if digest:
         prompt = f"{digest}\n\n---\n\n{prompt}"
-    content = MessageContent(username="system", timestamp=now, text=prompt)
+    content = MessageContent(timestamp=now, text=prompt)
     try:
         response = await brain.process(
             line=task_key, content=content, tier=REVERIE_MODEL
@@ -125,7 +125,7 @@ async def consolidation(
     """Daily memory integration and reflection cycle."""
     prompt = _build_cycle_prompt(CONSOLIDATION_PROMPT, workspace, "Consolidation")
     now = datetime.now().astimezone()
-    content = MessageContent(username="system", timestamp=now, text=prompt)
+    content = MessageContent(timestamp=now, text=prompt)
     try:
         response = await brain.process(
             line=task_key, content=content, tier=CONSOLIDATION_MODEL

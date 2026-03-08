@@ -124,9 +124,7 @@ def test_extract_text_skips_other():
 
 async def test_process_sets_line_and_empty_chat_room(brain: Brain, fake_messages: Any):
     fake_messages.responses = [FakeMessage(content=[make_text_block(text="ok")])]
-    await brain.process(
-        "__task__:test", MessageContent(username="system", text="reverie")
-    )
+    await brain.process("__task__:test", MessageContent(text="reverie"))
     assert brain.tool_context.line == "__task__:test"
     assert brain.tool_context.chat_room == ""
 
@@ -138,7 +136,7 @@ async def test_process_appends_system_context(brain: Brain, fake_messages: Any):
     ctx = [SystemBlock(text="Extra context for this line.")]
     await brain.process(
         "test-line",
-        MessageContent(username="system", text="hello"),
+        MessageContent(text="hello"),
         system_context=ctx,
     )
     assert brain.tool_context.line == "test-line"

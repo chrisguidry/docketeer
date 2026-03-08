@@ -58,7 +58,7 @@ def _load_prompt_providers() -> list[Callable[[Path], list[SystemBlock]]]:
 class MessageContent:
     """Content to send to the inference backend — text and/or images."""
 
-    username: str
+    username: str | None = None
     message_id: str = ""
     timestamp: datetime | None = None
     text: str = ""

@@ -1,4 +1,4 @@
-"""Tests for the signal loop — batching, delivery, and formatting."""
+"""Tests for the signal loop — filtering and delivery."""
 
 import asyncio
 import contextlib
@@ -8,9 +8,10 @@ from pathlib import Path
 from unittest.mock import AsyncMock
 
 from docketeer.antenna import Signal, SignalFilter, Tuning
+from docketeer.prompt import BrainResponse
 from docketeer.signal_loop import (
-    deliver_batch,
-    format_signal_batch,
+    deliver_signal,
+    format_signal,
     run_tuning,
 )
 from docketeer.testing import MemoryBand
@@ -32,39 +33,38 @@ def _make_signal(
     )
 
 
-def test_format_signal_batch_single():
+def test_format_signal_basic():
     tuning = Tuning(name="github", band="wicket", topic="events")
-    signals = [_make_signal()]
-    result = format_signal_batch(tuning, signals)
-    assert "1 signal(s)" in result
+    result = format_signal(tuning, _make_signal())
     assert "github" in result
     assert "A push event" in result
-    assert "action: created" in result
+    assert '"action": "created"' in result
 
 
-def test_format_signal_batch_multiple():
-    tuning = Tuning(name="github", band="wicket", topic="events")
-    signals = [_make_signal(signal_id="s1"), _make_signal(signal_id="s2")]
-    result = format_signal_batch(tuning, signals)
-    assert "2 signal(s)" in result
-
-
-def test_format_signal_batch_truncates_long_values():
+def test_format_signal_truncates_long_payload():
     tuning = Tuning(name="t", band="b", topic="x")
-    signals = [_make_signal(payload={"content": "x" * 300})]
-    result = format_signal_batch(tuning, signals)
+    result = format_signal(tuning, _make_signal(payload={"content": "x" * 3000}))
     assert "..." in result
-    assert len(result) < 500
+    assert len(result) < 2200
 
 
-def test_format_signal_batch_uses_topic_when_no_summary():
+def test_format_signal_uses_topic_when_no_summary():
     tuning = Tuning(name="t", band="b", topic="x")
-    signals = [_make_signal(summary="")]
-    result = format_signal_batch(tuning, signals)
+    result = format_signal(tuning, _make_signal(summary=""))
     assert "events.push" in result
 
 
-def test_format_signal_batch_empty_payload():
+def test_format_signal_nested_dict_payload():
+    tuning = Tuning(name="t", band="b", topic="x")
+    result = format_signal(
+        tuning,
+        _make_signal(payload={"commit": {"operation": "create", "text": "hello"}}),
+    )
+    assert '"operation": "create"' in result
+    assert '"text": "hello"' in result
+
+
+def test_format_signal_empty_payload():
     tuning = Tuning(name="t", band="b", topic="x")
     signal = Signal(
         band="test",
@@ -74,56 +74,53 @@ def test_format_signal_batch_empty_payload():
         payload={},
         summary="empty",
     )
-    result = format_signal_batch(tuning, [signal])
-    assert "1 signal(s)" in result
+    result = format_signal(tuning, signal)
+    assert "Signal on tuning" in result
 
 
-async def test_deliver_batch_calls_process(tmp_path: Path):
-    process = AsyncMock()
+async def test_deliver_signal_calls_process(tmp_path: Path):
+    process = AsyncMock(return_value=BrainResponse(text="noted"))
     tuning = Tuning(name="github", band="wicket", topic="events")
-    signals = [_make_signal()]
 
-    await deliver_batch(process, tuning, signals, tmp_path)
+    await deliver_signal(process, tuning, _make_signal(), tmp_path)
 
     process.assert_called_once()
     kwargs = process.call_args.kwargs
     assert kwargs["line"] == "github"
     assert kwargs["tier"] == "fast"
+    assert kwargs["content"].username is None
     assert "signal" in kwargs["content"].text.lower()
 
 
-async def test_deliver_batch_with_purpose_prompt(tmp_path: Path):
+async def test_deliver_signal_with_purpose_prompt(tmp_path: Path):
     (tmp_path / "lines").mkdir()
     (tmp_path / "lines" / "github.md").write_text("Watch for security issues.")
 
-    process = AsyncMock()
+    process = AsyncMock(return_value=BrainResponse(text=""))
     tuning = Tuning(name="github", band="wicket", topic="events")
-    signals = [_make_signal()]
 
-    await deliver_batch(process, tuning, signals, tmp_path)
+    await deliver_signal(process, tuning, _make_signal(), tmp_path)
 
     kwargs = process.call_args.kwargs
     assert len(kwargs["system_context"]) == 1
     assert "security" in kwargs["system_context"][0].text
 
 
-async def test_deliver_batch_no_purpose_prompt(tmp_path: Path):
-    process = AsyncMock()
+async def test_deliver_signal_no_purpose_prompt(tmp_path: Path):
+    process = AsyncMock(return_value=BrainResponse(text=""))
     tuning = Tuning(name="github", band="wicket", topic="events")
-    signals = [_make_signal()]
 
-    await deliver_batch(process, tuning, signals, tmp_path)
+    await deliver_signal(process, tuning, _make_signal(), tmp_path)
 
     kwargs = process.call_args.kwargs
     assert kwargs["system_context"] == []
 
 
-async def test_deliver_batch_uses_tuning_line(tmp_path: Path):
-    process = AsyncMock()
+async def test_deliver_signal_uses_tuning_line(tmp_path: Path):
+    process = AsyncMock(return_value=BrainResponse(text=""))
     tuning = Tuning(name="github-prs", band="wicket", topic="events", line="opensource")
-    signals = [_make_signal()]
 
-    await deliver_batch(process, tuning, signals, tmp_path)
+    await deliver_signal(process, tuning, _make_signal(), tmp_path)
     assert process.call_args.kwargs["line"] == "opensource"
 
 
@@ -153,8 +150,8 @@ def test_memory_band_remote_filter_hints():
 
 async def test_run_tuning_delivers_signal(tmp_path: Path):
     band = MemoryBand("test")
-    tuning = Tuning(name="t", band="test", topic="events", batch_window=0.0)
-    process = AsyncMock()
+    tuning = Tuning(name="t", band="test", topic="events")
+    process = AsyncMock(return_value=BrainResponse(text=""))
     signal = _make_signal()
 
     async with band:
@@ -179,9 +176,8 @@ async def test_run_tuning_filters_signals(tmp_path: Path):
         band="test",
         topic="events",
         filters=[SignalFilter(path="payload.action", op="eq", value="opened")],
-        batch_window=0.0,
     )
-    process = AsyncMock()
+    process = AsyncMock(return_value=BrainResponse(text=""))
 
     async with band:
         band.emit(_make_signal(payload={"action": "created"}))
@@ -209,6 +205,7 @@ async def test_run_tuning_reconnects_on_error(tmp_path: Path):
             topic: str,
             filters: list[SignalFilter],
             last_signal_id: str = "",
+            secret: str | None = None,
         ) -> AsyncGenerator[Signal, None]:
             nonlocal call_count
             call_count += 1
@@ -217,14 +214,34 @@ async def test_run_tuning_reconnects_on_error(tmp_path: Path):
 
     band = ErrorBand("error-band")
     tuning = Tuning(name="t", band="error-band", topic="events")
-    process = AsyncMock()
+    process = AsyncMock(return_value=BrainResponse(text=""))
 
     task = asyncio.create_task(
         run_tuning(band, tuning, process, tmp_path, reconnect_delay=0.01)
     )
-    await asyncio.sleep(0.05)
+    await asyncio.sleep(0.1)
     task.cancel()
     with contextlib.suppress(asyncio.CancelledError):
         await task
 
     assert call_count >= 2
+
+
+async def test_run_tuning_resets_backoff_on_success(tmp_path: Path):
+    """After a successful signal delivery, backoff resets to initial delay."""
+    band = MemoryBand("test")
+    tuning = Tuning(name="t", band="test", topic="events")
+    process = AsyncMock()
+    signal = _make_signal()
+
+    async with band:
+        band.emit(signal)
+        band.stop()
+
+        task = asyncio.create_task(run_tuning(band, tuning, process, tmp_path))
+        await asyncio.sleep(0.05)
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+    process.assert_called_once()

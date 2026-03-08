@@ -107,7 +107,7 @@ async def test_context_provider_line_loaded_for_task_lines(
     fake_messages.responses = [FakeMessage(content=[make_text_block(text="ok")])]
     await brain.process(
         "reverie",
-        MessageContent(username="system", text="think"),
+        MessageContent(text="think"),
     )
 
     messages = brain._conversations["reverie"]
@@ -182,3 +182,13 @@ async def test_no_providers_means_no_context(
     messages = brain._conversations["room1"]
     system_msgs = [m for m in messages if m.role == "system"]
     assert len(system_msgs) == 0
+
+
+async def test_no_username_skips_profile_loading(
+    brain: Brain, fake_messages: Any, tool_context: ToolContext
+):
+    brain._context_providers = [FakeContextProvider()]
+    fake_messages.responses = [FakeMessage(content=[make_text_block(text="ok")])]
+    await brain.process("room1", MessageContent(text="a signal"))
+
+    assert brain._profiles_loaded["room1"] == set()

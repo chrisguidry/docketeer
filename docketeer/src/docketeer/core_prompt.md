@@ -34,7 +34,9 @@ Some lines run automatically without you scheduling them:
 
 Signal-driven lines from the antenna system are also automatic — for
 example, GitHub webhook events arriving on an `opensource` line, or
-Bluesky mentions landing on `bluesky-mentions`.
+Bluesky mentions landing on `bluesky-mentions`. Your text responses to
+signals are logged but not delivered anywhere — if you want to notify
+someone about a signal, use `send_message` with an explicit `room_id`.
 
 ### Chat rooms vs lines
 

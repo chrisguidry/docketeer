@@ -49,6 +49,16 @@ def test_contains_no_match(signal: Signal):
     assert evaluate_filter(f, signal) is False
 
 
+def test_icontains_matches(signal: Signal):
+    f = SignalFilter(path="payload.repo", op="icontains", value="OCKET")
+    assert evaluate_filter(f, signal) is True
+
+
+def test_icontains_no_match(signal: Signal):
+    f = SignalFilter(path="payload.repo", op="icontains", value="XYZ")
+    assert evaluate_filter(f, signal) is False
+
+
 def test_startswith_matches(signal: Signal):
     f = SignalFilter(path="topic", op="startswith", value="events.")
     assert evaluate_filter(f, signal) is True
@@ -75,7 +85,7 @@ def test_missing_path_returns_false(signal: Signal):
 
 
 def test_unknown_op_returns_false(signal: Signal):
-    f = SignalFilter(path="topic", op="regex", value=".*")
+    f = SignalFilter(path="topic", op="regex", value=".*")  # type: ignore[arg-type]
     assert evaluate_filter(f, signal) is False
 
 

@@ -121,6 +121,52 @@ TYPE_MAP = {
 }
 
 
+def _type_to_schema(hint: Any) -> dict[str, Any]:
+    """Convert a type hint to a JSON Schema fragment."""
+    import typing
+
+    origin = get_origin(hint)
+
+    # Literal["a", "b"] → {"type": "string", "enum": ["a", "b"]}
+    if origin is typing.Literal:
+        values = list(get_args(hint))
+        if values and all(isinstance(v, str) for v in values):
+            return {"type": "string", "enum": values}
+        return {"enum": values}
+
+    # dict / dict[K, V]
+    if hint is dict or origin is dict:
+        args = get_args(hint)
+        if args and len(args) > 1:
+            return {
+                "type": "object",
+                "additionalProperties": _type_to_schema(args[1]),
+            }
+        return {"type": "object"}
+
+    # TypedDict → object with typed properties
+    if isinstance(hint, type) and _is_typeddict(hint):
+        return _typeddict_to_schema(hint)
+
+    return {"type": TYPE_MAP.get(hint, "string")}
+
+
+def _is_typeddict(cls: type) -> bool:
+    """Check if a class is a TypedDict."""
+    return hasattr(cls, "__annotations__") and hasattr(cls, "__required_keys__")
+
+
+def _typeddict_to_schema(cls: type) -> dict[str, Any]:
+    """Convert a TypedDict to a JSON Schema object."""
+    hints = get_type_hints(cls)
+    required_keys = getattr(cls, "__required_keys__", set())
+    properties = {name: _type_to_schema(hint) for name, hint in hints.items()}
+    schema: dict[str, Any] = {"type": "object", "properties": properties}
+    if required_keys:
+        schema["required"] = sorted(required_keys)
+    return schema
+
+
 def _schema_from_hints(fn: Callable) -> dict:
     """Derive a JSON Schema input_schema from a tool function's type hints and docstring."""
     hints = get_type_hints(fn)
@@ -142,7 +188,7 @@ def _schema_from_hints(fn: Callable) -> dict:
             item_type = get_args(hint)[0] if get_args(hint) else str
             prop = {
                 "type": "array",
-                "items": {"type": TYPE_MAP.get(item_type, "string")},
+                "items": _type_to_schema(item_type),
             }
         elif get_origin(hint) is dict:
             args = get_args(hint)

@@ -68,9 +68,7 @@ async def nudge(
         return
 
     now = datetime.now().astimezone()
-    content = MessageContent(
-        username="system", timestamp=now, text=prompt, thread_id=thread_id
-    )
+    content = MessageContent(timestamp=now, text=prompt, thread_id=thread_id)
 
     target_line = line or f"__task__:{task_key}"
     key = f"nudge:{task_key}"
@@ -128,9 +126,7 @@ async def nudge_every(
     duration = parse_every(every)
 
     now = datetime.now().astimezone()
-    content = MessageContent(
-        username="system", timestamp=now, text=prompt, thread_id=thread_id
-    )
+    content = MessageContent(timestamp=now, text=prompt, thread_id=thread_id)
 
     target_line = line or f"__task__:{task_key}"
     key = f"nudge_every:{task_key}"

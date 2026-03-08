@@ -14,10 +14,11 @@ from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 from docketeer.plugins import discover_all
 from docketeer.prompt import BrainResponse, MessageContent, SystemBlock
+from docketeer.vault import Vault
 
 log = logging.getLogger(__name__)
 
@@ -50,12 +51,15 @@ class Signal:
     summary: str = ""
 
 
+FilterOp = Literal["eq", "ne", "contains", "icontains", "startswith", "exists"]
+
+
 @dataclass(frozen=True)
 class SignalFilter:
     """A predicate evaluated against signal fields."""
 
     path: str  # dot-path: "payload.action", "topic"
-    op: str  # "eq", "ne", "contains", "startswith", "exists"
+    op: FilterOp
     value: str = ""
 
 
@@ -68,8 +72,7 @@ class Tuning:
     topic: str
     filters: list[SignalFilter] = field(default_factory=list)
     line: str = ""  # defaults to tuning name
-    batch_window: float = 5.0
-    max_batch: int = 10
+    secret: str | None = None
 
     @property
     def target_line(self) -> str:
@@ -115,6 +118,8 @@ def evaluate_filter(f: SignalFilter, signal: Signal) -> bool:
             return str_value != f.value
         case "contains":
             return f.value in str_value
+        case "icontains":
+            return f.value.lower() in str_value.lower()
         case "startswith":
             return str_value.startswith(f.value)
         case _:
@@ -134,6 +139,7 @@ class Band(ABC):
     """A persistent streaming connection that produces signals."""
 
     name: str
+    description: str = ""
 
     @abstractmethod
     async def __aenter__(self) -> "Band": ...
@@ -147,6 +153,7 @@ class Band(ABC):
         topic: str,
         filters: list[SignalFilter],
         last_signal_id: str = "",
+        secret: str | None = None,
     ) -> AsyncGenerator[Signal, None]:
         """Yield signals matching the topic and remote-compatible filters."""
         ...  # pragma: no cover
@@ -171,21 +178,34 @@ def discover_bands() -> dict[str, Band]:
 # --- Tuning persistence ---
 
 
+def _tunings_dir(data_dir: Path) -> Path:
+    return data_dir / "tunings"
+
+
 def load_tunings(data_dir: Path) -> list[Tuning]:
-    """Load tunings from the data directory."""
-    path = data_dir / "tunings.json"
-    if not path.exists():
+    """Load all tunings from individual files in the tunings directory."""
+    tunings_path = _tunings_dir(data_dir)
+    if not tunings_path.is_dir():
         return []
-    data = json.loads(path.read_text())
-    return [_tuning_from_dict(d) for d in data]
+    tunings: list[Tuning] = []
+    for path in sorted(tunings_path.glob("*.json")):
+        data = json.loads(path.read_text())
+        tunings.append(_tuning_from_dict(data))
+    return tunings
 
 
-def save_tunings(data_dir: Path, tunings: list[Tuning]) -> None:
-    """Save tunings to the data directory."""
-    data_dir.mkdir(parents=True, exist_ok=True)
-    path = data_dir / "tunings.json"
-    data = [_tuning_to_dict(t) for t in tunings]
-    path.write_text(json.dumps(data, indent=2) + "\n")
+def save_tuning(data_dir: Path, tuning: Tuning) -> None:
+    """Save a single tuning to its own file."""
+    tunings_path = _tunings_dir(data_dir)
+    tunings_path.mkdir(parents=True, exist_ok=True)
+    path = tunings_path / f"{tuning.name}.json"
+    path.write_text(json.dumps(_tuning_to_dict(tuning), indent=2) + "\n")
+
+
+def delete_tuning(data_dir: Path, name: str) -> None:
+    """Delete a tuning file."""
+    path = _tunings_dir(data_dir) / f"{name}.json"
+    path.unlink(missing_ok=True)
 
 
 def _tuning_to_dict(t: Tuning) -> dict[str, Any]:
@@ -195,8 +215,7 @@ def _tuning_to_dict(t: Tuning) -> dict[str, Any]:
         "topic": t.topic,
         "filters": [{"path": f.path, "op": f.op, "value": f.value} for f in t.filters],
         "line": t.line,
-        "batch_window": t.batch_window,
-        "max_batch": t.max_batch,
+        "secret": t.secret,
     }
 
 
@@ -208,10 +227,12 @@ class Antenna:
         process_fn: ProcessFn,
         data_dir: Path,
         workspace: Path,
+        vault: Vault | None = None,
     ) -> None:
         self._process_fn = process_fn
         self._data_dir = data_dir
         self._workspace = workspace
+        self._vault = vault
         self._bands: dict[str, Band] = {}
         self._tunings: dict[str, Tuning] = {}
         self._tasks: dict[str, asyncio.Task[None]] = {}
@@ -239,8 +260,6 @@ class Antenna:
             await band.__aexit__(None, None, None)
 
     def _start_task(self, tuning: Tuning) -> None:
-        from docketeer.signal_loop import run_tuning
-
         band = self._bands.get(tuning.band)
         if band is None:
             log.warning(
@@ -250,9 +269,32 @@ class Antenna:
             )
             return
 
+        if tuning.secret is not None and not self._vault:
+            log.warning(
+                "Tuning '%s' requires secret '%s' but no vault is available, skipping",
+                tuning.name,
+                tuning.secret,
+            )
+            return
+
         self._tasks[tuning.name] = asyncio.create_task(
-            run_tuning(band, tuning, self._process_fn, self._workspace),
+            self._resolve_and_run(band, tuning),
             name=f"antenna:{tuning.name}",
+        )
+
+    async def _resolve_and_run(self, band: Band, tuning: Tuning) -> None:
+        from docketeer.signal_loop import run_tuning
+
+        secret: str | None = None
+        if tuning.secret is not None and self._vault:
+            secret = await self._vault.resolve(tuning.secret)
+
+        await run_tuning(
+            band,
+            tuning,
+            self._process_fn,
+            self._workspace,
+            secret=secret,
         )
 
     async def _stop_task(self, name: str) -> None:
@@ -272,7 +314,7 @@ class Antenna:
         await self._stop_task(tuning.name)
         self._tunings[tuning.name] = tuning
         self._start_task(tuning)
-        save_tunings(self._data_dir, list(self._tunings.values()))
+        save_tuning(self._data_dir, tuning)
 
     async def detune(self, name: str) -> None:
         """Remove a tuning and stop its task."""
@@ -281,15 +323,15 @@ class Antenna:
 
         await self._stop_task(name)
         del self._tunings[name]
-        save_tunings(self._data_dir, list(self._tunings.values()))
+        delete_tuning(self._data_dir, name)
 
     def list_tunings(self) -> list[Tuning]:
         """Return all active tunings."""
         return list(self._tunings.values())
 
-    def list_bands(self) -> list[str]:
-        """Return names of all discovered bands."""
-        return sorted(self._bands)
+    def list_bands(self) -> list[Band]:
+        """Return all discovered bands, sorted by name."""
+        return sorted(self._bands.values(), key=lambda b: b.name)
 
 
 def _tuning_from_dict(d: dict[str, Any]) -> Tuning:
@@ -299,6 +341,5 @@ def _tuning_from_dict(d: dict[str, Any]) -> Tuning:
         topic=d["topic"],
         filters=[SignalFilter(**f) for f in d.get("filters", [])],
         line=d.get("line", ""),
-        batch_window=d.get("batch_window", 5.0),
-        max_batch=d.get("max_batch", 10),
+        secret=d.get("secret"),
     )

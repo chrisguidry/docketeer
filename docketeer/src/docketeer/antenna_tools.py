@@ -1,7 +1,20 @@
 """Antenna tools — tune, detune, list_tunings, list_bands."""
 
-from docketeer.antenna import Antenna, SignalFilter, Tuning
+from typing import TypedDict, cast
+
+from docketeer.antenna import Antenna, FilterOp, SignalFilter, Tuning
 from docketeer.tools import ToolContext, registry
+
+
+class _FilterSpecRequired(TypedDict):
+    path: str
+    op: FilterOp
+
+
+class FilterSpec(_FilterSpecRequired, total=False):
+    """A filter specification for narrowing events."""
+
+    value: str
 
 
 def register_antenna_tools(antenna: Antenna) -> None:
@@ -14,27 +27,32 @@ def register_antenna_tools(antenna: Antenna) -> None:
         band: str,
         topic: str,
         line: str = "",
-        filters: list[dict[str, str]] | None = None,
-        batch_window: float = 5.0,
-        max_batch: int = 10,
+        filters: list[FilterSpec] | None = None,
+        secret: str | None = None,
     ) -> str:
-        """Start listening to a realtime event stream. Matching events are
-        batched and delivered to a line for you to reason about — like
-        GitHub webhook events arriving on an "opensource" line, or Bluesky
-        mentions landing on a "bluesky-mentions" line.
+        """Start listening to a realtime event stream. Each matching event is
+        delivered to a line for you to reason about — like GitHub webhook
+        events arriving on an "opensource" line, or Bluesky mentions landing
+        on a "bluesky-mentions" line.
 
         name: unique name for this tuning (e.g. "github-prs", "bluesky-mentions")
         band: which band to listen on (use list_bands to see what's available)
         topic: what to listen for — meaning depends on the band (e.g. event type, collection)
         line: which line to deliver events to (defaults to the tuning name).
             Use the same line for related tunings so you build up shared context.
-        filters: optional list of filters to narrow events, each with path/op/value keys
+        filters: optional list of filters to narrow events, each with path/op/value keys.
+            ops: eq, ne, contains, icontains (case-insensitive), startswith, exists
             (e.g. {"path": "payload.action", "op": "eq", "value": "opened"})
-        batch_window: seconds to wait and batch events before delivery (default 5.0)
-        max_batch: max events per batch (default 10)
+            (e.g. {"path": "payload.record.text", "op": "icontains", "value": "cat"})
+        secret: name of a vault secret for authentication (e.g. "wicket/github-token").
+            The secret is resolved when the tuning connects.
         """
         parsed_filters = [
-            SignalFilter(path=f["path"], op=f["op"], value=f.get("value", ""))
+            SignalFilter(
+                path=f["path"],
+                op=cast(FilterOp, f["op"]),
+                value=f.get("value", ""),
+            )
             for f in (filters or [])
         ]
         tuning = Tuning(
@@ -43,8 +61,7 @@ def register_antenna_tools(antenna: Antenna) -> None:
             topic=topic,
             line=line,
             filters=parsed_filters,
-            batch_window=batch_window,
-            max_batch=max_batch,
+            secret=secret,
         )
         try:
             await antenna.tune(tuning)
@@ -88,8 +105,21 @@ def register_antenna_tools(antenna: Antenna) -> None:
     @registry.tool(emoji=":satellite:")
     async def list_bands(ctx: ToolContext) -> str:
         """Show available bands — the event sources you can tune into
-        (e.g. wicket for SSE webhooks, atproto for Bluesky events)."""
+        (e.g. wicket for SSE webhooks, atproto for Bluesky events).
+        Each band describes how topic, filters, and secret map to that platform."""
         bands = antenna.list_bands()
         if not bands:
             return "No bands available."
-        return f"{len(bands)} band(s):\n" + "\n".join(f"  - {b}" for b in bands)
+
+        sections: list[str] = []
+        for band in bands:
+            header = f"  [{band.name}]"
+            if band.description:
+                header += f"\n{_indent(band.description, 4)}"
+            sections.append(header)
+        return f"{len(bands)} band(s):\n\n" + "\n\n".join(sections)
+
+
+def _indent(text: str, spaces: int) -> str:
+    prefix = " " * spaces
+    return "\n".join(f"{prefix}{line}" for line in text.strip().splitlines())

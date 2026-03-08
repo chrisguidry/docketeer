@@ -265,7 +265,12 @@ async def main() -> None:  # pragma: no cover
         from docketeer.antenna_tools import register_antenna_tools
 
         antenna = await stack.enter_async_context(
-            Antenna(brain.process, environment.DATA_DIR, environment.WORKSPACE_PATH)
+            Antenna(
+                brain.process,
+                environment.DATA_DIR,
+                environment.WORKSPACE_PATH,
+                vault=vault,
+            )
         )
         register_antenna_tools(antenna)
 

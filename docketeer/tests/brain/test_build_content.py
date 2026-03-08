@@ -79,3 +79,18 @@ def test_build_content_images_only(brain: Brain):
     result = brain._build_content(content)
     assert isinstance(result, list)
     assert any(b.type == "image" for b in result)
+
+
+def test_build_content_no_username(brain: Brain):
+    content = MessageContent(text="A signal arrived")
+    result = brain._build_content(content)
+    assert isinstance(result, str)
+    _, message_line = result.split("\n", 1)
+    assert message_line == "A signal arrived"
+
+
+def test_build_content_no_username_empty_text(brain: Brain):
+    content = MessageContent()
+    result = brain._build_content(content)
+    assert isinstance(result, str)
+    assert "(empty message)" in result
