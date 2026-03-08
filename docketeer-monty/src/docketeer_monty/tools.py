@@ -50,15 +50,15 @@ def _build_external_functions(
 
 @registry.tool(emoji=":snake:")
 async def run_python(ctx: ToolContext, code: str) -> str:
-    """Run Python code in a sandboxed interpreter. Use this for batch
-    operations, data transformation, or any task that benefits from
-    programmatic logic instead of repeated individual tool calls.
+    """Code mode: run Python that can call all your other tools. Use this
+    for batch operations, data transformation, or any task that benefits
+    from programmatic logic instead of repeated individual tool calls.
 
-    All other tools are available as async functions you can await
-    directly — e.g. `result = await read_file("notes/todo.md")` or
-    `await shell("grep -r TODO {workspace}")`. Use this when you need
-    loops, conditionals, or to orchestrate multiple tool calls in one
-    step. Available stdlib: sys, os, typing, asyncio, re.
+    All other tools are available as async functions:
+
+    {tool_signatures}
+
+    Available stdlib: sys, os, typing, asyncio, re.
 
     code: Python source code to execute
     """

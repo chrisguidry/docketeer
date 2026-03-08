@@ -4,7 +4,13 @@ from pathlib import Path
 
 import pytest
 
-from docketeer.tools import ToolContext
+from docketeer.tools import ToolContext, registry
+
+
+@pytest.fixture(autouse=True)
+def _template_vars(tmp_path: Path) -> None:
+    registry.template_vars.setdefault("workspace", str(tmp_path))
+    registry.template_vars.setdefault("scratch", "/tmp")
 
 
 @pytest.fixture()

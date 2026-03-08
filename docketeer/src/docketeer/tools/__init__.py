@@ -110,11 +110,12 @@ class ToolRegistry:
     def definitions(self) -> list[ToolDefinition]:
         """Return tool definitions, with template_vars applied to descriptions."""
         defs = list(self._schemas.values())
-        if self.template_vars:
-            for d in defs:
-                d.description = self._description_templates[d.name].format_map(
-                    self.template_vars
-                )
+        template_vars = dict(self.template_vars)
+        template_vars["tool_signatures"] = _build_tool_signatures(self)
+        for d in defs:
+            d.description = self._description_templates[d.name].format_map(
+                template_vars
+            )
         return defs
 
     async def execute(self, name: str, args: dict[str, Any], ctx: ToolContext) -> str:
@@ -134,6 +135,19 @@ TYPE_MAP = {
     bool: "boolean",
     float: "number",
 }
+
+
+def _build_tool_signatures(registry: ToolRegistry) -> str:
+    """Build a newline-separated list of async function signatures from real functions."""
+    lines = []
+    for name, fn in registry._tools.items():
+        if name == "run_python":
+            continue
+        sig = inspect.signature(fn)
+        params = [p for p in sig.parameters.values() if p.name != "ctx"]
+        param_str = ", ".join(str(p) for p in params)
+        lines.append(f"await {name}({param_str})")
+    return "\n".join(lines)
 
 
 def _type_to_schema(hint: Any) -> dict[str, Any]:

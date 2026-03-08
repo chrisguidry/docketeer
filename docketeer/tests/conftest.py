@@ -16,7 +16,7 @@ from docketeer import environment
 from docketeer.brain import Brain
 from docketeer.brain.backend import BackendAuthError
 from docketeer.testing import MemoryWatcher
-from docketeer.tools import ToolContext
+from docketeer.tools import ToolContext, registry
 
 _FAKE_REQUEST = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
 
@@ -46,6 +46,8 @@ def _isolated_data_dir(tmp_path: Path) -> Iterator[None]:
     """Isolate tests from the real data directory."""
     data_dir = tmp_path / "data"
     ws_dir = data_dir / "memory"
+    registry.template_vars.setdefault("workspace", str(ws_dir))
+    registry.template_vars.setdefault("scratch", "/tmp")
     with (
         patch.object(environment, "DATA_DIR", data_dir),
         patch.object(environment, "WORKSPACE_PATH", ws_dir),
