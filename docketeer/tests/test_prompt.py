@@ -12,8 +12,24 @@ from docketeer.prompt import (
     SystemBlock,
     _load_prompt_providers,
     build_system_blocks,
+    core_prompt,
     format_message_time,
 )
+
+
+def test_core_prompt_returns_system_block(workspace: Path):
+    blocks = core_prompt(workspace)
+    assert len(blocks) == 1
+    assert isinstance(blocks[0], SystemBlock)
+    assert "line" in blocks[0].text.lower()
+
+
+def test_core_prompt_describes_lines(workspace: Path):
+    blocks = core_prompt(workspace)
+    text = blocks[0].text
+    assert "line" in text
+    assert "chat" in text.lower()
+    assert "schedule" in text.lower() or "docket" in text.lower()
 
 
 def test_build_system_blocks_empty_without_providers(workspace: Path):

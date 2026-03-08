@@ -134,12 +134,13 @@ def _register_core_chat_tools(client: ChatClient) -> None:
         after: str = "",
         room_id: str = "",
     ) -> str:
-        """Fetch recent messages from a chat room.
+        """Fetch recent messages from a chat room. Only works on chat lines
+        unless you specify a room_id explicitly.
 
         count: number of messages to retrieve (default 50)
         before: only messages before this ISO 8601 datetime
         after: only messages after this ISO 8601 datetime
-        room_id: room to fetch from (defaults to the current room)
+        room_id: room to fetch from (defaults to the chat room for this line, if any)
         """
         target_room = room_id or ctx.chat_room
         if not target_room:
@@ -172,13 +173,14 @@ def _register_core_chat_tools(client: ChatClient) -> None:
         thread_id: str = "",
         room_id: str = "",
     ) -> str:
-        """Send a message to a room or thread. Use this to start a thread
+        """Send a message to a chat room or thread. Use this to start a thread
         from a message, reply in a specific thread, or post to the channel
-        when you're currently in a thread.
+        when you're currently in a thread. Only works on chat lines unless
+        you specify a room_id explicitly.
 
         text: the message text
         thread_id: reply in this thread (use a message ID to start a thread from that message)
-        room_id: target room (defaults to current room)
+        room_id: target room (defaults to the chat room for this line, if any)
         """
         target_room = room_id or ctx.chat_room
         await client.send_message(target_room, text, thread_id=thread_id)

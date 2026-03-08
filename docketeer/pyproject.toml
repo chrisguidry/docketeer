@@ -31,6 +31,9 @@ Issues = "https://github.com/chrisguidry/docketeer/issues"
 [project.scripts]
 docketeer = "docketeer.main:run"
 
+[project.entry-points."docketeer.prompt"]
+core = "docketeer.prompt:core_prompt"
+
 [build-system]
 requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"

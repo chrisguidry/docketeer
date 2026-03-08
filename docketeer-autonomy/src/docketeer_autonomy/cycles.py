@@ -31,19 +31,19 @@ REVERIE_INTERVAL = environment.get_timedelta("REVERIE_INTERVAL", timedelta(minut
 CONSOLIDATION_CRON = environment.get_str("CONSOLIDATION_CRON", "0 3 * * *")
 
 REVERIE_PROMPT = """\
-[Internal cycle: reverie]
+[Internal cycle: reverie — this runs on its own persistent line]
 
 You are entering a reverie — a period of receptive internal processing.
 Scan your raw material and transform it into understanding. Check on
 promises, notice what needs attention, and tend to your workspace.
 
-If something needs action directed at a person or room, use schedule()
+If something needs action directed at a person or chat room, use schedule()
 to create a task for it. Not every reverie produces action — if nothing
 needs doing, just move on.\
 """
 
 CONSOLIDATION_PROMPT = """\
-[Internal cycle: consolidation]
+[Internal cycle: consolidation — this runs on its own persistent line]
 
 You are entering consolidation — your daily memory integration cycle.
 This is where short-term observations become lasting understanding.

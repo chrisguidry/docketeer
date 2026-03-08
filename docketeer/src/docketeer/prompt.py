@@ -38,6 +38,12 @@ class SystemBlock:
         return d
 
 
+def core_prompt(workspace: Path) -> list[SystemBlock]:
+    """Core system prompt — describes lines, scheduling, and architecture."""
+    source = importlib.resources.files("docketeer").joinpath("core_prompt.md")
+    return [SystemBlock(text=source.read_text())]
+
+
 _prompt_providers: list[Callable[[Path], list[SystemBlock]]] | None = None
 
 
