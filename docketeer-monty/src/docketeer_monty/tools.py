@@ -58,7 +58,7 @@ async def run_python(ctx: ToolContext, code: str) -> str:
     directly — e.g. `result = await read_file("notes/todo.md")` or
     `await shell("grep -r TODO {workspace}")`. Use this when you need
     loops, conditionals, or to orchestrate multiple tool calls in one
-    step. Available stdlib: json, re, datetime, dataclasses, typing.
+    step. Available stdlib: sys, os, typing, asyncio, re.
 
     code: Python source code to execute
     """
