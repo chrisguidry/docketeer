@@ -56,8 +56,9 @@ class WicketBand(Band):
         "  payload.* filters with eq op are pushed server-side\n"
         '  e.g. {path: "payload.action", op: "eq", value: "opened"}\n'
         "\n"
-        "secret: name of a vault secret used as a Bearer token\n"
-        "  Wicket supports per-path subscriber secrets for authentication\n"
+        "secrets:\n"
+        "  token: vault path to a Bearer token for authentication\n"
+        '  e.g. secrets={"token": "wicket/github-token"}\n'
         "\n"
         "Signals produced:\n"
         "  signal_id = webhook envelope ID (UUID)\n"
@@ -83,7 +84,7 @@ class WicketBand(Band):
         topic: str,
         filters: list[SignalFilter],
         last_signal_id: str = "",
-        secret: str | None = None,
+        secrets: dict[str, str] | None = None,
     ) -> AsyncGenerator[Signal, None]:
         assert self._client is not None
 
@@ -97,8 +98,9 @@ class WicketBand(Band):
         headers: dict[str, str] = {"Accept": "text/event-stream"}
         if last_signal_id:
             headers["Last-Event-ID"] = last_signal_id
-        if secret is not None:
-            headers["Authorization"] = f"Bearer {secret}"
+        token = (secrets or {}).get("token")
+        if token is not None:
+            headers["Authorization"] = f"Bearer {token}"
 
         async with self._client.stream(
             "GET", url, params=params, headers=headers

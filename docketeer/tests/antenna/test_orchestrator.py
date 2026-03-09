@@ -182,10 +182,10 @@ async def test_antenna_list_bands_empty(tmp_path: Path, process_fn: AsyncMock):
             assert len(antenna.list_bands()) == 0
 
 
-async def test_antenna_resolves_secret_through_vault(
+async def test_antenna_resolves_secrets_through_vault(
     tmp_path: Path, process_fn: AsyncMock, band: MemoryBand
 ):
-    vault = MemoryVault({"my-secret": "s3cr3t-value"})
+    vault = MemoryVault({"my/token": "s3cr3t-value"})
 
     def factory() -> MemoryBand:
         return band
@@ -197,18 +197,18 @@ async def test_antenna_resolves_secret_through_vault(
                     name="t1",
                     band="test-band",
                     topic="events",
-                    secret="my-secret",
+                    secrets={"token": "my/token"},
                 )
             )
             band.emit(_make_signal())
             band.stop()
             await asyncio.sleep(0.05)
 
-    assert band.last_secret == "s3cr3t-value"
+    assert band.last_secrets == {"token": "s3cr3t-value"}
     process_fn.assert_called_once()
 
 
-async def test_antenna_skips_tuning_when_secret_but_no_vault(
+async def test_antenna_skips_tuning_when_secrets_but_no_vault(
     tmp_path: Path, process_fn: AsyncMock, band: MemoryBand
 ):
     def factory() -> MemoryBand:
@@ -217,12 +217,17 @@ async def test_antenna_skips_tuning_when_secret_but_no_vault(
     with patch("docketeer.antenna.discover_all", return_value=[factory]):
         async with Antenna(process_fn, tmp_path, tmp_path) as antenna:
             await antenna.tune(
-                Tuning(name="t1", band="test-band", topic="events", secret="my-secret")
+                Tuning(
+                    name="t1",
+                    band="test-band",
+                    topic="events",
+                    secrets={"token": "my-secret"},
+                )
             )
             assert "t1" not in antenna._tasks
 
 
-async def test_antenna_no_secret_passes_none(
+async def test_antenna_no_secrets_passes_none(
     tmp_path: Path, process_fn: AsyncMock, band: MemoryBand
 ):
     def factory() -> MemoryBand:
@@ -235,4 +240,4 @@ async def test_antenna_no_secret_passes_none(
             band.stop()
             await asyncio.sleep(0.05)
 
-    assert band.last_secret is None
+    assert band.last_secrets is None

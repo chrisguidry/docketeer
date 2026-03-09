@@ -37,7 +37,7 @@ class JetstreamBand(Band):
         '  {path: "collection", op: "startswith", value: "app.bsky.feed"}\n'
         "  did and collection eq/startswith filters are pushed server-side\n"
         "\n"
-        "secret: not used (Jetstream is a public firehose)\n"
+        "secrets: not used (Jetstream is a public firehose)\n"
         "\n"
         "Signals produced:\n"
         "  Three event kinds, distinguished by topic:\n"
@@ -80,7 +80,7 @@ class JetstreamBand(Band):
         topic: str,
         filters: list[SignalFilter],
         last_signal_id: str = "",
-        secret: str | None = None,
+        secrets: dict[str, str] | None = None,
     ) -> AsyncGenerator[Signal, None]:
         params: dict[str, str] = {"wantedCollections": topic}
 

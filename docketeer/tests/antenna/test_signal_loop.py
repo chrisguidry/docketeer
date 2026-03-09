@@ -11,6 +11,8 @@ from unittest.mock import AsyncMock
 from docketeer.antenna import Signal, SignalFilter, Tuning
 from docketeer.prompt import BrainResponse
 from docketeer.signal_loop import (
+    _load_cursor,
+    _save_cursor,
     deliver_signal,
     format_signal,
     log_signal,
@@ -110,6 +112,21 @@ def test_log_signal_appends_multiple(tmp_path: Path):
     assert len(lines) == 2
     assert json.loads(lines[0])["signal_id"] == "s1"
     assert json.loads(lines[1])["signal_id"] == "s2"
+
+
+def test_cursor_save_and_load(tmp_path: Path):
+    _save_cursor(tmp_path, "my-tuning", "abc123")
+    assert _load_cursor(tmp_path, "my-tuning") == "abc123"
+
+
+def test_cursor_load_missing(tmp_path: Path):
+    assert _load_cursor(tmp_path, "nonexistent") == ""
+
+
+def test_cursor_overwrite(tmp_path: Path):
+    _save_cursor(tmp_path, "t", "first")
+    _save_cursor(tmp_path, "t", "second")
+    assert _load_cursor(tmp_path, "t") == "second"
 
 
 async def test_deliver_signal_calls_process(tmp_path: Path):
@@ -261,7 +278,7 @@ async def test_run_tuning_reconnects_on_error(tmp_path: Path):
             topic: str,
             filters: list[SignalFilter],
             last_signal_id: str = "",
-            secret: str | None = None,
+            secrets: dict[str, str] | None = None,
         ) -> AsyncGenerator[Signal, None]:
             nonlocal call_count
             call_count += 1

@@ -76,27 +76,27 @@ def test_save_and_load_tunings(tmp_path: Path):
     assert t.line == "opensource"
 
 
-def test_save_and_load_tuning_with_secret(tmp_path: Path):
+def test_save_and_load_tuning_with_secrets(tmp_path: Path):
     save_tuning(
         tmp_path,
         Tuning(
             name="secure",
             band="wicket",
             topic="hooks",
-            secret="wicket/github-token",
+            secrets={"token": "wicket/github-token"},
         ),
     )
 
     loaded = load_tunings(tmp_path)
     assert len(loaded) == 1
-    assert loaded[0].secret == "wicket/github-token"
+    assert loaded[0].secrets == {"token": "wicket/github-token"}
 
 
-def test_load_tuning_without_secret_defaults_to_none(tmp_path: Path):
+def test_load_tuning_without_secrets_defaults_to_none(tmp_path: Path):
     save_tuning(tmp_path, Tuning(name="t", band="b", topic="x"))
 
     loaded = load_tunings(tmp_path)
-    assert loaded[0].secret is None
+    assert loaded[0].secrets is None
 
 
 def test_load_tunings_no_dir(tmp_path: Path):

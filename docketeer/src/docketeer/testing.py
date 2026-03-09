@@ -249,7 +249,7 @@ class MemoryBand(Band):
     def __init__(self, name: str = "memory") -> None:
         self.name = name
         self._queue: asyncio.Queue[Signal | None] = asyncio.Queue()
-        self.last_secret: str | None = None
+        self.last_secrets: dict[str, str] | None = None
 
     async def __aenter__(self) -> MemoryBand:
         return self
@@ -270,9 +270,9 @@ class MemoryBand(Band):
         topic: str,
         filters: list[SignalFilter],
         last_signal_id: str = "",
-        secret: str | None = None,
+        secrets: dict[str, str] | None = None,
     ) -> AsyncGenerator[Signal, None]:
-        self.last_secret = secret
+        self.last_secrets = secrets
         while True:
             signal = await self._queue.get()
             if signal is None:

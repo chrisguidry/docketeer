@@ -126,14 +126,14 @@ async def test_list_bands(tool_context: ToolContext):
     assert "test-band" in result
 
 
-async def test_tune_with_secret(tool_context: ToolContext):
+async def test_tune_with_secrets(tool_context: ToolContext):
     result = await registry.execute(
         "tune",
         {
             "name": "secure-hook",
             "band": "test-band",
             "topic": "events",
-            "secret": "wicket/github-token",
+            "secrets": {"token": "wicket/github-token"},
         },
         tool_context,
     )

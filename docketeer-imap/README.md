@@ -1,0 +1,51 @@
+# docketeer-imap
+
+IMAP IDLE band plugin for [Docketeer](https://pypi.org/project/docketeer/).
+Monitors IMAP mailboxes for new messages using
+[IDLE](https://www.rfc-editor.org/rfc/rfc2177) (push-style notifications) and
+produces `Signal` objects for the antenna system.
+
+Install `docketeer-imap` alongside `docketeer` and the band is automatically
+available.
+
+## Configuration
+
+All connection details come from a vault secret — no global environment
+variables needed. Each tuning specifies its own secret, so you can monitor
+multiple IMAP accounts independently.
+
+The vault secret must be a JSON object:
+
+```json
+{
+  "host": "imap.gmail.com",
+  "port": 993,
+  "username": "me@gmail.com",
+  "password": "your-app-password"
+}
+```
+
+For Gmail, use an [App Password](https://support.google.com/accounts/answer/185833)
+rather than your account password.
+
+## Signals
+
+Each new email produces a signal with:
+
+- **signal_id** — IMAP UID (used for catch-up on reconnect)
+- **topic** — the mailbox name (e.g. `INBOX`)
+- **payload** — `{from, to, cc, subject, date, message_id, body, headers}`
+- **summary** — `"From: sender — Subject: subject line"`
+
+The `headers` dict contains all message headers, so you can filter on anything:
+
+```
+{path: "payload.headers.X-GitHub-Event", op: "eq", value: "pull_request"}
+{path: "payload.from", op: "contains", value: "github.com"}
+{path: "payload.subject", op: "icontains", value: "deploy"}
+```
+
+## Filtering
+
+All filtering is client-side for v1. `remote_filter_hints()` returns an empty
+list.

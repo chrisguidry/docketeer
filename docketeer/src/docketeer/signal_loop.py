@@ -45,6 +45,23 @@ def log_signal(data_dir: Path, tuning: Tuning, signal: Signal) -> None:
         f.flush()
 
 
+def _cursor_path(data_dir: Path, tuning_name: str) -> Path:
+    return data_dir / "tunings" / tuning_name / "cursor"
+
+
+def _load_cursor(data_dir: Path, tuning_name: str) -> str:
+    path = _cursor_path(data_dir, tuning_name)
+    if path.exists():
+        return path.read_text().strip()
+    return ""
+
+
+def _save_cursor(data_dir: Path, tuning_name: str, signal_id: str) -> None:
+    path = _cursor_path(data_dir, tuning_name)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(signal_id + "\n")
+
+
 def _read_line_purpose(workspace: Path, line: str) -> str:
     """Read the purpose prompt for a line, if it exists."""
     path = workspace / "lines" / f"{line}.md"
@@ -94,7 +111,7 @@ async def run_tuning(
     data_dir: Path,
     reconnect_delay: float = 1.0,
     max_reconnect_delay: float = 60.0,
-    secret: str | None = None,
+    secrets: dict[str, str] | None = None,
 ) -> None:
     """Run a single tuning: listen, filter, deliver.
 
@@ -102,7 +119,7 @@ async def run_tuning(
     on errors, resetting the delay after a successful signal delivery.
     """
     hint_filters = band.remote_filter_hints(tuning.filters)
-    last_signal_id = ""
+    last_signal_id = _load_cursor(data_dir, tuning.name)
     delay = reconnect_delay
 
     while True:
@@ -111,9 +128,11 @@ async def run_tuning(
                 tuning.topic,
                 hint_filters,
                 last_signal_id,
-                secret=secret,
+                secrets=secrets,
             ):
                 if not passes_filters(tuning.filters, signal):
+                    last_signal_id = signal.signal_id
+                    _save_cursor(data_dir, tuning.name, last_signal_id)
                     continue
 
                 log.debug(
@@ -123,6 +142,7 @@ async def run_tuning(
                     signal.summary[:200],
                 )
                 last_signal_id = signal.signal_id
+                _save_cursor(data_dir, tuning.name, last_signal_id)
                 delay = reconnect_delay
                 await deliver_signal(process_fn, tuning, signal, workspace, data_dir)
         except asyncio.CancelledError:

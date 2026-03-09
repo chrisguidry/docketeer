@@ -312,7 +312,7 @@ async def test_listen_secret_adds_auth_header():
     with patch("docketeer_wicket.band.httpx.AsyncClient", return_value=client):
         band = WicketBand()
         async with band:
-            async for _ in band.listen("events", [], secret="my-token"):
+            async for _ in band.listen("events", [], secrets={"token": "my-token"}):
                 pass
 
     headers = captured_kwargs["headers"]

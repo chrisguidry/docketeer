@@ -72,7 +72,7 @@ class Tuning:
     topic: str
     filters: list[SignalFilter] = field(default_factory=list)
     line: str = ""  # defaults to tuning name
-    secret: str | None = None
+    secrets: dict[str, str] | None = None
 
     @property
     def target_line(self) -> str:
@@ -153,7 +153,7 @@ class Band(ABC):
         topic: str,
         filters: list[SignalFilter],
         last_signal_id: str = "",
-        secret: str | None = None,
+        secrets: dict[str, str] | None = None,
     ) -> AsyncGenerator[Signal, None]:
         """Yield signals matching the topic and remote-compatible filters."""
         ...  # pragma: no cover
@@ -215,7 +215,7 @@ def _tuning_to_dict(t: Tuning) -> dict[str, Any]:
         "topic": t.topic,
         "filters": [{"path": f.path, "op": f.op, "value": f.value} for f in t.filters],
         "line": t.line,
-        "secret": t.secret,
+        "secrets": t.secrets,
     }
 
 
@@ -269,11 +269,10 @@ class Antenna:
             )
             return
 
-        if tuning.secret is not None and not self._vault:
+        if tuning.secrets and not self._vault:
             log.warning(
-                "Tuning '%s' requires secret '%s' but no vault is available, skipping",
+                "Tuning '%s' requires secrets but no vault is available, skipping",
                 tuning.name,
-                tuning.secret,
             )
             return
 
@@ -285,9 +284,11 @@ class Antenna:
     async def _resolve_and_run(self, band: Band, tuning: Tuning) -> None:
         from docketeer.signal_loop import run_tuning
 
-        secret: str | None = None
-        if tuning.secret is not None and self._vault:
-            secret = await self._vault.resolve(tuning.secret)
+        resolved: dict[str, str] | None = None
+        if tuning.secrets and self._vault:
+            resolved = {}
+            for key, vault_path in tuning.secrets.items():
+                resolved[key] = await self._vault.resolve(vault_path)
 
         await run_tuning(
             band,
@@ -295,7 +296,7 @@ class Antenna:
             self._process_fn,
             self._workspace,
             data_dir=self._data_dir,
-            secret=secret,
+            secrets=resolved,
         )
 
     async def _stop_task(self, name: str) -> None:
@@ -342,5 +343,5 @@ def _tuning_from_dict(d: dict[str, Any]) -> Tuning:
         topic=d["topic"],
         filters=[SignalFilter(**f) for f in d.get("filters", [])],
         line=d.get("line", ""),
-        secret=d.get("secret"),
+        secrets=d.get("secrets"),
     )

@@ -120,6 +120,15 @@ repos:
         pass_filenames: false
         require_serial: true
 
+      - id: pytest-docketeer-imap
+        name: pytest (docketeer-imap)
+        entry: uv run --no-sync --directory docketeer-imap pytest
+        language: system
+        types: [python]
+        files: ^docketeer/src/|^docketeer-imap/
+        pass_filenames: false
+        require_serial: true
+
       - id: pytest-docketeer-mcp
         name: pytest (docketeer-mcp)
         entry: uv run --no-sync --directory docketeer-mcp pytest

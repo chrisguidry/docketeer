@@ -28,7 +28,7 @@ def register_antenna_tools(antenna: Antenna) -> None:
         topic: str,
         line: str = "",
         filters: list[FilterSpec] | None = None,
-        secret: str | None = None,
+        secrets: dict[str, str] | None = None,
     ) -> str:
         """Start listening to a realtime event stream. Each matching event is
         delivered to a line for you to reason about — like GitHub webhook
@@ -44,8 +44,12 @@ def register_antenna_tools(antenna: Antenna) -> None:
             ops: eq, ne, contains, icontains (case-insensitive), startswith, exists
             (e.g. {{"path": "payload.action", "op": "eq", "value": "opened"}})
             (e.g. {{"path": "payload.record.text", "op": "icontains", "value": "cat"}})
-        secret: name of a vault secret for authentication (e.g. "wicket/github-token").
-            The secret is resolved when the tuning connects.
+        secrets: vault paths for band-specific credentials, keyed by field name.
+            Each band documents its required keys (use list_bands to see details).
+            Values are vault secret paths resolved when the tuning connects.
+            (e.g. {{"token": "wicket/github-token"}} for wicket)
+            (e.g. {{"host": "imap/host", "username": "imap/user",
+                    "password": "imap/password"}} for imap)
         """
         parsed_filters = [
             SignalFilter(
@@ -61,7 +65,7 @@ def register_antenna_tools(antenna: Antenna) -> None:
             topic=topic,
             line=line,
             filters=parsed_filters,
-            secret=secret,
+            secrets=secrets,
         )
         try:
             await antenna.tune(tuning)
