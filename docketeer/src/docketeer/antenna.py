@@ -294,6 +294,7 @@ class Antenna:
             tuning,
             self._process_fn,
             self._workspace,
+            data_dir=self._data_dir,
             secret=secret,
         )
 

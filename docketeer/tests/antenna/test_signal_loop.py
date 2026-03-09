@@ -2,6 +2,7 @@
 
 import asyncio
 import contextlib
+import json
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 from pathlib import Path
@@ -12,6 +13,7 @@ from docketeer.prompt import BrainResponse
 from docketeer.signal_loop import (
     deliver_signal,
     format_signal,
+    log_signal,
     run_tuning,
 )
 from docketeer.testing import MemoryBand
@@ -78,11 +80,44 @@ def test_format_signal_empty_payload():
     assert "Signal on tuning" in result
 
 
+def test_log_signal_writes_jsonl(tmp_path: Path):
+    data_dir = tmp_path / "data"
+    tuning = Tuning(name="github", band="wicket", topic="events")
+    signal = _make_signal()
+
+    log_signal(data_dir, tuning, signal)
+
+    log_path = data_dir / "tunings" / "github" / "2026-01-01.jsonl"
+    assert log_path.exists()
+    record = json.loads(log_path.read_text().strip())
+    assert record["signal_id"] == "s1"
+    assert record["band"] == "test"
+    assert record["topic"] == "events.push"
+    assert record["summary"] == "A push event"
+    assert record["payload"] == {"action": "created"}
+    assert record["timestamp"] == "2026-01-01T12:00:00+00:00"
+
+
+def test_log_signal_appends_multiple(tmp_path: Path):
+    data_dir = tmp_path / "data"
+    tuning = Tuning(name="t", band="b", topic="x")
+
+    log_signal(data_dir, tuning, _make_signal(signal_id="s1"))
+    log_signal(data_dir, tuning, _make_signal(signal_id="s2"))
+
+    log_path = data_dir / "tunings" / "t" / "2026-01-01.jsonl"
+    lines = log_path.read_text().strip().splitlines()
+    assert len(lines) == 2
+    assert json.loads(lines[0])["signal_id"] == "s1"
+    assert json.loads(lines[1])["signal_id"] == "s2"
+
+
 async def test_deliver_signal_calls_process(tmp_path: Path):
+    data_dir = tmp_path / "data"
     process = AsyncMock(return_value=BrainResponse(text="noted"))
     tuning = Tuning(name="github", band="wicket", topic="events")
 
-    await deliver_signal(process, tuning, _make_signal(), tmp_path)
+    await deliver_signal(process, tuning, _make_signal(), tmp_path, data_dir)
 
     process.assert_called_once()
     kwargs = process.call_args.kwargs
@@ -92,14 +127,26 @@ async def test_deliver_signal_calls_process(tmp_path: Path):
     assert "signal" in kwargs["content"].text.lower()
 
 
+async def test_deliver_signal_logs_signal(tmp_path: Path):
+    data_dir = tmp_path / "data"
+    process = AsyncMock(return_value=BrainResponse(text="noted"))
+    tuning = Tuning(name="github", band="wicket", topic="events")
+
+    await deliver_signal(process, tuning, _make_signal(), tmp_path, data_dir)
+
+    log_path = data_dir / "tunings" / "github" / "2026-01-01.jsonl"
+    assert log_path.exists()
+
+
 async def test_deliver_signal_with_purpose_prompt(tmp_path: Path):
+    data_dir = tmp_path / "data"
     (tmp_path / "lines").mkdir()
     (tmp_path / "lines" / "github.md").write_text("Watch for security issues.")
 
     process = AsyncMock(return_value=BrainResponse(text=""))
     tuning = Tuning(name="github", band="wicket", topic="events")
 
-    await deliver_signal(process, tuning, _make_signal(), tmp_path)
+    await deliver_signal(process, tuning, _make_signal(), tmp_path, data_dir)
 
     kwargs = process.call_args.kwargs
     assert len(kwargs["system_context"]) == 1
@@ -107,20 +154,22 @@ async def test_deliver_signal_with_purpose_prompt(tmp_path: Path):
 
 
 async def test_deliver_signal_no_purpose_prompt(tmp_path: Path):
+    data_dir = tmp_path / "data"
     process = AsyncMock(return_value=BrainResponse(text=""))
     tuning = Tuning(name="github", band="wicket", topic="events")
 
-    await deliver_signal(process, tuning, _make_signal(), tmp_path)
+    await deliver_signal(process, tuning, _make_signal(), tmp_path, data_dir)
 
     kwargs = process.call_args.kwargs
     assert kwargs["system_context"] == []
 
 
 async def test_deliver_signal_uses_tuning_line(tmp_path: Path):
+    data_dir = tmp_path / "data"
     process = AsyncMock(return_value=BrainResponse(text=""))
     tuning = Tuning(name="github-prs", band="wicket", topic="events", line="opensource")
 
-    await deliver_signal(process, tuning, _make_signal(), tmp_path)
+    await deliver_signal(process, tuning, _make_signal(), tmp_path, data_dir)
     assert process.call_args.kwargs["line"] == "opensource"
 
 
@@ -149,6 +198,7 @@ def test_memory_band_remote_filter_hints():
 
 
 async def test_run_tuning_delivers_signal(tmp_path: Path):
+    data_dir = tmp_path / "data"
     band = MemoryBand("test")
     tuning = Tuning(name="t", band="test", topic="events")
     process = AsyncMock(return_value=BrainResponse(text=""))
@@ -158,7 +208,9 @@ async def test_run_tuning_delivers_signal(tmp_path: Path):
         band.emit(signal)
         band.stop()
 
-        task = asyncio.create_task(run_tuning(band, tuning, process, tmp_path))
+        task = asyncio.create_task(
+            run_tuning(band, tuning, process, tmp_path, data_dir=data_dir)
+        )
         await asyncio.sleep(0.05)
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
@@ -170,6 +222,7 @@ async def test_run_tuning_delivers_signal(tmp_path: Path):
 
 
 async def test_run_tuning_filters_signals(tmp_path: Path):
+    data_dir = tmp_path / "data"
     band = MemoryBand("test")
     tuning = Tuning(
         name="t",
@@ -184,7 +237,9 @@ async def test_run_tuning_filters_signals(tmp_path: Path):
         band.emit(_make_signal(signal_id="s2", payload={"action": "opened"}))
         band.stop()
 
-        task = asyncio.create_task(run_tuning(band, tuning, process, tmp_path))
+        task = asyncio.create_task(
+            run_tuning(band, tuning, process, tmp_path, data_dir=data_dir)
+        )
         await asyncio.sleep(0.05)
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
@@ -197,6 +252,7 @@ async def test_run_tuning_filters_signals(tmp_path: Path):
 
 async def test_run_tuning_reconnects_on_error(tmp_path: Path):
     """When listen() raises, run_tuning logs and retries after a delay."""
+    data_dir = tmp_path / "data"
     call_count = 0
 
     class ErrorBand(MemoryBand):
@@ -217,7 +273,14 @@ async def test_run_tuning_reconnects_on_error(tmp_path: Path):
     process = AsyncMock(return_value=BrainResponse(text=""))
 
     task = asyncio.create_task(
-        run_tuning(band, tuning, process, tmp_path, reconnect_delay=0.01)
+        run_tuning(
+            band,
+            tuning,
+            process,
+            tmp_path,
+            data_dir=data_dir,
+            reconnect_delay=0.01,
+        )
     )
     await asyncio.sleep(0.1)
     task.cancel()
@@ -229,6 +292,7 @@ async def test_run_tuning_reconnects_on_error(tmp_path: Path):
 
 async def test_run_tuning_resets_backoff_on_success(tmp_path: Path):
     """After a successful signal delivery, backoff resets to initial delay."""
+    data_dir = tmp_path / "data"
     band = MemoryBand("test")
     tuning = Tuning(name="t", band="test", topic="events")
     process = AsyncMock()
@@ -238,7 +302,9 @@ async def test_run_tuning_resets_backoff_on_success(tmp_path: Path):
         band.emit(signal)
         band.stop()
 
-        task = asyncio.create_task(run_tuning(band, tuning, process, tmp_path))
+        task = asyncio.create_task(
+            run_tuning(band, tuning, process, tmp_path, data_dir=data_dir)
+        )
         await asyncio.sleep(0.05)
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):

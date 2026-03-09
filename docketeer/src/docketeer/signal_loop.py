@@ -25,6 +25,26 @@ def format_signal(tuning: Tuning, signal: Signal) -> str:
     return "\n".join(lines)
 
 
+def log_signal(data_dir: Path, tuning: Tuning, signal: Signal) -> None:
+    """Append a signal record to the tuning's daily JSONL log."""
+    log_dir = data_dir / "tunings" / tuning.name
+    log_dir.mkdir(parents=True, exist_ok=True)
+    date_str = signal.timestamp.strftime("%Y-%m-%d")
+    path = log_dir / f"{date_str}.jsonl"
+
+    record = {
+        "timestamp": signal.timestamp.isoformat(),
+        "signal_id": signal.signal_id,
+        "band": signal.band,
+        "topic": signal.topic,
+        "summary": signal.summary,
+        "payload": signal.payload,
+    }
+    with path.open("a") as f:
+        f.write(json.dumps(record, default=str) + "\n")
+        f.flush()
+
+
 def _read_line_purpose(workspace: Path, line: str) -> str:
     """Read the purpose prompt for a line, if it exists."""
     path = workspace / "lines" / f"{line}.md"
@@ -38,8 +58,11 @@ async def deliver_signal(
     tuning: Tuning,
     signal: Signal,
     workspace: Path,
+    data_dir: Path,
 ) -> None:
     """Deliver a signal to a line via brain.process."""
+    log_signal(data_dir, tuning, signal)
+
     line = tuning.target_line
     text = format_signal(tuning, signal)
     content = MessageContent(text=text)
@@ -67,6 +90,8 @@ async def run_tuning(
     tuning: Tuning,
     process_fn: ProcessFn,
     workspace: Path,
+    *,
+    data_dir: Path,
     reconnect_delay: float = 1.0,
     max_reconnect_delay: float = 60.0,
     secret: str | None = None,
@@ -99,7 +124,7 @@ async def run_tuning(
                 )
                 last_signal_id = signal.signal_id
                 delay = reconnect_delay
-                await deliver_signal(process_fn, tuning, signal, workspace)
+                await deliver_signal(process_fn, tuning, signal, workspace, data_dir)
         except asyncio.CancelledError:
             raise
         except Exception:
