@@ -19,8 +19,6 @@ def format_signal(tuning: Tuning, signal: Signal) -> str:
     lines.append(f"[{ts}] {summary}")
     if signal.payload:
         payload_json = json.dumps(signal.payload, indent=2, default=str)
-        if len(payload_json) > 2000:
-            payload_json = payload_json[:1997] + "..."
         lines.append("")
         lines.append(payload_json)
     lines.append("")

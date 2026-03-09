@@ -41,11 +41,11 @@ def test_format_signal_basic():
     assert '"action": "created"' in result
 
 
-def test_format_signal_truncates_long_payload():
+def test_format_signal_includes_full_payload():
     tuning = Tuning(name="t", band="b", topic="x")
-    result = format_signal(tuning, _make_signal(payload={"content": "x" * 3000}))
-    assert "..." in result
-    assert len(result) < 2200
+    content = "x" * 3000
+    result = format_signal(tuning, _make_signal(payload={"content": content}))
+    assert content in result
 
 
 def test_format_signal_uses_topic_when_no_summary():
