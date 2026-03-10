@@ -386,6 +386,30 @@ class SlackClient(ChatClient):
     async def send_typing(self, room_id: str, typing: bool) -> None:
         return None
 
+    async def reply_thread_id(self, msg: IncomingMessage) -> str:
+        if msg.thread_id:
+            return msg.thread_id
+        _channel, ts = decode_message_id(msg.message_id)
+        return ts
+
+    async def set_thread_status(
+        self,
+        room_id: str,
+        thread_id: str,
+        status: str,
+    ) -> None:
+        if not thread_id:
+            return
+        await self._api_post(
+            "assistant.threads.setStatus",
+            token=self.bot_token,
+            data={
+                "channel_id": room_id,
+                "thread_ts": thread_id,
+                "status": status,
+            },
+        )
+
     async def react(self, message_id: str, emoji: str) -> None:
         channel, ts = decode_message_id(message_id)
         await self._api_post(

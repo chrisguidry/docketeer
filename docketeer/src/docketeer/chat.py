@@ -142,6 +142,28 @@ class ChatClient(ABC):
     @abstractmethod
     async def unreact(self, message_id: str, emoji: str) -> None: ...
 
+    async def reply_thread_id(self, msg: IncomingMessage) -> str:
+        """Return the thread ID to use when replying to an incoming message.
+
+        Most backends can reply directly using the inbound thread_id. Backends with
+        assistant-thread semantics (for example Slack AI threads) can override this
+        to anchor replies to the inbound message itself.
+        """
+        return msg.thread_id
+
+    async def set_thread_status(
+        self,
+        room_id: str,
+        thread_id: str,
+        status: str,
+    ) -> None:
+        """Set or clear a transient per-thread processing status.
+
+        Default implementation is a no-op. Backends with native assistant status
+        surfaces can override this.
+        """
+        return None
+
     async def room_slug(self, room_id: str) -> str:
         """Return a filesystem-friendly slug for the room. Override for rich data."""
         return ""

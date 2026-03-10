@@ -89,3 +89,52 @@ async def test_send_typing_noop(slack_client: SlackClient):
 
 async def test_set_status_noop(slack_client: SlackClient):
     assert await slack_client.set_status("online") is None
+
+
+async def test_reply_thread_id_from_existing_thread(slack_client: SlackClient):
+    from docketeer.chat import IncomingMessage, RoomKind
+
+    msg = IncomingMessage(
+        message_id="C1:1718",
+        user_id="U1",
+        username="alice",
+        display_name="Alice",
+        text="hi",
+        room_id="C1",
+        kind=RoomKind.public,
+        thread_id="1700",
+    )
+    assert await slack_client.reply_thread_id(msg) == "1700"
+
+
+async def test_reply_thread_id_from_message_id(slack_client: SlackClient):
+    from docketeer.chat import IncomingMessage, RoomKind
+
+    msg = IncomingMessage(
+        message_id="C1:1718",
+        user_id="U1",
+        username="alice",
+        display_name="Alice",
+        text="hi",
+        room_id="C1",
+        kind=RoomKind.public,
+    )
+    assert await slack_client.reply_thread_id(msg) == "1718"
+
+
+@respx.mock
+async def test_set_thread_status(slack_client: SlackClient):
+    route = respx.post("https://slack.com/api/assistant.threads.setStatus")
+    route.mock(return_value=httpx.Response(200, json={"ok": True}))
+    await slack_client.set_thread_status("C1", "1718", "is thinking...")
+    body = route.calls[0].request.content.decode()
+    assert "channel_id=C1" in body
+    assert "thread_ts=1718" in body
+    assert "status=is+thinking..." in body
+
+
+@respx.mock
+async def test_set_thread_status_skips_empty_thread(slack_client: SlackClient):
+    route = respx.post("https://slack.com/api/assistant.threads.setStatus")
+    await slack_client.set_thread_status("C1", "", "is thinking...")
+    assert not route.called

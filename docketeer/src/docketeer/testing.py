@@ -140,6 +140,17 @@ class MemoryChat(ChatClient):
     async def send_typing(self, room_id: str, typing: bool) -> None:
         self.typing_events.append((room_id, typing))
 
+    async def reply_thread_id(self, msg: IncomingMessage) -> str:
+        return msg.thread_id
+
+    async def set_thread_status(
+        self,
+        room_id: str,
+        thread_id: str,
+        status: str,
+    ) -> None:
+        return None
+
     async def react(self, message_id: str, emoji: str) -> None:
         self.reactions.append(Reaction(message_id, emoji, "react"))
 

@@ -442,3 +442,66 @@ async def test_handle_message_typing_cleared_on_error(
     with patch.object(brain, "process", side_effect=RuntimeError("boom")):
         await handle_message(chat, brain, _make_incoming())
     assert ("room1", False) in chat.typing_events
+
+
+class _StatusChat(MemoryChat):
+    def __init__(self, reply_thread: str = "") -> None:
+        super().__init__()
+        self.status_changes: list[tuple[str, str, str]] = []
+        self._reply_thread = reply_thread
+
+    async def reply_thread_id(self, msg: IncomingMessage) -> str:
+        return self._reply_thread or msg.thread_id
+
+    async def set_thread_status(
+        self,
+        room_id: str,
+        thread_id: str,
+        status: str,
+    ) -> None:
+        self.status_changes.append((room_id, thread_id, status))
+
+
+async def test_handle_message_sets_and_clears_thread_status(
+    brain: Brain, fake_messages: FakeMessages
+):
+    chat = _StatusChat(reply_thread="thread-1")
+    brain.load_history(
+        "room1",
+        [
+            RoomMessage(
+                message_id="m0",
+                timestamp=datetime(2026, 2, 6, 10, 0, tzinfo=UTC),
+                username="a",
+                display_name="A",
+                text="x",
+            )
+        ],
+    )
+    fake_messages.responses = [FakeMessage(content=[make_text_block(text="ok")])]
+    await handle_message(chat, brain, _make_incoming())
+    assert chat.status_changes == [
+        ("room1", "thread-1", "is thinking..."),
+        ("room1", "thread-1", ""),
+    ]
+
+
+async def test_handle_message_uses_backend_reply_thread(
+    brain: Brain, fake_messages: FakeMessages
+):
+    chat = _StatusChat(reply_thread="thread-1")
+    brain.load_history(
+        "room1",
+        [
+            RoomMessage(
+                message_id="m0",
+                timestamp=datetime(2026, 2, 6, 10, 0, tzinfo=UTC),
+                username="a",
+                display_name="A",
+                text="x",
+            )
+        ],
+    )
+    fake_messages.responses = [FakeMessage(content=[make_text_block(text="ok")])]
+    await handle_message(chat, brain, _make_incoming())
+    assert chat.sent_messages[-1].thread_id == "thread-1"
