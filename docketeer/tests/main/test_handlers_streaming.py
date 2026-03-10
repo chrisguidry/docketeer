@@ -154,6 +154,27 @@ async def test_handle_message_streams_text_without_duplicate_final_send(
     assert chat.sent_messages == []
 
 
+async def test_handle_message_appends_streamed_text_chunks(
+    brain: Brain, fake_messages: FakeMessages
+):
+    chat = _StreamingChat()
+    _preload_room(brain)
+    fake_messages.responses = [
+        FakeMessage(
+            content=[make_text_block(text="Hello"), make_text_block(text=" world")]
+        )
+    ]
+
+    await handle_message(chat, brain, _make_incoming())
+
+    assert chat.stream_events == [
+        ("start", "Hello"),
+        ("append", " world"),
+        ("stop", ""),
+    ]
+    assert chat.sent_messages == []
+
+
 async def test_handle_message_stream_append_failure_falls_back_to_final_message(
     brain: Brain, fake_messages: FakeMessages
 ):
