@@ -167,7 +167,9 @@ async def test_stop_reply_stream(slack_client: SlackClient):
     route = respx.post("https://slack.com/api/chat.stopStream")
     route.mock(return_value=httpx.Response(200, json={"ok": True}))
     await slack_client.stop_reply_stream(
-        SlackReplyStream(channel_id="D1", stream_ts="1718.1", thread_id="1718", user_id="U1")
+        SlackReplyStream(
+            channel_id="D1", stream_ts="1718.1", thread_id="1718", user_id="U1"
+        )
     )
     body = route.calls[0].request.content.decode()
     assert "channel=D1" in body

@@ -158,8 +158,8 @@ async def test_stream_message_with_on_first_text_and_on_text(
     class _ChunkedStream(FakeStream):
         def _make_text_stream(self) -> AsyncIterator[str]:
             async def gen() -> AsyncIterator[str]:
-                yield "Hel"
-                yield "lo"
+                yield "He"
+                yield "llo"
                 yield "!"
 
             return gen()
@@ -185,7 +185,7 @@ async def test_stream_message_with_on_first_text_and_on_text(
         on_first_text=on_first_text,
         on_text=on_text,
     )
-    assert events == ["first", "Hel", "lo", "!"]
+    assert events == ["first", "He", "llo", "!"]
 
 
 async def test_stream_message_skips_non_text_blocks(mock_client: MagicMock) -> None:

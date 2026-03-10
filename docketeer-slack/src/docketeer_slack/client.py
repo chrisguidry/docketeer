@@ -25,9 +25,9 @@ from docketeer.chat import (
     RoomKind,
     RoomMessage,
 )
+from docketeer_slack import interactions, room_context
 from docketeer_slack.parsing import (
     conversation_kind,
-    decode_message_id,
     encode_message_id,
     parse_attachments,
     parse_slack_ts,
@@ -314,22 +314,10 @@ class SlackClient(ChatClient):
         )
 
     async def fetch_attachment(self, url: str) -> bytes:
-        resp = await self._api.get(
-            url,
-            headers={"Authorization": f"Bearer {self.bot_token}"},
-        )
-        resp.raise_for_status()
-        return resp.content
+        return await interactions.fetch_attachment(self, url)
 
     async def fetch_message(self, message_id: str) -> dict[str, Any] | None:
-        channel, ts = decode_message_id(message_id)
-        thread = await self._api_get(
-            "conversations.replies", params={"channel": channel, "ts": ts}
-        )
-        for message in thread.get("messages", []):
-            if message.get("ts") == ts:
-                return message
-        return None
+        return await room_context.fetch_message(self, message_id)
 
     async def fetch_messages(
         self,
@@ -399,13 +387,13 @@ class SlackClient(ChatClient):
         return rooms
 
     async def set_status(self, status: str, message: str = "") -> None:
-        return None
+        await interactions.set_status(self, status, message)
 
     async def send_typing(self, room_id: str, typing: bool) -> None:
-        return None
+        await interactions.send_typing(self, room_id, typing)
 
     async def reply_thread_id(self, msg: IncomingMessage) -> str:
-        return msg.thread_id or decode_message_id(msg.message_id)[1]
+        return await interactions.reply_thread_id(self, msg)
 
     async def set_thread_status(
         self,
@@ -413,17 +401,7 @@ class SlackClient(ChatClient):
         thread_id: str,
         status: str,
     ) -> None:
-        if not thread_id:
-            return
-        await self._api_post(
-            "assistant.threads.setStatus",
-            token=self.bot_token,
-            data={
-                "channel_id": room_id,
-                "thread_ts": thread_id,
-                "status": status,
-            },
-        )
+        await interactions.set_thread_status(self, room_id, thread_id, status)
 
     async def start_reply_stream(
         self,
@@ -488,83 +466,20 @@ class SlackClient(ChatClient):
         )
 
     async def react(self, message_id: str, emoji: str) -> None:
-        channel, ts = decode_message_id(message_id)
-        await self._api_post(
-            "reactions.add",
-            token=self.bot_token,
-            data={"channel": channel, "timestamp": ts, "name": emoji.strip(":")},
-        )
+        await interactions.react(self, message_id, emoji)
 
     async def unreact(self, message_id: str, emoji: str) -> None:
-        channel, ts = decode_message_id(message_id)
-        await self._api_post(
-            "reactions.remove",
-            token=self.bot_token,
-            data={"channel": channel, "timestamp": ts, "name": emoji.strip(":")},
-        )
+        await interactions.unreact(self, message_id, emoji)
 
     async def room_slug(self, room_id: str) -> str:
-        room = self._rooms.get(room_id)
-        return room.name if room and room.name else room_id
+        return await room_context.room_slug(self, room_id)
 
     async def room_context(self, room_id: str, username: str) -> str:
-        room = self._rooms.get(room_id)
-        if not room:
-            try:
-                result = await self._api_get(
-                    "conversations.info", params={"channel": room_id}
-                )
-                convo = result.get("channel", {})
-                room = RoomInfo(
-                    room_id=room_id,
-                    kind=conversation_kind(convo),
-                    members=[],
-                    name=convo.get("name", ""),
-                )
-                self._rooms[room_id] = room
-                topic = convo.get("topic", {}).get("value", "")
-                purpose = convo.get("purpose", {}).get("value", "")
-            except httpx.HTTPError:
-                return ""
-        else:
-            topic = purpose = ""
-
-        if room.kind is RoomKind.direct:
-            return f"Room: DM with @{username}"
-
-        label = room.name or room_id
-        visibility = "private" if room.kind is RoomKind.private else "public"
-        parts = [f"Room: #{label} ({visibility})"]
-        if topic:
-            parts.append(f"Topic: {topic}")
-        if purpose:
-            parts.append(f"Purpose: {purpose}")
-        return "\n".join(parts)
+        return await room_context.room_context(self, room_id, username)
 
     async def _prime_history(
         self,
         on_history: OnHistoryCallback | None,
         since: datetime | None = None,
     ) -> None:
-        if not on_history:
-            return
-        try:
-            rooms = await self.list_rooms()
-        except httpx.HTTPError:
-            log.warning("Failed to list Slack rooms for history", exc_info=True)
-            return
-        dm_rooms = [r for r in rooms if r.kind.is_dm]
-        for room in dm_rooms:
-            try:
-                messages = await self.fetch_messages(room.room_id, after=since)
-            except httpx.HTTPError:
-                log.warning(
-                    "Failed to fetch history for %s", room.room_id, exc_info=True
-                )
-                continue
-            if not messages:
-                continue
-            await on_history(room, messages)
-            for msg in messages:
-                if self._high_water is None or msg.timestamp > self._high_water:
-                    self._high_water = msg.timestamp
+        await room_context.prime_history(self, on_history, since)

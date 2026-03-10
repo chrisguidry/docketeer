@@ -139,7 +139,9 @@ async def test_handle_message_streams_text_without_duplicate_final_send(
 ):
     chat = _StreamingChat()
     _preload_room(brain)
-    fake_messages.responses = [FakeMessage(content=[make_text_block(text="Just a reply.")])]
+    fake_messages.responses = [
+        FakeMessage(content=[make_text_block(text="Just a reply.")])
+    ]
 
     await handle_message(chat, brain, _make_incoming())
 
@@ -153,7 +155,9 @@ async def test_handle_message_stream_append_failure_falls_back_to_final_message(
     chat = _StreamingChat(fail_after_start=True)
     _preload_room(brain)
     fake_messages.responses = [
-        FakeMessage(content=[make_text_block(text="Hello"), make_text_block(text=" world")])
+        FakeMessage(
+            content=[make_text_block(text="Hello"), make_text_block(text=" world")]
+        )
     ]
 
     await handle_message(chat, brain, _make_incoming())
