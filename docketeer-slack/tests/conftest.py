@@ -24,6 +24,7 @@ def tool_context(workspace: Path) -> ToolContext:
 def slack_client() -> SlackClient:
     client = SlackClient()
     client._user_id = "U_BOT"
+    client._team_id = "T1"
     client.username = "dobby"
     client._http = httpx.AsyncClient(timeout=5)
     return client

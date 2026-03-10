@@ -2,10 +2,11 @@ import json
 from pathlib import Path
 
 import httpx
+import pytest
 import respx
 
-from docketeer.chat import RoomKind
-from docketeer_slack.client import SlackClient
+from docketeer.chat import IncomingMessage, RoomKind
+from docketeer_slack.client import SlackClient, SlackReplyStream
 
 
 @respx.mock
@@ -26,6 +27,175 @@ async def test_send_message_with_attachments(slack_client: SlackClient):
     await slack_client.send_message("C1", "hello", attachments=[{"color": "green"}])
     body = json.loads(route.calls[0].request.content)
     assert body["attachments"] == [{"color": "green"}]
+
+
+@respx.mock
+async def test_start_reply_stream_channel(slack_client: SlackClient):
+    route = respx.post("https://slack.com/api/chat.startStream")
+    route.mock(return_value=httpx.Response(200, json={"ok": True, "ts": "1718.1"}))
+    stream = await slack_client.start_reply_stream(
+        IncomingMessage(
+            message_id="C1:1718",
+            user_id="U1",
+            username="alice",
+            display_name="Alice",
+            text="hi",
+            room_id="C1",
+            kind=RoomKind.public,
+        ),
+        "1718",
+        "hello",
+    )
+    assert stream == SlackReplyStream(
+        channel_id="C1",
+        stream_ts="1718.1",
+        thread_id="1718",
+        user_id="",
+    )
+    body = route.calls[0].request.content.decode()
+    assert "channel=C1" in body
+    assert "thread_ts=1718" in body
+    assert "markdown_text=hello" in body
+    assert "recipient_team_id=" in body
+    assert "recipient_user_id" not in body
+
+
+@respx.mock
+async def test_start_reply_stream_dm(slack_client: SlackClient):
+    route = respx.post("https://slack.com/api/chat.startStream")
+    route.mock(return_value=httpx.Response(200, json={"ok": True, "ts": "1718.1"}))
+    await slack_client.start_reply_stream(
+        IncomingMessage(
+            message_id="D1:1718",
+            user_id="U1",
+            username="alice",
+            display_name="Alice",
+            text="hi",
+            room_id="D1",
+            kind=RoomKind.direct,
+        ),
+        "1718",
+        "hello",
+    )
+    body = route.calls[0].request.content.decode()
+    assert "recipient_user_id=U1" in body
+
+
+@respx.mock
+async def test_start_reply_stream_without_team_id(slack_client: SlackClient):
+    slack_client._team_id = None
+    route = respx.post("https://slack.com/api/chat.startStream")
+    route.mock(return_value=httpx.Response(200, json={"ok": True, "ts": "1718.1"}))
+    await slack_client.start_reply_stream(
+        IncomingMessage(
+            message_id="C1:1718",
+            user_id="U1",
+            username="alice",
+            display_name="Alice",
+            text="hi",
+            room_id="C1",
+            kind=RoomKind.public,
+        ),
+        "1718",
+        "hello",
+    )
+    body = route.calls[0].request.content.decode()
+    assert "recipient_team_id" not in body
+
+
+@respx.mock
+async def test_start_reply_stream_returns_none_without_thread_or_text(
+    slack_client: SlackClient,
+):
+    msg = IncomingMessage(
+        message_id="C1:1718",
+        user_id="U1",
+        username="alice",
+        display_name="Alice",
+        text="hi",
+        room_id="C1",
+        kind=RoomKind.public,
+    )
+    assert await slack_client.start_reply_stream(msg, "", "hello") is None
+    assert await slack_client.start_reply_stream(msg, "1718", "") is None
+
+
+@respx.mock
+async def test_start_reply_stream_raises_without_response_ts(slack_client: SlackClient):
+    route = respx.post("https://slack.com/api/chat.startStream")
+    route.mock(return_value=httpx.Response(200, json={"ok": True}))
+    msg = IncomingMessage(
+        message_id="C1:1718",
+        user_id="U1",
+        username="alice",
+        display_name="Alice",
+        text="hi",
+        room_id="C1",
+        kind=RoomKind.public,
+    )
+    with pytest.raises(httpx.HTTPError, match="did not return ts"):
+        await slack_client.start_reply_stream(msg, "1718", "hello")
+
+
+@respx.mock
+async def test_append_reply_stream(slack_client: SlackClient):
+    route = respx.post("https://slack.com/api/chat.appendStream")
+    route.mock(return_value=httpx.Response(200, json={"ok": True}))
+    await slack_client.append_reply_stream(
+        SlackReplyStream(channel_id="C1", stream_ts="1718.1", thread_id="1718"),
+        " world",
+    )
+    body = route.calls[0].request.content.decode()
+    assert "channel=C1" in body
+    assert "ts=1718.1" in body
+    assert "markdown_text=+world" in body
+
+
+@respx.mock
+async def test_append_reply_stream_skips_invalid_inputs(slack_client: SlackClient):
+    route = respx.post("https://slack.com/api/chat.appendStream")
+    await slack_client.append_reply_stream(object(), "hello")
+    await slack_client.append_reply_stream(
+        SlackReplyStream(channel_id="C1", stream_ts="1718.1", thread_id="1718"),
+        "",
+    )
+    assert not route.called
+
+
+@respx.mock
+async def test_stop_reply_stream(slack_client: SlackClient):
+    route = respx.post("https://slack.com/api/chat.stopStream")
+    route.mock(return_value=httpx.Response(200, json={"ok": True}))
+    await slack_client.stop_reply_stream(
+        SlackReplyStream(
+            channel_id="D1", stream_ts="1718.1", thread_id="1718", user_id="U1"
+        )
+    )
+    body = route.calls[0].request.content.decode()
+    assert "channel=D1" in body
+    assert "ts=1718.1" in body
+    assert "recipient_team_id=" in body
+    assert "recipient_user_id=U1" in body
+
+
+@respx.mock
+async def test_stop_reply_stream_skips_invalid_handle(slack_client: SlackClient):
+    route = respx.post("https://slack.com/api/chat.stopStream")
+    await slack_client.stop_reply_stream(object())
+    assert not route.called
+
+
+@respx.mock
+async def test_stop_reply_stream_without_optional_fields(slack_client: SlackClient):
+    slack_client._team_id = None
+    route = respx.post("https://slack.com/api/chat.stopStream")
+    route.mock(return_value=httpx.Response(200, json={"ok": True}))
+    await slack_client.stop_reply_stream(
+        SlackReplyStream(channel_id="C1", stream_ts="1718.1", thread_id="1718")
+    )
+    body = route.calls[0].request.content.decode()
+    assert "recipient_team_id" not in body
+    assert "recipient_user_id" not in body
 
 
 @respx.mock

@@ -164,6 +164,27 @@ class ChatClient(ABC):
         """
         return None
 
+    async def start_reply_stream(
+        self,
+        msg: IncomingMessage,
+        thread_id: str,
+        text: str,
+    ) -> Any | None:
+        """Start streaming a reply, returning a backend-specific stream handle.
+
+        Default implementation returns None, meaning native streaming is not
+        supported and callers should fall back to normal message delivery.
+        """
+        return None
+
+    async def append_reply_stream(self, stream: Any, text: str) -> None:
+        """Append text to a previously started reply stream."""
+        return None
+
+    async def stop_reply_stream(self, stream: Any) -> None:
+        """Finalize a previously started reply stream."""
+        return None
+
     async def room_slug(self, room_id: str) -> str:
         """Return a filesystem-friendly slug for the room. Override for rich data."""
         return ""

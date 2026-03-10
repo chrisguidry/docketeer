@@ -10,10 +10,10 @@ from docketeer.prompt import MessageContent
 from ..conftest import FakeMessage, make_text_block, make_tool_use_block
 
 
-async def test_on_text_suppressed_on_intermediate_tool_round(
+async def test_on_text_fires_for_intermediate_tool_round_and_final_response(
     brain: Brain, fake_messages: Any
 ):
-    """When a response has both text and tool blocks, the text is suppressed."""
+    """on_text receives streamed text from each model response round."""
     fake_messages.responses = [
         FakeMessage(
             content=[
@@ -27,14 +27,15 @@ async def test_on_text_suppressed_on_intermediate_tool_round(
     callbacks = ProcessCallbacks(on_text=on_text)
     content = MessageContent(username="chris", text="list files")
     response = await brain.process("room1", content, callbacks=callbacks)
-    on_text.assert_not_awaited()
+    assert [call.args[0] for call in on_text.await_args_list] == [
+        "Let me check that...",
+        "Here's what I found.",
+    ]
     assert response.text == "Here's what I found."
 
 
-async def test_on_text_not_fired_on_text_only_response(
-    brain: Brain, fake_messages: Any
-):
-    """on_text should not fire on the final text-only response."""
+async def test_on_text_fires_on_text_only_response(brain: Brain, fake_messages: Any):
+    """on_text receives text for a single-round text-only response."""
     fake_messages.responses = [
         FakeMessage(content=[make_text_block(text="Just a reply.")]),
     ]
@@ -42,13 +43,13 @@ async def test_on_text_not_fired_on_text_only_response(
     callbacks = ProcessCallbacks(on_text=on_text)
     content = MessageContent(username="chris", text="hello")
     await brain.process("room1", content, callbacks=callbacks)
-    on_text.assert_not_awaited()
+    assert [call.args[0] for call in on_text.await_args_list] == ["Just a reply."]
 
 
-async def test_on_text_not_fired_when_tool_round_has_no_text(
+async def test_on_text_skips_tool_only_round_and_fires_on_final_text(
     brain: Brain, fake_messages: Any
 ):
-    """When a tool round has no text blocks, on_text should not fire."""
+    """Tool-only rounds emit nothing, but later text rounds still reach on_text."""
     fake_messages.responses = [
         FakeMessage(
             content=[make_tool_use_block(name="list_files", input={"path": ""})],
@@ -59,13 +60,13 @@ async def test_on_text_not_fired_when_tool_round_has_no_text(
     callbacks = ProcessCallbacks(on_text=on_text)
     content = MessageContent(username="chris", text="list files")
     await brain.process("room1", content, callbacks=callbacks)
-    on_text.assert_not_awaited()
+    assert [call.args[0] for call in on_text.await_args_list] == ["Done!"]
 
 
-async def test_on_text_suppressed_on_multiple_intermediate_rounds(
+async def test_on_text_fires_on_multiple_intermediate_rounds(
     brain: Brain, fake_messages: Any
 ):
-    """Text from intermediate tool rounds is suppressed, not dispatched."""
+    """on_text receives streamed text from each intermediate and final round."""
     fake_messages.responses = [
         FakeMessage(
             content=[
@@ -85,7 +86,11 @@ async def test_on_text_suppressed_on_multiple_intermediate_rounds(
     callbacks = ProcessCallbacks(on_text=on_text)
     content = MessageContent(username="chris", text="do things")
     response = await brain.process("room1", content, callbacks=callbacks)
-    on_text.assert_not_awaited()
+    assert [call.args[0] for call in on_text.await_args_list] == [
+        "Checking first...",
+        "Now the second...",
+        "All done.",
+    ]
     assert response.text == "All done."
 
 

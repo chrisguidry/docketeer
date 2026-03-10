@@ -63,6 +63,7 @@ async def agentic_loop(
             messages,
             tools,
             on_first_text=callbacks_on_first_text,
+            on_text=callbacks_on_text,
             thinking=thinking,
         )
 
@@ -126,6 +127,7 @@ async def agentic_loop(
             messages,
             tools=[],
             on_first_text=callbacks_on_first_text,
+            on_text=callbacks_on_text,
             thinking=thinking,
         )
         usage = Usage(
@@ -170,10 +172,11 @@ async def stream_message(
     messages: list[MessageParam],
     tools: list[ToolDefinition],
     on_first_text: Callable[[], Awaitable[None]] | None = None,
+    on_text: Callable[[str], Awaitable[None]] | None = None,
     *,
     thinking: bool = False,
 ) -> anthropic.types.Message:
-    """Stream a response from Claude, optionally firing a callback on first text."""
+    """Stream a response from Claude, optionally firing text callbacks."""
     system, messages = _partition_system_messages(system, messages)
     thinking_config: ThinkingConfigEnabledParam | anthropic.Omit = (
         ThinkingConfigEnabledParam(type="enabled", budget_tokens=model.thinking_budget)
@@ -191,10 +194,15 @@ async def stream_message(
         messages=serialized_messages,  # type: ignore[arg-type]
         tools=serialized_tools,  # type: ignore[arg-type]
     ) as stream:
-        if on_first_text:
-            async for _text in stream.text_stream:
-                await on_first_text()
-                break
+        first_text_seen = False
+        if on_first_text or on_text:
+            async for text in stream.text_stream:
+                if not first_text_seen:
+                    first_text_seen = True
+                    if on_first_text:
+                        await on_first_text()
+                if on_text and text:
+                    await on_text(text)
         return await stream.get_final_message()
 
 

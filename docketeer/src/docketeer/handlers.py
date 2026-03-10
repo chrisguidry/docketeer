@@ -80,6 +80,9 @@ async def handle_message(
 
     thread_id = await client.reply_thread_id(msg)
     tool_emojis: set[str] = set()
+    stream: object | None = None
+    stream_started = False
+    stream_failed = False
 
     async def _on_tool_start(tool_name: str) -> None:
         await client.send_typing(msg.room_id, False)
@@ -89,11 +92,29 @@ async def handle_message(
             tool_emojis.add(emoji)
             await client.react(msg.message_id, emoji)
 
+    async def _on_first_text() -> None:
+        await client.send_typing(msg.room_id, True)
+
+    async def _on_text(text: str) -> None:
+        nonlocal stream, stream_started, stream_failed
+        if not text or stream_failed:
+            return
+        try:
+            if stream is None:
+                stream = await client.start_reply_stream(msg, thread_id, text)
+                if stream is None:
+                    stream_failed = True
+                    return
+                stream_started = True
+                return
+            await client.append_reply_stream(stream, text)
+        except Exception:
+            stream_failed = True
+            log.exception("Failed to stream response to %s", msg.room_id)
+
     callbacks = ProcessCallbacks(
-        on_first_text=lambda: client.send_typing(msg.room_id, True),
-        on_text=lambda text: client.send_message(
-            msg.room_id, text, thread_id=thread_id
-        ),
+        on_first_text=_on_first_text,
+        on_text=_on_text,
         on_tool_start=_on_tool_start,
         interrupted=interrupted,
     )
@@ -118,11 +139,19 @@ async def handle_message(
         )
         response = BrainResponse(text=APOLOGY)
     finally:
+        if stream is not None:
+            try:
+                await client.stop_reply_stream(stream)
+            except Exception:
+                log.exception("Failed to finalize reply stream for %s", msg.room_id)
         await client.unreact(msg.message_id, ":brain:")
         await client.set_thread_status(msg.room_id, thread_id, "")
         for emoji in tool_emojis:
             await client.unreact(msg.message_id, emoji)
         await client.send_typing(msg.room_id, False)
+
+    if stream_started and not stream_failed:
+        return
 
     try:
         await send_response(client, msg.room_id, response, thread_id=thread_id)
