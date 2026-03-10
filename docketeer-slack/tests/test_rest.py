@@ -140,14 +140,16 @@ async def test_upload_file(slack_client: SlackClient, tmp_path: Path):
     get_url_body = get_url.calls[0].request.content.decode()
     assert "filename=note.txt" in get_url_body
     complete_body = complete.calls[0].request.content.decode()
-    assert 'channel_id=C1' in complete_body
-    assert 'initial_comment=here' in complete_body
-    assert 'thread_ts=1718' in complete_body
-    assert 'F1' in complete_body
+    assert "channel_id=C1" in complete_body
+    assert "initial_comment=here" in complete_body
+    assert "thread_ts=1718" in complete_body
+    assert "F1" in complete_body
 
 
 @respx.mock
-async def test_upload_file_without_optional_fields(slack_client: SlackClient, tmp_path: Path):
+async def test_upload_file_without_optional_fields(
+    slack_client: SlackClient, tmp_path: Path
+):
     target = tmp_path / "note.txt"
     target.write_text("hello")
 

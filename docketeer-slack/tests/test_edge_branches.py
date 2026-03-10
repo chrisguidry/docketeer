@@ -25,7 +25,9 @@ async def test_incoming_messages_skips_ack_without_envelope(slack_client: SlackC
         patch.object(slack_client, "_prime_history", new_callable=AsyncMock),
         patch.object(slack_client, "_parse_socket_event", AsyncMock(return_value=None)),
         patch.object(slack_client, "_ack", new_callable=AsyncMock) as ack,
-        patch("docketeer_slack.client.asyncio.sleep", side_effect=asyncio.CancelledError),
+        patch(
+            "docketeer_slack.client.asyncio.sleep", side_effect=asyncio.CancelledError
+        ),
     ):
         with pytest.raises(asyncio.CancelledError):
             await anext(slack_client.incoming_messages())
@@ -35,10 +37,15 @@ async def test_incoming_messages_skips_ack_without_envelope(slack_client: SlackC
 async def test_should_handle_channel_message_negative(slack_client: SlackClient):
     slack_client._allowlist = set()
     slack_client._user_id = "U_BOT"
-    assert slack_client._should_handle_channel_message({"channel": "C1", "text": "hello"}) is False
+    assert (
+        slack_client._should_handle_channel_message({"channel": "C1", "text": "hello"})
+        is False
+    )
 
 
-async def test_incoming_from_message_without_timestamp_yields_message(slack_client: SlackClient):
+async def test_incoming_from_message_without_timestamp_yields_message(
+    slack_client: SlackClient,
+):
     msg = slack_client._incoming_from_message(
         {"channel": "D1", "user": "U1", "text": "hello", "ts": "not-a-ts"},
         kind=RoomKind.direct,
@@ -47,7 +54,9 @@ async def test_incoming_from_message_without_timestamp_yields_message(slack_clie
     assert msg.timestamp is None
 
 
-async def test_incoming_messages_yields_without_timestamp_update(slack_client: SlackClient):
+async def test_incoming_messages_yields_without_timestamp_update(
+    slack_client: SlackClient,
+):
     class OneShotSocket:
         def __aiter__(self) -> object:
             return self
@@ -88,7 +97,9 @@ async def test_incoming_messages_yields_without_timestamp_update(slack_client: S
 
 
 @patch.object(SlackClient, "_api_get", new_callable=AsyncMock)
-async def test_fetch_messages_before_after_params(api_get: AsyncMock, slack_client: SlackClient):
+async def test_fetch_messages_before_after_params(
+    api_get: AsyncMock, slack_client: SlackClient
+):
     api_get.return_value = {"messages": []}
     before = datetime(2026, 2, 6, 12, 0, tzinfo=UTC)
     after = datetime(2026, 2, 6, 11, 0, tzinfo=UTC)
@@ -99,10 +110,17 @@ async def test_fetch_messages_before_after_params(api_get: AsyncMock, slack_clie
 
 
 @patch.object(SlackClient, "_api_get", new_callable=AsyncMock)
-async def test_fetch_messages_thread_parent_has_empty_thread_id(api_get: AsyncMock, slack_client: SlackClient):
+async def test_fetch_messages_thread_parent_has_empty_thread_id(
+    api_get: AsyncMock, slack_client: SlackClient
+):
     api_get.return_value = {
         "messages": [
-            {"ts": "1718123456.123456", "user": "U1", "text": "parent", "thread_ts": "1718123456.123456"}
+            {
+                "ts": "1718123456.123456",
+                "user": "U1",
+                "text": "parent",
+                "thread_ts": "1718123456.123456",
+            }
         ]
     }
     messages = await slack_client.fetch_messages("C1")
@@ -171,7 +189,9 @@ async def test_incoming_messages_without_socket_in_finally(slack_client: SlackCl
     with (
         patch.object(slack_client, "_open_socket", side_effect=open_socket),
         patch.object(slack_client, "_prime_history", new_callable=AsyncMock),
-        patch("docketeer_slack.client.asyncio.sleep", side_effect=asyncio.CancelledError),
+        patch(
+            "docketeer_slack.client.asyncio.sleep", side_effect=asyncio.CancelledError
+        ),
     ):
         with pytest.raises(asyncio.CancelledError):
             await anext(slack_client.incoming_messages())

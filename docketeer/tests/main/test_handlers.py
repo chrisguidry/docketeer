@@ -7,7 +7,13 @@ import pytest
 
 from docketeer.brain import APOLOGY, Brain
 from docketeer.brain.backend import BackendAuthError
-from docketeer.chat import Attachment, IncomingMessage, RoomKind, RoomMessage
+from docketeer.chat import (
+    Attachment,
+    ChatClient,
+    IncomingMessage,
+    RoomKind,
+    RoomMessage,
+)
 from docketeer.handlers import build_content, handle_message, send_response
 from docketeer.prompt import BrainResponse
 from docketeer.testing import MemoryChat, Reaction
@@ -505,3 +511,26 @@ async def test_handle_message_uses_backend_reply_thread(
     fake_messages.responses = [FakeMessage(content=[make_text_block(text="ok")])]
     await handle_message(chat, brain, _make_incoming())
     assert chat.sent_messages[-1].thread_id == "thread-1"
+
+
+async def test_chat_client_default_reply_thread_id_uses_incoming_thread(
+    chat: MemoryChat,
+):
+    msg = IncomingMessage(
+        message_id="m1",
+        user_id="u1",
+        username="alice",
+        display_name="Alice",
+        text="hi",
+        room_id="room1",
+        kind=RoomKind.direct,
+        thread_id="thread-1",
+    )
+    assert await ChatClient.reply_thread_id(chat, msg) == "thread-1"
+
+
+async def test_chat_client_default_set_thread_status_is_noop(chat: MemoryChat):
+    assert (
+        await ChatClient.set_thread_status(chat, "room1", "thread-1", "thinking")
+        is None
+    )

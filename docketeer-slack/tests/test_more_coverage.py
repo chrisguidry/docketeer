@@ -10,8 +10,14 @@ from docketeer_slack.client import SlackClient
 
 async def test_open_socket(slack_client: SlackClient):
     with (
-        patch.object(slack_client, "_socket_url", AsyncMock(return_value="wss://example.test/socket")),
-        patch("docketeer_slack.client.websockets.connect", AsyncMock(return_value="ws")) as connect,
+        patch.object(
+            slack_client,
+            "_socket_url",
+            AsyncMock(return_value="wss://example.test/socket"),
+        ),
+        patch(
+            "docketeer_slack.client.websockets.connect", AsyncMock(return_value="ws")
+        ) as connect,
     ):
         await slack_client._open_socket()
     connect.assert_awaited_once_with("wss://example.test/socket", open_timeout=30)
@@ -19,7 +25,12 @@ async def test_open_socket(slack_client: SlackClient):
 
 
 async def test_parse_socket_event_non_message(slack_client: SlackClient):
-    assert await slack_client._parse_socket_event({"payload": {"event": {"type": "other"}}}) is None
+    assert (
+        await slack_client._parse_socket_event(
+            {"payload": {"event": {"type": "other"}}}
+        )
+        is None
+    )
 
 
 async def test_parse_socket_event_private_allowlist(slack_client: SlackClient):
@@ -42,7 +53,10 @@ async def test_parse_socket_event_private_allowlist(slack_client: SlackClient):
 
 
 async def test_incoming_from_message_invalid(slack_client: SlackClient):
-    assert slack_client._incoming_from_message({"user": "U1"}, kind=RoomKind.direct) is None
+    assert (
+        slack_client._incoming_from_message({"user": "U1"}, kind=RoomKind.direct)
+        is None
+    )
     assert (
         slack_client._incoming_from_message(
             {"channel": "D1", "ts": "1718123456.123456", "user": "U1"},
@@ -113,12 +127,16 @@ async def test_list_rooms_paginates(slack_client: SlackClient):
 
 
 async def test_room_context_cached_private(slack_client: SlackClient):
-    slack_client._rooms["G1"] = RoomInfo(room_id="G1", kind=RoomKind.private, members=[], name="secret")
+    slack_client._rooms["G1"] = RoomInfo(
+        room_id="G1", kind=RoomKind.private, members=[], name="secret"
+    )
     assert await slack_client.room_context("G1", "alice") == "Room: #secret (private)"
 
 
 async def test_room_context_cached_unknown_name(slack_client: SlackClient):
-    slack_client._rooms["C1"] = RoomInfo(room_id="C1", kind=RoomKind.public, members=[], name="")
+    slack_client._rooms["C1"] = RoomInfo(
+        room_id="C1", kind=RoomKind.public, members=[], name=""
+    )
     assert await slack_client.room_context("C1", "alice") == "Room: #C1 (public)"
 
 

@@ -6,7 +6,9 @@ from docketeer_slack.client import SlackClient
 
 
 async def test_room_slug_from_cache(slack_client: SlackClient):
-    slack_client._rooms["C1"] = RoomInfo(room_id="C1", kind=RoomKind.public, members=[], name="general")
+    slack_client._rooms["C1"] = RoomInfo(
+        room_id="C1", kind=RoomKind.public, members=[], name="general"
+    )
     assert await slack_client.room_slug("C1") == "general"
 
 
@@ -20,7 +22,9 @@ async def test_room_context_from_cache_dm(slack_client: SlackClient):
 
 
 async def test_room_context_from_cache_channel(slack_client: SlackClient):
-    slack_client._rooms["C1"] = RoomInfo(room_id="C1", kind=RoomKind.public, members=[], name="general")
+    slack_client._rooms["C1"] = RoomInfo(
+        room_id="C1", kind=RoomKind.public, members=[], name="general"
+    )
     assert await slack_client.room_context("C1", "alice") == "Room: #general (public)"
 
 
@@ -48,7 +52,9 @@ async def test_room_context_fetches_info(slack_client: SlackClient):
 
 @respx.mock
 async def test_room_context_fetch_failure(slack_client: SlackClient):
-    respx.get("https://slack.com/api/conversations.info").mock(return_value=httpx.Response(500))
+    respx.get("https://slack.com/api/conversations.info").mock(
+        return_value=httpx.Response(500)
+    )
     assert await slack_client.room_context("C1", "alice") == ""
 
 

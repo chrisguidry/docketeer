@@ -50,12 +50,14 @@ async def test_fake_socket_exhaustion():
 
 
 async def test_incoming_messages_yields_and_dedupes(slack_client: SlackClient):
-    slack_client._ws = _FakeSocket([
-        json.dumps({"envelope_id": "e1", "payload": {}}),
-        json.dumps({"envelope_id": "e2", "payload": {}}),
-        json.dumps({"envelope_id": "e3", "payload": {}}),
-        json.dumps({"envelope_id": "e4", "payload": {}}),
-    ])
+    slack_client._ws = _FakeSocket(
+        [
+            json.dumps({"envelope_id": "e1", "payload": {}}),
+            json.dumps({"envelope_id": "e2", "payload": {}}),
+            json.dumps({"envelope_id": "e3", "payload": {}}),
+            json.dumps({"envelope_id": "e4", "payload": {}}),
+        ]
+    )
     events = [
         None,
         slack_client._incoming_from_message(
@@ -186,7 +188,9 @@ async def test_prime_history_fetch_messages_failure(slack_client: SlackClient):
     room = RoomInfo(room_id="D1", kind=RoomKind.direct, members=[])
     with (
         patch.object(slack_client, "list_rooms", return_value=[room]),
-        patch.object(slack_client, "fetch_messages", side_effect=httpx.HTTPError("boom")),
+        patch.object(
+            slack_client, "fetch_messages", side_effect=httpx.HTTPError("boom")
+        ),
     ):
         await slack_client._prime_history(AsyncMock())
 

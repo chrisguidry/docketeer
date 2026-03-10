@@ -40,7 +40,9 @@ async def test_parse_socket_event_dm(slack_client: SlackClient):
     assert msg.message_id == "D1:1718123456.123456"
 
 
-async def test_parse_socket_event_channel_without_mention_ignored(slack_client: SlackClient):
+async def test_parse_socket_event_channel_without_mention_ignored(
+    slack_client: SlackClient,
+):
     event = {
         "payload": {
             "event": {

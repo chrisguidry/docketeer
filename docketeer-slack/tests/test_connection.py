@@ -64,7 +64,9 @@ async def test_api_post_retries_on_rate_limit(slack_client: SlackClient):
     ]
     with patch("docketeer_slack.client.asyncio.sleep", new_callable=AsyncMock) as sleep:
         payload = await slack_client._api_post(
-            "chat.postMessage", token="xoxb-test", json_body={"channel": "C1", "text": "hi"}
+            "chat.postMessage",
+            token="xoxb-test",
+            json_body={"channel": "C1", "text": "hi"},
         )
     assert payload == {"ok": True}
     sleep.assert_awaited_once()
@@ -104,7 +106,9 @@ async def test_api_get_raises_on_slack_error(slack_client: SlackClient):
 @respx.mock
 async def test_socket_url(slack_client: SlackClient):
     respx.post("https://slack.com/api/apps.connections.open").mock(
-        return_value=httpx.Response(200, json={"ok": True, "url": "wss://example.test/socket"})
+        return_value=httpx.Response(
+            200, json={"ok": True, "url": "wss://example.test/socket"}
+        )
     )
     assert await slack_client._socket_url() == "wss://example.test/socket"
 

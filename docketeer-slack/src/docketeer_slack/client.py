@@ -123,7 +123,9 @@ class SlackClient(ChatClient):
     ) -> dict[str, Any]:
         headers = {"Authorization": f"Bearer {self.bot_token}"}
         while True:
-            resp = await self._api.get(f"{API_BASE}/{method}", headers=headers, params=params)
+            resp = await self._api.get(
+                f"{API_BASE}/{method}", headers=headers, params=params
+            )
             if resp.status_code == 429:
                 retry = int(resp.headers.get("Retry-After", "1"))
                 await asyncio.sleep(retry)
@@ -210,7 +212,10 @@ class SlackClient(ChatClient):
             "group": RoomKind.private,
         }.get(channel_type, RoomKind.direct)
 
-        if kind in {RoomKind.public, RoomKind.private} and not self._should_handle_channel_message(event):
+        if kind in {
+            RoomKind.public,
+            RoomKind.private,
+        } and not self._should_handle_channel_message(event):
             return None
 
         return self._incoming_from_message(event, kind=kind)
@@ -252,7 +257,9 @@ class SlackClient(ChatClient):
             kind=kind,
             timestamp=parse_slack_ts(ts),
             attachments=attachments,
-            thread_id=event.get("thread_ts", "") if event.get("thread_ts") != ts else "",
+            thread_id=event.get("thread_ts", "")
+            if event.get("thread_ts") != ts
+            else "",
             is_own=user_id == self.user_id,
         )
 
@@ -348,7 +355,9 @@ class SlackClient(ChatClient):
                     display_name=user_id or "unknown",
                     text=message.get("text", ""),
                     attachments=parse_attachments(message.get("files")),
-                    thread_id=message.get("thread_ts", "") if message.get("thread_ts") != ts else "",
+                    thread_id=message.get("thread_ts", "")
+                    if message.get("thread_ts") != ts
+                    else "",
                 )
             )
         return messages
@@ -436,7 +445,9 @@ class SlackClient(ChatClient):
         room = self._rooms.get(room_id)
         if not room:
             try:
-                result = await self._api_get("conversations.info", params={"channel": room_id})
+                result = await self._api_get(
+                    "conversations.info", params={"channel": room_id}
+                )
                 convo = result.get("channel", {})
                 room = RoomInfo(
                     room_id=room_id,
@@ -481,7 +492,9 @@ class SlackClient(ChatClient):
             try:
                 messages = await self.fetch_messages(room.room_id, after=since)
             except httpx.HTTPError:
-                log.warning("Failed to fetch history for %s", room.room_id, exc_info=True)
+                log.warning(
+                    "Failed to fetch history for %s", room.room_id, exc_info=True
+                )
                 continue
             if not messages:
                 continue
