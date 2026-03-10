@@ -45,11 +45,14 @@ def _make_incoming(room_id: str = "room1") -> IncomingMessage:
 
 
 class _StreamingChat(MemoryChat):
-    def __init__(self, fail_after_start: bool = False) -> None:
+    def __init__(
+        self, fail_after_start: bool = False, fail_on_stop: bool = False
+    ) -> None:
         super().__init__()
         self.stream_events: list[tuple[str, str]] = []
         self._stream_handle = object()
         self._fail_after_start = fail_after_start
+        self._fail_on_stop = fail_on_stop
 
     async def start_reply_stream(
         self,
@@ -69,6 +72,8 @@ class _StreamingChat(MemoryChat):
     async def stop_reply_stream(self, stream: Any) -> None:
         assert stream is self._stream_handle
         self.stream_events.append(("stop", ""))
+        if self._fail_on_stop:
+            raise RuntimeError("stop boom")
 
 
 async def test_handle_message_intermediate_text_suppressed(
@@ -165,3 +170,18 @@ async def test_handle_message_stream_append_failure_falls_back_to_final_message(
     assert chat.stream_events[0] == ("start", "Hello")
     assert chat.stream_events[-1] == ("stop", "")
     assert [m.text for m in chat.sent_messages] == ["Hello\n world"]
+
+
+async def test_handle_message_stream_stop_failure_still_sends_no_duplicate_message(
+    brain: Brain, fake_messages: FakeMessages
+):
+    chat = _StreamingChat(fail_on_stop=True)
+    _preload_room(brain)
+    fake_messages.responses = [
+        FakeMessage(content=[make_text_block(text="Just a reply.")])
+    ]
+
+    await handle_message(chat, brain, _make_incoming())
+
+    assert chat.stream_events == [("start", "Just a reply."), ("stop", "")]
+    assert chat.sent_messages == []

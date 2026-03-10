@@ -104,3 +104,11 @@ async def test_chat_client_default_set_thread_status_is_noop(chat: MemoryChat):
         await ChatClient.set_thread_status(chat, "room1", "thread-1", "thinking")
         is None
     )
+
+
+async def test_chat_client_default_append_reply_stream_is_noop(chat: MemoryChat):
+    assert await ChatClient.append_reply_stream(chat, object(), "hello") is None
+
+
+async def test_chat_client_default_stop_reply_stream_is_noop(chat: MemoryChat):
+    assert await ChatClient.stop_reply_stream(chat, object()) is None
