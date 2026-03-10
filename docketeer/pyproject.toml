@@ -19,7 +19,7 @@ dependencies = [
     "croniter",
     "mcp",
     "pydocket>=0.17.8",
-
+    "pyyaml",
     "watchfiles",
 ]
 

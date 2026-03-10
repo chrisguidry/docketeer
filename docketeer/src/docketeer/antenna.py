@@ -3,21 +3,25 @@
 Bands are persistent streaming connections (SSE, WebSocket, etc.) that
 produce Signals.  Tunings tie a band + topic + filters to a line of
 thinking.  The Antenna owns bands and tunings and routes signals to lines.
+
+Also contains the AntennaHook (workspace hook for tunings/ directory) and
+the list_bands tool.
 """
 
 import asyncio
 import contextlib
-import json
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 from datetime import datetime
-from pathlib import Path
-from typing import Any, Literal, Protocol
+from pathlib import Path, PurePosixPath
+from typing import Any, Literal, Protocol, cast
 
+from docketeer.hooks import HookResult, parse_frontmatter
 from docketeer.plugins import discover_all
 from docketeer.prompt import BrainResponse, MessageContent, SystemBlock
+from docketeer.tools import ToolContext, registry
 from docketeer.vault import Vault
 
 log = logging.getLogger(__name__)
@@ -175,62 +179,16 @@ def discover_bands() -> dict[str, Band]:
     return bands
 
 
-# --- Tuning persistence ---
-
-
-def _tunings_dir(data_dir: Path) -> Path:
-    return data_dir / "tunings"
-
-
-def load_tunings(data_dir: Path) -> list[Tuning]:
-    """Load all tunings from individual files in the tunings directory."""
-    tunings_path = _tunings_dir(data_dir)
-    if not tunings_path.is_dir():
-        return []
-    tunings: list[Tuning] = []
-    for path in sorted(tunings_path.glob("*.json")):
-        data = json.loads(path.read_text())
-        tunings.append(_tuning_from_dict(data))
-    return tunings
-
-
-def save_tuning(data_dir: Path, tuning: Tuning) -> None:
-    """Save a single tuning to its own file."""
-    tunings_path = _tunings_dir(data_dir)
-    tunings_path.mkdir(parents=True, exist_ok=True)
-    path = tunings_path / f"{tuning.name}.json"
-    path.write_text(json.dumps(_tuning_to_dict(tuning), indent=2) + "\n")
-
-
-def delete_tuning(data_dir: Path, name: str) -> None:
-    """Delete a tuning file."""
-    path = _tunings_dir(data_dir) / f"{name}.json"
-    path.unlink(missing_ok=True)
-
-
-def _tuning_to_dict(t: Tuning) -> dict[str, Any]:
-    return {
-        "name": t.name,
-        "band": t.band,
-        "topic": t.topic,
-        "filters": [{"path": f.path, "op": f.op, "value": f.value} for f in t.filters],
-        "line": t.line,
-        "secrets": t.secrets,
-    }
-
-
 class Antenna:
     """Orchestrator — owns bands, tunings, and signal routing tasks."""
 
     def __init__(
         self,
         process_fn: ProcessFn,
-        data_dir: Path,
         workspace: Path,
         vault: Vault | None = None,
     ) -> None:
         self._process_fn = process_fn
-        self._data_dir = data_dir
         self._workspace = workspace
         self._vault = vault
         self._bands: dict[str, Band] = {}
@@ -241,11 +199,6 @@ class Antenna:
         self._bands = discover_bands()
         for band in self._bands.values():
             await band.__aenter__()
-
-        for tuning in load_tunings(self._data_dir):
-            self._tunings[tuning.name] = tuning
-            self._start_task(tuning)
-
         return self
 
     async def __aexit__(self, *exc: object) -> None:
@@ -260,14 +213,7 @@ class Antenna:
             await band.__aexit__(None, None, None)
 
     def _start_task(self, tuning: Tuning) -> None:
-        band = self._bands.get(tuning.band)
-        if band is None:
-            log.warning(
-                "Tuning '%s' references unknown band '%s', skipping",
-                tuning.name,
-                tuning.band,
-            )
-            return
+        band = self._bands[tuning.band]
 
         if tuning.secrets and not self._vault:
             log.warning(
@@ -295,7 +241,6 @@ class Antenna:
             tuning,
             self._process_fn,
             self._workspace,
-            data_dir=self._data_dir,
             secrets=resolved,
         )
 
@@ -316,7 +261,6 @@ class Antenna:
         await self._stop_task(tuning.name)
         self._tunings[tuning.name] = tuning
         self._start_task(tuning)
-        save_tuning(self._data_dir, tuning)
 
     async def detune(self, name: str) -> None:
         """Remove a tuning and stop its task."""
@@ -325,7 +269,6 @@ class Antenna:
 
         await self._stop_task(name)
         del self._tunings[name]
-        delete_tuning(self._data_dir, name)
 
     def list_tunings(self) -> list[Tuning]:
         """Return all active tunings."""
@@ -336,12 +279,166 @@ class Antenna:
         return sorted(self._bands.values(), key=lambda b: b.name)
 
 
-def _tuning_from_dict(d: dict[str, Any]) -> Tuning:
+# --- Antenna hook ---
+
+
+def _parse_filters(raw_filters: list) -> list[SignalFilter]:
+    """Convert frontmatter filter dicts to SignalFilter objects."""
+    filters: list[SignalFilter] = []
+    for f in raw_filters:
+        if not isinstance(f, dict):
+            continue
+        path = f.get("field") or f.get("path", "")
+        op = f.get("op", "eq")
+        value = f.get("value", "")
+        filters.append(
+            SignalFilter(path=str(path), op=cast(FilterOp, op), value=str(value))
+        )
+    return filters
+
+
+def _parse_tuning(name: str, meta: dict) -> Tuning:
+    """Build a Tuning from parsed frontmatter metadata."""
+    band = meta.get("band")
+    topic = meta.get("topic")
+
+    if not band or not topic:
+        raise ValueError(f"Tuning '{name}' requires 'band' and 'topic' in frontmatter")
+
     return Tuning(
-        name=d["name"],
-        band=d["band"],
-        topic=d["topic"],
-        filters=[SignalFilter(**f) for f in d.get("filters", [])],
-        line=d.get("line", ""),
-        secrets=d.get("secrets"),
+        name=name,
+        band=str(band),
+        topic=str(topic),
+        filters=_parse_filters(meta.get("filters", [])),
+        line=str(meta.get("line", "")),
+        secrets=meta.get("secrets"),
     )
+
+
+class AntennaHook:
+    """Workspace hook for the tunings/ directory."""
+
+    prefix = PurePosixPath("tunings")
+
+    def __init__(self) -> None:
+        self._antenna: Antenna | None = None
+
+    def set_antenna(self, antenna: Antenna) -> None:
+        self._antenna = antenna
+
+    @property
+    def _antenna_required(self) -> Antenna:
+        if self._antenna is None:
+            raise RuntimeError("AntennaHook not wired to an Antenna")
+        return self._antenna
+
+    def _is_tuning_file(self, path: PurePosixPath) -> bool:
+        """Check if this is a top-level .md file in tunings/."""
+        return path.name.endswith(".md") and len(path.parts) <= 2
+
+    async def validate(self, path: PurePosixPath, content: str) -> HookResult | None:
+        """Parse and validate tuning frontmatter."""
+        if not self._is_tuning_file(path):
+            return None
+
+        meta, _ = parse_frontmatter(content)
+        if not meta:
+            raise ValueError(
+                f"Tuning file {path} needs YAML frontmatter with 'band' and 'topic'"
+            )
+
+        name = path.stem
+        tuning = _parse_tuning(name, meta)
+
+        # Validate the band exists
+        antenna = self._antenna_required
+        if tuning.band not in antenna._bands:
+            raise ValueError(
+                f"Unknown band '{tuning.band}'. Available: {sorted(antenna._bands)}"
+            )
+
+        target = tuning.line or name
+        msg = f"Tuned '{name}' on band '{tuning.band}', delivering to line '{target}'"
+        return HookResult(msg)
+
+    async def commit(self, path: PurePosixPath, content: str) -> None:
+        """Activate the tuning via the antenna."""
+        if not self._is_tuning_file(path):
+            return
+
+        meta, _ = parse_frontmatter(content)
+        name = path.stem
+        tuning = _parse_tuning(name, meta)
+
+        antenna = self._antenna_required
+        await antenna.tune(tuning)
+        log.info("Tuned '%s' on band '%s'", name, tuning.band)
+
+    async def on_delete(self, path: PurePosixPath) -> str | None:
+        """Stop the tuning."""
+        if not self._is_tuning_file(path):
+            return None
+
+        name = path.stem
+        antenna = self._antenna_required
+
+        try:
+            await antenna.detune(name)
+        except KeyError:
+            return f"No tuning named '{name}' was active"
+        log.info("Detuned '%s'", name)
+        return f"Detuned '{name}'"
+
+    async def scan(self, workspace: Path) -> None:
+        """Reconcile tunings/ files with running antenna tasks."""
+        tunings_dir = workspace / "tunings"
+        if not tunings_dir.is_dir():
+            return
+
+        for md_file in sorted(tunings_dir.glob("*.md")):
+            content = md_file.read_text()
+            meta, _ = parse_frontmatter(content)
+            if not meta:
+                continue
+
+            name = md_file.stem
+            band = meta.get("band")
+            topic = meta.get("topic")
+            if not band or not topic:
+                continue
+
+            tuning = _parse_tuning(name, meta)
+            antenna = self._antenna_required
+            try:
+                await antenna.tune(tuning)
+            except ValueError:
+                log.warning("Scan: skipping tuning '%s'", name, exc_info=True)
+
+
+# --- Antenna tools ---
+
+
+def register_antenna_tools(antenna: Antenna) -> None:
+    """Register the list_bands tool."""
+
+    @registry.tool(emoji=":satellite:")
+    async def list_bands(ctx: ToolContext) -> str:
+        """Show available bands — the event sources you can tune into
+        (e.g. wicket for SSE webhooks, atproto for Bluesky events).
+        Each band describes how topic, filters, and secret map to that platform."""
+        bands = antenna.list_bands()
+        if not bands:
+            return "No bands available."
+
+        sections: list[str] = []
+        for band in bands:
+            header = f"  [{band.name}]"
+            if band.description:
+                header += f"\n{_indent(band.description, 4)}"
+            sections.append(header)
+        return f"{len(bands)} band(s):\n\n" + "\n\n".join(sections)
+
+
+def _indent(text: str, spaces: int) -> str:
+    prefix = " " * spaces
+    return "\n".join(f"{prefix}{line}" for line in text.strip().splitlines())

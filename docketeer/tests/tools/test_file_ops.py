@@ -1,8 +1,12 @@
 """Tests for file operation tools (list, read, write, delete, search, links)."""
 
 import os
-from pathlib import Path
+from collections.abc import Iterator
+from pathlib import Path, PurePosixPath
 
+import pytest
+
+from docketeer.hooks import HookResult, hook_registry
 from docketeer.testing import MemoryCatalog
 from docketeer.tools import ToolContext, registry
 
@@ -291,3 +295,66 @@ async def test_search_files_semantic_no_results_falls_back(workspace: Path):
 
     result = await registry.execute("search_files", {"query": "keyword"}, ctx)
     assert "found.txt:1:keyword match here" in result
+
+
+# --- Hook validate/commit write-back ---
+
+
+class _EnrichingHook:
+    """A hook that adds a key to the content on write."""
+
+    prefix = PurePosixPath("enriched")
+
+    async def validate(self, path: PurePosixPath, content: str) -> HookResult | None:
+        return HookResult(
+            message=f"Enriched {path}",
+            updated_content=content + "\n# enriched",
+        )
+
+    async def commit(self, path: PurePosixPath, content: str) -> None:
+        pass
+
+    async def on_delete(self, path: PurePosixPath) -> str | None:
+        return None  # pragma: no cover
+
+    async def scan(self, workspace: Path) -> None:
+        pass  # pragma: no cover
+
+
+@pytest.fixture()
+def _enriching_hook() -> Iterator[None]:
+    hook = _EnrichingHook()
+    hook_registry.register(hook)
+    yield
+    hook_registry._hooks.remove(hook)
+
+
+@pytest.mark.usefixtures("_enriching_hook")
+async def test_write_file_applies_updated_content(tool_context: ToolContext):
+    result = await registry.execute(
+        "write_file",
+        {"path": "enriched/test.md", "content": "original"},
+        tool_context,
+    )
+    assert result == "Enriched enriched/test.md"
+    on_disk = (tool_context.workspace / "enriched" / "test.md").read_text()
+    assert on_disk == "original\n# enriched"
+
+
+@pytest.mark.usefixtures("_enriching_hook")
+async def test_edit_file_applies_updated_content(tool_context: ToolContext):
+    (tool_context.workspace / "enriched").mkdir()
+    (tool_context.workspace / "enriched" / "test.md").write_text("old content")
+
+    result = await registry.execute(
+        "edit_file",
+        {
+            "path": "enriched/test.md",
+            "old_string": "old",
+            "new_string": "new",
+        },
+        tool_context,
+    )
+    assert result == "Enriched enriched/test.md"
+    on_disk = (tool_context.workspace / "enriched" / "test.md").read_text()
+    assert on_disk == "new content\n# enriched"

@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 
 from docketeer.antenna import Band, ProcessFn, Signal, Tuning, passes_filters
+from docketeer.hooks import parse_frontmatter
 from docketeer.prompt import MessageContent, SystemBlock
 
 log = logging.getLogger(__name__)
@@ -25,9 +26,9 @@ def format_signal(tuning: Tuning, signal: Signal) -> str:
     return "\n".join(lines)
 
 
-def log_signal(data_dir: Path, tuning: Tuning, signal: Signal) -> None:
-    """Append a signal record to the tuning's daily JSONL log."""
-    log_dir = data_dir / "tunings" / tuning.name
+def log_signal(workspace: Path, tuning: Tuning, signal: Signal) -> None:
+    """Append a signal record to the tuning's daily JSONL log in the workspace."""
+    log_dir = workspace / "tunings" / tuning.name / "signals"
     log_dir.mkdir(parents=True, exist_ok=True)
     date_str = signal.timestamp.strftime("%Y-%m-%d")
     path = log_dir / f"{date_str}.jsonl"
@@ -45,29 +46,31 @@ def log_signal(data_dir: Path, tuning: Tuning, signal: Signal) -> None:
         f.flush()
 
 
-def _cursor_path(data_dir: Path, tuning_name: str) -> Path:
-    return data_dir / "tunings" / tuning_name / "cursor"
+def _cursor_path(workspace: Path, tuning_name: str) -> Path:
+    return workspace / "tunings" / tuning_name / "cursor"
 
 
-def _load_cursor(data_dir: Path, tuning_name: str) -> str:
-    path = _cursor_path(data_dir, tuning_name)
+def _load_cursor(workspace: Path, tuning_name: str) -> str:
+    path = _cursor_path(workspace, tuning_name)
     if path.exists():
         return path.read_text().strip()
     return ""
 
 
-def _save_cursor(data_dir: Path, tuning_name: str, signal_id: str) -> None:
-    path = _cursor_path(data_dir, tuning_name)
+def _save_cursor(workspace: Path, tuning_name: str, signal_id: str) -> None:
+    path = _cursor_path(workspace, tuning_name)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(signal_id + "\n")
 
 
-def _read_line_purpose(workspace: Path, line: str) -> str:
-    """Read the purpose prompt for a line, if it exists."""
-    path = workspace / "lines" / f"{line}.md"
-    if path.exists():
-        return path.read_text().strip()
-    return ""
+def _read_tuning_purpose(workspace: Path, tuning: Tuning) -> str:
+    """Read the purpose/system_context for a tuning from its workspace file body."""
+    path = workspace / "tunings" / f"{tuning.name}.md"
+    if not path.exists():
+        return ""
+    content = path.read_text()
+    _, body = parse_frontmatter(content)
+    return body.strip()
 
 
 async def deliver_signal(
@@ -75,17 +78,16 @@ async def deliver_signal(
     tuning: Tuning,
     signal: Signal,
     workspace: Path,
-    data_dir: Path,
 ) -> None:
     """Deliver a signal to a line via brain.process."""
-    log_signal(data_dir, tuning, signal)
+    log_signal(workspace, tuning, signal)
 
     line = tuning.target_line
     text = format_signal(tuning, signal)
     content = MessageContent(text=text)
 
     system_context: list[SystemBlock] = []
-    purpose = _read_line_purpose(workspace, line)
+    purpose = _read_tuning_purpose(workspace, tuning)
     if purpose:
         system_context.append(SystemBlock(text=purpose))
 
@@ -108,7 +110,6 @@ async def run_tuning(
     process_fn: ProcessFn,
     workspace: Path,
     *,
-    data_dir: Path,
     reconnect_delay: float = 1.0,
     max_reconnect_delay: float = 60.0,
     secrets: dict[str, str] | None = None,
@@ -119,7 +120,7 @@ async def run_tuning(
     on errors, resetting the delay after a successful signal delivery.
     """
     hint_filters = band.remote_filter_hints(tuning.filters)
-    last_signal_id = _load_cursor(data_dir, tuning.name)
+    last_signal_id = _load_cursor(workspace, tuning.name)
     delay = reconnect_delay
 
     while True:
@@ -132,7 +133,7 @@ async def run_tuning(
             ):
                 if not passes_filters(tuning.filters, signal):
                     last_signal_id = signal.signal_id
-                    _save_cursor(data_dir, tuning.name, last_signal_id)
+                    _save_cursor(workspace, tuning.name, last_signal_id)
                     continue
 
                 log.debug(
@@ -142,9 +143,9 @@ async def run_tuning(
                     signal.summary[:200],
                 )
                 last_signal_id = signal.signal_id
-                _save_cursor(data_dir, tuning.name, last_signal_id)
+                _save_cursor(workspace, tuning.name, last_signal_id)
                 delay = reconnect_delay
-                await deliver_signal(process_fn, tuning, signal, workspace, data_dir)
+                await deliver_signal(process_fn, tuning, signal, workspace)
         except asyncio.CancelledError:
             raise
         except Exception:

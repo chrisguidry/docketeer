@@ -10,7 +10,7 @@ from .manager import manager
 
 def provide_mcp_catalog(workspace: Path) -> list[SystemBlock]:
     """Build an MCP server catalog block for the system prompt."""
-    servers = load_servers()
+    servers = load_servers(workspace)
     if not servers:
         return []
 

@@ -1,14 +1,12 @@
 """MCP server configuration loading and saving."""
 
 import json
-import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from docketeer import environment
+from docketeer.hooks import parse_frontmatter, render_frontmatter
 from docketeer.vault import SecretEnvRef
-
-_NAME_PATTERN = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_-]*$")
 
 
 def _mcp_dir() -> Path:
@@ -40,16 +38,8 @@ class MCPServerConfig:
         return bool(self.url)
 
 
-def _validate_name(name: str) -> None:
-    if not _NAME_PATTERN.match(name):
-        raise ValueError(
-            f"Invalid server name {name!r}: must start with a letter or underscore "
-            f"and contain only letters, digits, underscores, and hyphens"
-        )
-
-
 def _parse_env(raw: dict) -> dict[str, str | SecretEnvRef]:
-    """Parse an env dict from JSON, converting secret objects to SecretEnvRef."""
+    """Parse an env dict from frontmatter, converting secret objects to SecretEnvRef."""
     env: dict[str, str | SecretEnvRef] = {}
     for key, value in raw.items():
         if isinstance(value, dict) and "secret" in value:
@@ -60,7 +50,7 @@ def _parse_env(raw: dict) -> dict[str, str | SecretEnvRef]:
 
 
 def _serialize_env(env: dict[str, str | SecretEnvRef]) -> dict[str, str | dict]:
-    """Serialize an env dict for JSON, converting SecretEnvRef back to dicts."""
+    """Serialize an env dict for YAML, converting SecretEnvRef back to dicts."""
     out: dict[str, str | dict] = {}
     for key, value in env.items():
         if isinstance(value, SecretEnvRef):
@@ -70,63 +60,72 @@ def _serialize_env(env: dict[str, str | SecretEnvRef]) -> dict[str, str | dict]:
     return out
 
 
-def load_servers() -> dict[str, MCPServerConfig]:
-    """Load all server configs from the data directory."""
-    mcp_dir = _mcp_dir()
+def load_servers(workspace: Path) -> dict[str, MCPServerConfig]:
+    """Load all server configs from workspace mcp/ directory."""
+    mcp_dir = workspace / "mcp"
     if not mcp_dir.is_dir():
         return {}
 
     servers: dict[str, MCPServerConfig] = {}
-    for path in sorted(mcp_dir.glob("*.json")):
+    for path in sorted(mcp_dir.glob("*.md")):
         name = path.stem
         try:
-            data = json.loads(path.read_text())
-        except (json.JSONDecodeError, OSError):
+            content = path.read_text()
+        except OSError:
+            continue
+
+        meta, _ = parse_frontmatter(content)
+        if not meta:
             continue
 
         servers[name] = MCPServerConfig(
             name=name,
-            command=data.get("command", ""),
-            args=data.get("args", []),
-            env=_parse_env(data.get("env", {})),
-            url=data.get("url", ""),
-            headers=data.get("headers", {}),
-            network_access=data.get("networkAccess", False),
-            auth=data.get("auth", ""),
+            command=meta.get("command", ""),
+            args=meta.get("args", []),
+            env=_parse_env(meta.get("env", {})),
+            url=meta.get("url", ""),
+            headers=meta.get("headers", {}),
+            network_access=meta.get("network_access", False),
+            auth=meta.get("auth", ""),
         )
     return servers
 
 
-def save_server(config: MCPServerConfig) -> None:
-    """Write a server config to disk."""
-    _validate_name(config.name)
-
-    mcp_dir = _mcp_dir()
+def save_server(workspace: Path, config: MCPServerConfig) -> None:
+    """Write a server config to the workspace as a markdown file."""
+    mcp_dir = workspace / "mcp"
     mcp_dir.mkdir(parents=True, exist_ok=True)
 
-    data: dict[str, object] = {}
+    meta: dict[str, object] = {}
     if config.command:
-        data["command"] = config.command
+        meta["command"] = config.command
         if config.args:
-            data["args"] = config.args
+            meta["args"] = config.args
         if config.env:
-            data["env"] = _serialize_env(config.env)
-        data["networkAccess"] = config.network_access
-    elif config.url:
-        data["url"] = config.url
+            meta["env"] = _serialize_env(config.env)
+        if config.network_access:
+            meta["network_access"] = True
+
+    if config.url:
+        meta["url"] = config.url
         if config.headers:
-            data["headers"] = config.headers
+            meta["headers"] = config.headers
 
     if config.auth:
-        data["auth"] = config.auth
+        meta["auth"] = config.auth
 
-    path = mcp_dir / f"{config.name}.json"
-    path.write_text(json.dumps(data, indent=2) + "\n")
+    # Preserve existing body text
+    path = mcp_dir / f"{config.name}.md"
+    body = ""
+    if path.is_file():
+        _, body = parse_frontmatter(path.read_text())
+
+    path.write_text(render_frontmatter(meta, body))
 
 
-def remove_server(name: str) -> bool:
+def remove_server(workspace: Path, name: str) -> bool:
     """Delete a server config file. Returns True if the file existed."""
-    path = _mcp_dir() / f"{name}.json"
+    path = workspace / "mcp" / f"{name}.md"
     if not path.is_file():
         return False
     path.unlink()

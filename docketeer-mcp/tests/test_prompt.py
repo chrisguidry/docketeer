@@ -1,23 +1,22 @@
 """Tests for the MCP prompt provider."""
 
-import json
 from pathlib import Path
 
 from docketeer_mcp.manager import MCPClientManager, MCPToolInfo
 from docketeer_mcp.prompt import provide_mcp_catalog
 
 
-def test_no_servers(workspace: Path, data_dir: Path):
+def test_no_servers(workspace: Path):
     assert provide_mcp_catalog(workspace) == []
 
 
-def test_with_servers_disconnected(workspace: Path, mcp_dir: Path):
-    (mcp_dir / "time.json").write_text(
-        json.dumps({"command": "uvx", "args": ["mcp-server-time"]})
+def test_with_servers_disconnected(workspace: Path):
+    mcp_dir = workspace / "mcp"
+    mcp_dir.mkdir()
+    (mcp_dir / "time.md").write_text(
+        "---\ncommand: uvx\nargs: [mcp-server-time]\n---\n"
     )
-    (mcp_dir / "api.json").write_text(
-        json.dumps({"url": "https://api.example.com/mcp"})
-    )
+    (mcp_dir / "api.md").write_text("---\nurl: https://api.example.com/mcp\n---\n")
 
     blocks = provide_mcp_catalog(workspace)
     assert len(blocks) == 1
@@ -31,10 +30,10 @@ def test_with_servers_disconnected(workspace: Path, mcp_dir: Path):
     assert "Connected:" not in text
 
 
-def test_with_connected_server(
-    workspace: Path, mcp_dir: Path, fresh_manager: MCPClientManager
-):
-    (mcp_dir / "time.json").write_text(json.dumps({"command": "uvx"}))
+def test_with_connected_server(workspace: Path, fresh_manager: MCPClientManager):
+    mcp_dir = workspace / "mcp"
+    mcp_dir.mkdir()
+    (mcp_dir / "time.md").write_text("---\ncommand: uvx\n---\n")
     fresh_manager._tools["time"] = [
         MCPToolInfo(server="time", name="t", description="", input_schema={}),
         MCPToolInfo(server="time", name="u", description="", input_schema={}),

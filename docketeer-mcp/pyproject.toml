@@ -17,6 +17,7 @@ classifiers = [
 dependencies = [
     "docketeer",
     "fastmcp>=3.0.0rc2",
+    "pyyaml>=6.0",
 ]
 
 [project.urls]
@@ -32,6 +33,9 @@ mcp = "docketeer_mcp.prompt:provide_mcp_catalog"
 
 [project.entry-points."docketeer.tasks"]
 mcp = "docketeer_mcp.tasks:mcp_task_collections"
+
+[project.entry-points."docketeer.hooks"]
+mcp = "docketeer_mcp.hook:create_hook"
 
 [build-system]
 requires = ["hatchling", "hatch-vcs"]

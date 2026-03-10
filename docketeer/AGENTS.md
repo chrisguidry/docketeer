@@ -13,22 +13,28 @@ plugin tests when modifying public interfaces.
   server.
 - **`chat.py`** — the `ChatClient` ABC. Chat backends (rocketchat, tui)
   implement this. Also defines `IncomingMessage`, `RoomMessage`, `RoomInfo`.
-- **`vault.py`** — the `Vault` ABC. Vault plugins (1password) implement this.
-- **`executor.py`** — the `CommandExecutor` ABC. Executor plugins (bubblewrap)
+- **`vault.py`** — the `Vault` ABC and vault tools. Vault plugins (1password)
   implement this.
-- **`tools/`** — built-in tool implementations (workspace files, vault,
-  executor). The `__init__.py` has the tool registry and `ToolContext`.
+- **`executor.py`** — the `CommandExecutor` ABC and executor tools (run,
+  shell). Executor plugins (bubblewrap) implement this.
+- **`workspace.py`** — workspace file tools (list, read, write, edit, delete,
+  search, links) with hook integration for file-based configuration.
+- **`tools.py`** — tool registry infrastructure (`ToolRegistry`, `ToolContext`,
+  `ToolDefinition`, `safe_path`). Domain tools are registered lazily from
+  their domain modules at import time.
+- **`hooks.py`** — workspace hook protocol and registry. Hooks react to file
+  operations in special directories (tunings/, tasks/) via validate/commit
+  phases.
 - **`plugins.py`** — entry point discovery. `discover_one()` for single-select
   plugins, `discover_all()` for multi-load.
 - **`prompt.py`** — system prompt assembly from prompt providers.
-- **`tasks.py`** — Docket task definitions (nudge).
+- **`tasks.py`** — Docket task definitions (nudge) and the `SchedulingHook`
+  for file-based task scheduling.
 - **`handlers.py`** — message handling and the bridge between chat and brain.
 - **`antenna.py`** — the realtime event feed system. Defines the `Band` ABC,
-  `Signal`, `SignalFilter`, `Tuning` data types, filter evaluation, tuning
-  persistence, and the `Antenna` orchestrator class. Band plugins (wicket,
-  atproto) implement the `Band` ABC.
-- **`antenna_tools.py`** — agent-facing tools for managing tunings at runtime
-  (`tune`, `detune`, `list_tunings`, `list_bands`).
+  `Signal`, `SignalFilter`, `Tuning` data types, filter evaluation, the
+  `Antenna` orchestrator, `AntennaHook` for file-based tuning, and the
+  `list_bands` tool.
 - **`signal_loop.py`** — runs one async task per tuning, filtering signals
   and delivering batches to lines via `brain.process()`.
 

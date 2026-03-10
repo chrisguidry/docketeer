@@ -1,11 +1,9 @@
 """Tests for MCP OAuth-related tools (connect with auth, mcp_oauth_complete)."""
 
-import json
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import httpx
-from docket import Docket
 
 from docketeer.tools import ToolContext, registry
 from docketeer.vault import NullVault, Vault
@@ -13,16 +11,20 @@ from docketeer_mcp.manager import MCPClientManager, MCPToolInfo
 from docketeer_mcp.oauth import PendingOAuth
 
 
-def _write_server(mcp_dir: Path, name: str, data: dict) -> None:
-    (mcp_dir / f"{name}.json").write_text(json.dumps(data))
+def _write_server(workspace: Path, name: str, content: str) -> None:
+    mcp_dir = workspace / "mcp"
+    mcp_dir.mkdir(exist_ok=True)
+    (mcp_dir / f"{name}.md").write_text(content)
 
 
 async def test_connect_with_vault_auth(
-    tool_context: ToolContext, mcp_dir: Path, fresh_manager: MCPClientManager
+    tool_context: ToolContext, workspace: Path, fresh_manager: MCPClientManager
 ):
     """When config has auth and vault is available, resolve token and connect."""
     _write_server(
-        mcp_dir, "api", {"url": "https://api.example.com/mcp", "auth": "mcp/api/token"}
+        workspace,
+        "api",
+        "---\nurl: https://api.example.com/mcp\nauth: mcp/api/token\n---\n",
     )
 
     mock_vault = AsyncMock(spec=Vault)
@@ -42,11 +44,13 @@ async def test_connect_with_vault_auth(
 
 
 async def test_connect_with_auth_no_vault(
-    tool_context: ToolContext, mcp_dir: Path, fresh_manager: MCPClientManager
+    tool_context: ToolContext, workspace: Path, fresh_manager: MCPClientManager
 ):
     """When config has auth but no vault, return error."""
     _write_server(
-        mcp_dir, "api", {"url": "https://api.example.com/mcp", "auth": "mcp/api/token"}
+        workspace,
+        "api",
+        "---\nurl: https://api.example.com/mcp\nauth: mcp/api/token\n---\n",
     )
     tool_context.vault = NullVault()
 
@@ -55,10 +59,10 @@ async def test_connect_with_auth_no_vault(
 
 
 async def test_connect_http_auth_required(
-    tool_context: ToolContext, mcp_dir: Path, fresh_manager: MCPClientManager
+    tool_context: ToolContext, workspace: Path, fresh_manager: MCPClientManager
 ):
     """When HTTP server requires auth, return authorization URL."""
-    _write_server(mcp_dir, "github", {"url": "https://mcp.github.com/mcp"})
+    _write_server(workspace, "github", "---\nurl: https://mcp.github.com/mcp\n---\n")
 
     with (
         patch("docketeer_mcp.tools._check_auth_required", return_value=True),
@@ -86,10 +90,10 @@ async def test_connect_http_auth_required(
 
 
 async def test_connect_http_auth_required_no_registration(
-    tool_context: ToolContext, mcp_dir: Path, fresh_manager: MCPClientManager
+    tool_context: ToolContext, workspace: Path, fresh_manager: MCPClientManager
 ):
     """When no registration endpoint, use provided client_id."""
-    _write_server(mcp_dir, "api", {"url": "https://api.example.com/mcp"})
+    _write_server(workspace, "api", "---\nurl: https://api.example.com/mcp\n---\n")
 
     with (
         patch("docketeer_mcp.tools._check_auth_required", return_value=True),
@@ -116,10 +120,10 @@ async def test_connect_http_auth_required_no_registration(
 
 
 async def test_connect_http_no_auth_required(
-    tool_context: ToolContext, mcp_dir: Path, fresh_manager: MCPClientManager
+    tool_context: ToolContext, workspace: Path, fresh_manager: MCPClientManager
 ):
     """When HTTP server doesn't require auth, connect normally."""
-    _write_server(mcp_dir, "open", {"url": "https://open.example.com/mcp"})
+    _write_server(workspace, "open", "---\nurl: https://open.example.com/mcp\n---\n")
     tools = [
         MCPToolInfo(server="open", name="ping", description="Ping", input_schema={})
     ]
@@ -134,10 +138,10 @@ async def test_connect_http_no_auth_required(
 
 
 async def test_mcp_oauth_complete_success(
-    tool_context: ToolContext, mcp_dir: Path, fresh_manager: MCPClientManager
+    tool_context: ToolContext, workspace: Path, fresh_manager: MCPClientManager
 ):
     """Happy path: exchange code, store token, update config."""
-    _write_server(mcp_dir, "github", {"url": "https://mcp.github.com/mcp"})
+    _write_server(workspace, "github", "---\nurl: https://mcp.github.com/mcp\n---\n")
 
     mock_vault = AsyncMock(spec=Vault)
     tool_context.vault = mock_vault
@@ -181,10 +185,10 @@ async def test_mcp_oauth_complete_success(
 
 
 async def test_mcp_oauth_complete_with_refresh(
-    tool_context: ToolContext, mcp_dir: Path, fresh_manager: MCPClientManager
+    tool_context: ToolContext, workspace: Path, fresh_manager: MCPClientManager
 ):
     """When refresh_token present, store it and schedule refresh task."""
-    _write_server(mcp_dir, "api", {"url": "https://api.example.com/mcp"})
+    _write_server(workspace, "api", "---\nurl: https://api.example.com/mcp\n---\n")
 
     mock_vault = AsyncMock(spec=Vault)
     tool_context.vault = mock_vault
@@ -214,8 +218,9 @@ async def test_mcp_oauth_complete_with_refresh(
                 "refresh_token": "rt_new",
             },
         ),
-        patch("docketeer_mcp.tools.current_docket", return_value=mock_docket),
+        patch("docketeer.dependencies._docket_var") as mock_var,
     ):
+        mock_var.get.return_value = mock_docket
         await registry.execute(
             "mcp_oauth_complete",
             {
@@ -355,21 +360,3 @@ async def test_check_auth_required_exception():
 
     with patch("docketeer_mcp.tools.httpx.AsyncClient", return_value=mock_client):
         assert await _check_auth_required("https://example.com/mcp") is False
-
-
-def test_current_docket():
-    """Resolves docket from context var."""
-    from contextvars import copy_context
-
-    from docketeer.dependencies import set_docket
-    from docketeer_mcp.tools import current_docket
-
-    mock_docket = AsyncMock()
-
-    def _run() -> Docket:
-        set_docket(mock_docket)
-        return current_docket()
-
-    ctx = copy_context()
-    result = ctx.run(_run)
-    assert result is mock_docket

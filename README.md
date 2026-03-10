@@ -114,6 +114,11 @@ graph TD
         end
         Bands -- signals --> Brain
 
+        subgraph hooks ["🔌 docketeer.hooks"]
+            Hooks["tunings, tasks, mcp, ..."]
+        end
+        Workspace -- file ops --> Hooks
+
         subgraph executor ["🔌 docketeer.executor"]
             Sandbox["bubblewrap, subprocess, ..."]
         end
@@ -212,8 +217,8 @@ Single-plugin groups (`docketeer.inference`, `docketeer.chat`,
 `docketeer.executor`, `docketeer.vault`, `docketeer.search`) auto-select when
 only one is installed, or can be chosen with an environment variable when several
 are available. Multi-plugin groups (`docketeer.tools`,
-`docketeer.prompt`, `docketeer.tasks`, `docketeer.bands`) load everything
-they find.
+`docketeer.prompt`, `docketeer.tasks`, `docketeer.bands`,
+`docketeer.hooks`) load everything they find.
 
 | Entry point group | Cardinality | Purpose |
 |-------------------|-------------|---------|
@@ -227,6 +232,7 @@ they find.
 | `docketeer.prompt` | multiple | Prompt providers — contribute blocks to the system prompt |
 | `docketeer.tasks` | multiple | Task plugins — background work run by the Docket scheduler |
 | `docketeer.bands` | multiple | Band plugins — realtime event stream sources (SSE, WebSocket, etc.) |
+| `docketeer.hooks` | multiple | Workspace hooks — react to file operations in special directories (validate, commit, delete) |
 
 ## Packages
 

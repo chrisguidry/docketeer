@@ -1,19 +1,19 @@
-"""Tests for antenna tools — tune, detune, list_tunings, list_bands."""
+"""Tests for antenna hook integration with workspace tools.
 
-from collections.abc import AsyncGenerator, Generator
+The old tune/detune/list_tunings tools are replaced by write_file/delete_file
+operating on the tunings/ directory.
+"""
+
+from collections.abc import Iterator
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from docketeer.antenna import Antenna
+from docketeer.antenna import Antenna, AntennaHook
+from docketeer.hooks import hook_registry
 from docketeer.testing import MemoryBand
 from docketeer.tools import ToolContext, registry
-
-
-@pytest.fixture()
-def tool_context(workspace: Path) -> ToolContext:
-    return ToolContext(workspace=workspace)
 
 
 @pytest.fixture()
@@ -22,134 +22,172 @@ def band() -> MemoryBand:
 
 
 @pytest.fixture()
-async def antenna(tmp_path: Path, band: MemoryBand) -> AsyncGenerator[Antenna]:
+async def antenna(tmp_path: Path, band: MemoryBand):
     def factory() -> MemoryBand:
         return band
 
     with patch("docketeer.antenna.discover_all", return_value=[factory]):
-        antenna = Antenna(AsyncMock(), tmp_path, tmp_path)
-        await antenna.__aenter__()
-        yield antenna
-        await antenna.__aexit__(None, None, None)
+        antenna = Antenna(AsyncMock(), tmp_path)
+        async with antenna:
+            yield antenna
 
 
 @pytest.fixture(autouse=True)
-def _register_tools(antenna: Antenna) -> Generator[None]:
-    from docketeer.antenna_tools import register_antenna_tools
-
-    register_antenna_tools(antenna)
+def _register_hook(antenna: Antenna) -> Iterator[None]:
+    hook = AntennaHook()
+    hook.set_antenna(antenna)
+    hook_registry.register(hook)
     yield
-    for name in ("tune", "detune", "list_tunings", "list_bands"):
-        registry._tools.pop(name, None)
+    hook_registry._hooks.remove(hook)
 
 
-async def test_tune_creates_tuning(tool_context: ToolContext):
+async def test_write_file_tunes(tool_context: ToolContext):
+    content = "---\nband: test-band\ntopic: events\n---\nMonitor events."
     result = await registry.execute(
-        "tune",
-        {"name": "my-tuning", "band": "test-band", "topic": "events"},
+        "write_file",
+        {"path": "tunings/github.md", "content": content},
         tool_context,
     )
-    assert "my-tuning" in result
+    assert "Tuned 'github'" in result
     assert "test-band" in result
 
 
-async def test_tune_with_filters(tool_context: ToolContext):
+async def test_write_file_tune_with_filters(tool_context: ToolContext):
+    content = (
+        "---\nband: test-band\ntopic: events\nfilters:\n"
+        "  - field: payload.action\n    op: eq\n    value: opened\n---\nBody."
+    )
     result = await registry.execute(
-        "tune",
-        {
-            "name": "filtered",
-            "band": "test-band",
-            "topic": "events",
-            "filters": [{"path": "payload.action", "op": "eq", "value": "opened"}],
-        },
+        "write_file",
+        {"path": "tunings/filtered.md", "content": content},
         tool_context,
     )
-    assert "filtered" in result
+    assert "Tuned 'filtered'" in result
 
 
-async def test_tune_with_line(tool_context: ToolContext):
+async def test_write_file_tune_unknown_band_reverts(tool_context: ToolContext):
+    content = "---\nband: nope\ntopic: events\n---\nBody."
     result = await registry.execute(
-        "tune",
-        {
-            "name": "github-prs",
-            "band": "test-band",
-            "topic": "events",
-            "line": "opensource",
-        },
+        "write_file",
+        {"path": "tunings/bad.md", "content": content},
         tool_context,
     )
-    assert "opensource" in result
+    assert "Error" in result
+    target = tool_context.workspace / "tunings" / "bad.md"
+    assert not target.exists()
 
 
-async def test_tune_unknown_band(tool_context: ToolContext):
-    result = await registry.execute(
-        "tune",
-        {"name": "bad", "band": "nope", "topic": "events"},
-        tool_context,
-    )
-    assert "error" in result.lower()
-
-
-async def test_detune_removes_tuning(tool_context: ToolContext):
+async def test_delete_file_detunes(tool_context: ToolContext, antenna: Antenna):
+    content = "---\nband: test-band\ntopic: events\n---\nBody."
     await registry.execute(
-        "tune",
-        {"name": "t1", "band": "test-band", "topic": "events"},
+        "write_file",
+        {"path": "tunings/gh.md", "content": content},
         tool_context,
     )
-    result = await registry.execute("detune", {"name": "t1"}, tool_context)
-    assert "t1" in result
+    assert len(antenna.list_tunings()) == 1
 
-
-async def test_detune_unknown(tool_context: ToolContext):
-    result = await registry.execute("detune", {"name": "nope"}, tool_context)
-    assert "error" in result.lower()
-
-
-async def test_list_tunings_empty(tool_context: ToolContext):
-    result = await registry.execute("list_tunings", {}, tool_context)
-    assert "no tunings" in result.lower()
-
-
-async def test_list_tunings_with_tunings(tool_context: ToolContext):
-    await registry.execute(
-        "tune",
-        {"name": "t1", "band": "test-band", "topic": "events"},
-        tool_context,
-    )
-    result = await registry.execute("list_tunings", {}, tool_context)
-    assert "t1" in result
-    assert "test-band" in result
-
-
-async def test_list_bands(tool_context: ToolContext):
-    result = await registry.execute("list_bands", {}, tool_context)
-    assert "test-band" in result
-
-
-async def test_tune_with_secrets(tool_context: ToolContext):
     result = await registry.execute(
-        "tune",
-        {
-            "name": "secure-hook",
-            "band": "test-band",
-            "topic": "events",
-            "secrets": {"token": "wicket/github-token"},
-        },
+        "delete_file", {"path": "tunings/gh.md"}, tool_context
+    )
+    assert "Detuned 'gh'" in result
+    assert len(antenna.list_tunings()) == 0
+
+
+async def test_write_file_no_frontmatter_reverts(tool_context: ToolContext):
+    result = await registry.execute(
+        "write_file",
+        {"path": "tunings/bad.md", "content": "No frontmatter"},
         tool_context,
     )
-    assert "secure-hook" in result
+    assert "Error" in result
 
 
-async def test_list_bands_shows_description(
+async def test_write_file_overwrite_with_bad_content_does_not_write(
     tool_context: ToolContext, antenna: Antenna
 ):
-    antenna._bands["test-band"].description = "A test band for testing."
-    result = await registry.execute("list_bands", {}, tool_context)
-    assert "test-band" in result
-    assert "A test band for testing." in result
+    good_content = "---\nband: test-band\ntopic: events\n---\nGood."
+    await registry.execute(
+        "write_file",
+        {"path": "tunings/gh.md", "content": good_content},
+        tool_context,
+    )
+    assert len(antenna.list_tunings()) == 1
+
+    bad_content = "---\nband: nope\ntopic: events\n---\nBad band."
+    result = await registry.execute(
+        "write_file",
+        {"path": "tunings/gh.md", "content": bad_content},
+        tool_context,
+    )
+    assert "Error" in result
+    # Original file should be untouched since validation happens before write
+    on_disk = (tool_context.workspace / "tunings" / "gh.md").read_text()
+    assert on_disk == good_content
 
 
-async def test_list_bands_empty(tool_context: ToolContext, antenna: Antenna):
-    antenna._bands.clear()
-    result = await registry.execute("list_bands", {}, tool_context)
-    assert "no bands" in result.lower()
+async def test_edit_file_hook_error_preserves_original(
+    tool_context: ToolContext, antenna: Antenna
+):
+    content = "---\nband: test-band\ntopic: events\n---\nBody."
+    await registry.execute(
+        "write_file",
+        {"path": "tunings/gh.md", "content": content},
+        tool_context,
+    )
+
+    result = await registry.execute(
+        "edit_file",
+        {
+            "path": "tunings/gh.md",
+            "old_string": "band: test-band",
+            "new_string": "band: nonexistent",
+        },
+        tool_context,
+    )
+    assert "Error" in result
+    # Original file should be untouched since validation happens before write
+    on_disk = (tool_context.workspace / "tunings" / "gh.md").read_text()
+    assert "band: test-band" in on_disk
+
+
+async def test_write_non_md_passes_through(tool_context: ToolContext):
+    result = await registry.execute(
+        "write_file",
+        {"path": "tunings/notes.txt", "content": "just a note"},
+        tool_context,
+    )
+    assert "Wrote" in result
+    assert (
+        tool_context.workspace / "tunings" / "notes.txt"
+    ).read_text() == "just a note"
+
+
+async def test_delete_non_md_passes_through(tool_context: ToolContext):
+    (tool_context.workspace / "tunings").mkdir(parents=True, exist_ok=True)
+    (tool_context.workspace / "tunings" / "notes.txt").write_text("bye")
+    result = await registry.execute(
+        "delete_file", {"path": "tunings/notes.txt"}, tool_context
+    )
+    assert "Deleted" in result
+
+
+async def test_edit_file_retunes(tool_context: ToolContext, antenna: Antenna):
+    content = "---\nband: test-band\ntopic: old-events\n---\nBody."
+    await registry.execute(
+        "write_file",
+        {"path": "tunings/gh.md", "content": content},
+        tool_context,
+    )
+    assert antenna.list_tunings()[0].topic == "old-events"
+
+    result = await registry.execute(
+        "edit_file",
+        {
+            "path": "tunings/gh.md",
+            "old_string": "old-events",
+            "new_string": "new-events",
+        },
+        tool_context,
+    )
+    assert "Tuned 'gh'" in result
+    assert antenna.list_tunings()[0].topic == "new-events"

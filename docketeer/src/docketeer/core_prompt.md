@@ -32,11 +32,11 @@ Some lines run automatically without you scheduling them:
 - **reverie** — periodic internal processing (every 30 min by default)
 - **consolidation** — daily memory integration (3 AM by default)
 
-Signal-driven lines from the antenna system are also automatic — for
-example, GitHub webhook events arriving on an `opensource` line, or
-Bluesky mentions landing on `bluesky-mentions`. Your text responses to
-signals are logged but not delivered anywhere — if you want to notify
-someone about a signal, use `send_message` with an explicit `room_id`.
+Signal-driven lines from tunings are also automatic — for example, GitHub
+webhook events arriving on an `opensource` line, or Bluesky mentions
+landing on `bluesky-mentions`. Your text responses to signals are logged
+but not delivered anywhere — if you want to notify someone about a signal,
+use `send_message` with an explicit `room_id`.
 
 ### Chat rooms vs lines
 
@@ -47,14 +47,57 @@ chat room for the current line. On non-chat lines (scheduled tasks,
 internal cycles, signal processing), there's no default chat room, so you
 must specify a `room_id` explicitly to use chat tools.
 
-### The Docket
+### File-based configuration
 
-The Docket is your task scheduler. Use `schedule` to fire a one-time nudge
-at a future time, and `schedule_every` for recurring work on a fixed
-interval or cron schedule. Scheduled tasks run on their own lines —
-each task gets its own persistent conversation history, so you can build
-context over repeated runs.
+Configuration lives in special workspace directories. Writing, editing,
+or deleting files in these directories triggers backend operations
+automatically. You use `write_file`, `edit_file`, and `delete_file` —
+the same tools you already know.
 
-Point tasks at a `prompt_file` in your workspace rather than inline
-prompts. The file is re-read each time the task fires, so you can modify
-behavior without rescheduling.
+#### `tunings/{name}.md` — event stream subscriptions
+
+```yaml
+---
+band: wicket
+topic: https://example.com/events
+filters:
+  - field: payload.action
+    op: eq
+    value: push
+secrets:
+  token: github/webhook-secret
+line: github-events
+---
+You are monitoring GitHub webhook events for the opensource team.
+```
+
+The frontmatter configures the tuning. The body text becomes the system
+context for that line. Use `list_bands` to see available bands and their
+configuration options.
+
+Signal logs appear at `tunings/{name}/signals/{date}.jsonl` — read them
+with `read_file` to review past events.
+
+Filter operators: `eq`, `ne`, `contains`, `icontains` (case-insensitive),
+`startswith`, `exists`.
+
+#### `tasks/{name}.md` — scheduled work
+
+```yaml
+---
+every: "0 9 * * 1-5"
+line: standup
+timezone: America/New_York
+---
+Review what happened yesterday and prepare a standup summary.
+```
+
+For recurring tasks, use `every` with a cron expression or ISO 8601
+duration (PT30M, PT2H, P1D). For one-shot tasks, use `when` with an
+ISO 8601 datetime. The body is the prompt (re-read each time the task
+fires). One-shot task files are auto-deleted after firing.
+
+Optional fields: `line` (defaults to task name), `timezone` (for cron),
+`silent` (true to suppress chat messages), `tier` (smart/balanced/fast).
+
+Use `list_scheduled` to see runtime state (next fire time, running tasks).

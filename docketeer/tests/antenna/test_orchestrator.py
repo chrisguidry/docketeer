@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from docketeer.antenna import Antenna, Signal, Tuning, save_tuning
+from docketeer.antenna import Antenna, Signal, Tuning
 from docketeer.prompt import BrainResponse
 from docketeer.testing import MemoryBand, MemoryVault
 
@@ -40,22 +40,8 @@ async def test_antenna_discovers_bands(tmp_path: Path, process_fn: AsyncMock):
         return band
 
     with patch("docketeer.antenna.discover_all", return_value=[factory]):
-        async with Antenna(process_fn, tmp_path, tmp_path) as antenna:
+        async with Antenna(process_fn, tmp_path) as antenna:
             assert any(b.name == "test-band" for b in antenna.list_bands())
-
-
-async def test_antenna_loads_tunings_on_start(tmp_path: Path, process_fn: AsyncMock):
-    save_tuning(tmp_path, Tuning(name="t1", band="test-band", topic="events"))
-    band = MemoryBand("test-band")
-
-    def factory() -> MemoryBand:
-        return band
-
-    with patch("docketeer.antenna.discover_all", return_value=[factory]):
-        async with Antenna(process_fn, tmp_path, tmp_path) as antenna:
-            tunings = antenna.list_tunings()
-            assert len(tunings) == 1
-            assert tunings[0].name == "t1"
 
 
 async def test_antenna_tune_adds_tuning(
@@ -65,32 +51,16 @@ async def test_antenna_tune_adds_tuning(
         return band
 
     with patch("docketeer.antenna.discover_all", return_value=[factory]):
-        async with Antenna(process_fn, tmp_path, tmp_path) as antenna:
+        async with Antenna(process_fn, tmp_path) as antenna:
             tuning = Tuning(name="new", band="test-band", topic="events")
             await antenna.tune(tuning)
             assert len(antenna.list_tunings()) == 1
             assert antenna.list_tunings()[0].name == "new"
 
 
-async def test_antenna_tune_persists(
-    tmp_path: Path, process_fn: AsyncMock, band: MemoryBand
-):
-    def factory() -> MemoryBand:
-        return band
-
-    with patch("docketeer.antenna.discover_all", return_value=[factory]):
-        async with Antenna(process_fn, tmp_path, tmp_path) as antenna:
-            await antenna.tune(Tuning(name="t1", band="test-band", topic="events"))
-
-    # Tuning should be in the file after exit
-    from docketeer.antenna import load_tunings
-
-    assert len(load_tunings(tmp_path)) == 1
-
-
 async def test_antenna_tune_rejects_unknown_band(tmp_path: Path, process_fn: AsyncMock):
     with patch("docketeer.antenna.discover_all", return_value=[]):
-        async with Antenna(process_fn, tmp_path, tmp_path) as antenna:
+        async with Antenna(process_fn, tmp_path) as antenna:
             with pytest.raises(ValueError, match="no-such-band"):
                 await antenna.tune(
                     Tuning(name="t1", band="no-such-band", topic="events")
@@ -104,7 +74,7 @@ async def test_antenna_tune_replaces_existing(
         return band
 
     with patch("docketeer.antenna.discover_all", return_value=[factory]):
-        async with Antenna(process_fn, tmp_path, tmp_path) as antenna:
+        async with Antenna(process_fn, tmp_path) as antenna:
             await antenna.tune(Tuning(name="t1", band="test-band", topic="old"))
             await antenna.tune(Tuning(name="t1", band="test-band", topic="new"))
             tunings = antenna.list_tunings()
@@ -119,7 +89,7 @@ async def test_antenna_detune_removes_tuning(
         return band
 
     with patch("docketeer.antenna.discover_all", return_value=[factory]):
-        async with Antenna(process_fn, tmp_path, tmp_path) as antenna:
+        async with Antenna(process_fn, tmp_path) as antenna:
             await antenna.tune(Tuning(name="t1", band="test-band", topic="events"))
             await antenna.detune("t1")
             assert antenna.list_tunings() == []
@@ -127,7 +97,7 @@ async def test_antenna_detune_removes_tuning(
 
 async def test_antenna_detune_unknown_raises(tmp_path: Path, process_fn: AsyncMock):
     with patch("docketeer.antenna.discover_all", return_value=[]):
-        async with Antenna(process_fn, tmp_path, tmp_path) as antenna:
+        async with Antenna(process_fn, tmp_path) as antenna:
             with pytest.raises(KeyError, match="no-such"):
                 await antenna.detune("no-such")
 
@@ -139,7 +109,7 @@ async def test_antenna_delivers_signals(
         return band
 
     with patch("docketeer.antenna.discover_all", return_value=[factory]):
-        async with Antenna(process_fn, tmp_path, tmp_path) as antenna:
+        async with Antenna(process_fn, tmp_path) as antenna:
             await antenna.tune(Tuning(name="t1", band="test-band", topic="events"))
             band.emit(_make_signal())
             band.stop()
@@ -149,16 +119,6 @@ async def test_antenna_delivers_signals(
     assert process_fn.call_args.kwargs["line"] == "t1"
 
 
-async def test_antenna_skips_tunings_for_missing_bands(
-    tmp_path: Path, process_fn: AsyncMock
-):
-    save_tuning(tmp_path, Tuning(name="t1", band="missing-band", topic="events"))
-    with patch("docketeer.antenna.discover_all", return_value=[]):
-        async with Antenna(process_fn, tmp_path, tmp_path) as antenna:
-            # Tuning is loaded but not running (no band)
-            assert len(antenna.list_tunings()) == 1
-
-
 async def test_antenna_cancels_tasks_on_exit(
     tmp_path: Path, process_fn: AsyncMock, band: MemoryBand
 ):
@@ -166,19 +126,17 @@ async def test_antenna_cancels_tasks_on_exit(
         return band
 
     with patch("docketeer.antenna.discover_all", return_value=[factory]):
-        async with Antenna(process_fn, tmp_path, tmp_path) as antenna:
+        async with Antenna(process_fn, tmp_path) as antenna:
             await antenna.tune(Tuning(name="t1", band="test-band", topic="events"))
-            # Task should be running
             assert antenna._tasks.get("t1") is not None
 
-    # After exit, task should be cancelled
     task = antenna._tasks.get("t1")
     assert task is None or task.cancelled() or task.done()
 
 
 async def test_antenna_list_bands_empty(tmp_path: Path, process_fn: AsyncMock):
     with patch("docketeer.antenna.discover_all", return_value=[]):
-        async with Antenna(process_fn, tmp_path, tmp_path) as antenna:
+        async with Antenna(process_fn, tmp_path) as antenna:
             assert len(antenna.list_bands()) == 0
 
 
@@ -191,7 +149,7 @@ async def test_antenna_resolves_secrets_through_vault(
         return band
 
     with patch("docketeer.antenna.discover_all", return_value=[factory]):
-        async with Antenna(process_fn, tmp_path, tmp_path, vault=vault) as antenna:
+        async with Antenna(process_fn, tmp_path, vault=vault) as antenna:
             await antenna.tune(
                 Tuning(
                     name="t1",
@@ -215,7 +173,7 @@ async def test_antenna_skips_tuning_when_secrets_but_no_vault(
         return band
 
     with patch("docketeer.antenna.discover_all", return_value=[factory]):
-        async with Antenna(process_fn, tmp_path, tmp_path) as antenna:
+        async with Antenna(process_fn, tmp_path) as antenna:
             await antenna.tune(
                 Tuning(
                     name="t1",
@@ -234,7 +192,7 @@ async def test_antenna_no_secrets_passes_none(
         return band
 
     with patch("docketeer.antenna.discover_all", return_value=[factory]):
-        async with Antenna(process_fn, tmp_path, tmp_path) as antenna:
+        async with Antenna(process_fn, tmp_path) as antenna:
             await antenna.tune(Tuning(name="t1", band="test-band", topic="events"))
             band.emit(_make_signal())
             band.stop()

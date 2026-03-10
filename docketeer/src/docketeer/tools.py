@@ -289,8 +289,16 @@ def _load_tool_plugins() -> None:
     discover_all("docketeer.tools")
 
 
-import docketeer.tools.executor as _executor  # noqa: E402, F401
-import docketeer.tools.vault as _vault  # noqa: E402, F401
-import docketeer.tools.workspace as _workspace  # noqa: E402, F401
+# --- Lazy registration of domain tools ---
+# These functions live in their domain modules to keep tools close to the
+# code they operate on. We call them here after the registry is defined
+# to avoid circular imports (domain modules import registry from this module).
 
+from docketeer.executor import _register_executor_tools  # noqa: E402
+from docketeer.vault import _register_vault_tools  # noqa: E402
+from docketeer.workspace import _register_workspace_tools  # noqa: E402
+
+_register_executor_tools()
+_register_vault_tools()
+_register_workspace_tools()
 _load_tool_plugins()

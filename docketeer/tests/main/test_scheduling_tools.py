@@ -1,350 +1,21 @@
-"""Tests for docket scheduling tools (schedule, schedule_every, list_scheduled, cancel)."""
+"""Tests for scheduling and antenna tools (list_scheduled, list_bands)."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
-from docket.dependencies import Perpetual
-
-from docketeer.scheduling import _reserved_task_keys, register_docket_tools
+from docketeer.antenna import Antenna, register_antenna_tools
+from docketeer.tasks import register_scheduling_tools
+from docketeer.testing import MemoryBand
 from docketeer.tools import ToolContext, registry
 
-# --- reserved key detection ---
 
-
-def test_reserved_task_keys_skips_non_automatic():
-    async def manual_task(  # pragma: no cover
-        perpetual: Perpetual = Perpetual(),
-    ) -> None: ...
-
-    docket = MagicMock()
-    docket.tasks = {"manual_task": manual_task}
-    assert _reserved_task_keys(docket) == set()
-
-
-# --- schedule tests ---
-
-
-async def test_schedule_with_key(mock_docket: AsyncMock, tool_context: ToolContext):
-    register_docket_tools(mock_docket, tool_context)
-    result = await registry.execute(
-        "schedule",
-        {
-            "prompt_file": "tasks/remind-chris.md",
-            "when": "2026-12-25T10:00:00-05:00",
-            "key": "xmas-reminder",
-        },
-        tool_context,
-    )
-    assert "xmas-reminder" in result
-    mock_docket.replace.assert_called_once()
-
-
-async def test_schedule_without_key(mock_docket: AsyncMock, tool_context: ToolContext):
-    register_docket_tools(mock_docket, tool_context)
-    result = await registry.execute(
-        "schedule",
-        {"prompt_file": "tasks/do-thing.md", "when": "2026-12-25T10:00:00-05:00"},
-        tool_context,
-    )
-    assert "task-" in result
-    mock_docket.add.assert_called_once()
-
-
-async def test_schedule_bad_datetime(mock_docket: AsyncMock, tool_context: ToolContext):
-    register_docket_tools(mock_docket, tool_context)
-    result = await registry.execute(
-        "schedule",
-        {"prompt_file": "tasks/test.md", "when": "not-a-date"},
-        tool_context,
-    )
-    assert "invalid datetime" in result
-
-
-async def test_schedule_rejects_colon_in_key(
-    mock_docket: AsyncMock, tool_context: ToolContext
-):
-    register_docket_tools(mock_docket, tool_context)
-    result = await registry.execute(
-        "schedule",
-        {
-            "prompt_file": "tasks/test.md",
-            "when": "2026-12-25T10:00:00-05:00",
-            "key": "search:index:foo",
-        },
-        tool_context,
-    )
-    assert "reserved for system tasks" in result
-    mock_docket.replace.assert_not_called()
-
-
-async def test_schedule_rejects_builtin_task_key(
-    mock_docket: AsyncMock, tool_context: ToolContext
-):
-    async def reverie(  # pragma: no cover
-        perpetual: Perpetual = Perpetual(every=timedelta(minutes=30), automatic=True),
-    ) -> None: ...
-
-    mock_docket.tasks = {"reverie": reverie}
-
-    register_docket_tools(mock_docket, tool_context)
-    result = await registry.execute(
-        "schedule",
-        {
-            "prompt_file": "tasks/test.md",
-            "when": "2026-12-25T10:00:00-05:00",
-            "key": "reverie",
-        },
-        tool_context,
-    )
-    assert "built-in system task" in result
-    mock_docket.replace.assert_not_called()
-
-
-async def test_schedule_with_line(mock_docket: AsyncMock, tool_context: ToolContext):
-    register_docket_tools(mock_docket, tool_context)
-    result = await registry.execute(
-        "schedule",
-        {
-            "prompt_file": "tasks/research.md",
-            "when": "2026-12-25T10:00:00-05:00",
-            "key": "research",
-            "line": "api-research",
-        },
-        tool_context,
-    )
-    assert "research" in result
-    assert "api-research" in result
-    call_kwargs = mock_docket.replace.return_value.call_args[1]
-    assert call_kwargs["line"] == "api-research"
-
-
-async def test_schedule_silent(mock_docket: AsyncMock, tool_context: ToolContext):
-    register_docket_tools(mock_docket, tool_context)
-    result = await registry.execute(
-        "schedule",
-        {
-            "prompt_file": "tasks/quiet.md",
-            "when": "2026-12-25T10:00:00-05:00",
-            "silent": True,
-        },
-        tool_context,
-    )
-    assert "silently" in result
-
-
-async def test_schedule_passes_thread_id(
-    mock_docket: AsyncMock, tool_context: ToolContext
-):
-    tool_context.thread_id = "parent_1"
-    register_docket_tools(mock_docket, tool_context)
-    await registry.execute(
-        "schedule",
-        {
-            "prompt_file": "tasks/reply-in-thread.md",
-            "when": "2026-12-25T10:00:00-05:00",
-            "key": "thread-task",
-        },
-        tool_context,
-    )
-    mock_docket.replace.assert_called_once()
-    call_kwargs = mock_docket.replace.return_value.call_args[1]
-    assert call_kwargs["thread_id"] == "parent_1"
-
-
-async def test_schedule_no_thread_by_default(
-    mock_docket: AsyncMock, tool_context: ToolContext
-):
-    register_docket_tools(mock_docket, tool_context)
-    await registry.execute(
-        "schedule",
-        {
-            "prompt_file": "tasks/do-thing.md",
-            "when": "2026-12-25T10:00:00-05:00",
-            "key": "no-thread",
-        },
-        tool_context,
-    )
-    call_kwargs = mock_docket.replace.return_value.call_args[1]
-    assert call_kwargs["thread_id"] == ""
-
-
-# --- schedule_every tests ---
-
-
-async def test_schedule_every_with_duration(
-    mock_docket: AsyncMock, tool_context: ToolContext
-):
-    register_docket_tools(mock_docket, tool_context)
-    result = await registry.execute(
-        "schedule_every",
-        {
-            "prompt_file": "tasks/check-status.md",
-            "every": "PT30M",
-            "key": "status-check",
-        },
-        tool_context,
-    )
-    assert "status-check" in result
-    assert "30m" in result.lower() or "30 min" in result.lower()
-    mock_docket.replace.assert_called_once()
-
-
-async def test_schedule_every_with_cron(
-    mock_docket: AsyncMock, tool_context: ToolContext
-):
-    register_docket_tools(mock_docket, tool_context)
-    result = await registry.execute(
-        "schedule_every",
-        {"prompt_file": "tasks/standup.md", "every": "0 9 * * 1-5", "key": "standup"},
-        tool_context,
-    )
-    assert "standup" in result
-    assert "cron" in result.lower()
-    mock_docket.replace.assert_called_once()
-
-
-async def test_schedule_every_invalid_expression(
-    mock_docket: AsyncMock, tool_context: ToolContext
-):
-    register_docket_tools(mock_docket, tool_context)
-    result = await registry.execute(
-        "schedule_every",
-        {"prompt_file": "tasks/test.md", "every": "not-valid", "key": "bad"},
-        tool_context,
-    )
-    assert "error" in result.lower()
-
-
-async def test_schedule_every_invalid_timezone(
-    mock_docket: AsyncMock, tool_context: ToolContext
-):
-    register_docket_tools(mock_docket, tool_context)
-    result = await registry.execute(
-        "schedule_every",
-        {
-            "prompt_file": "tasks/test.md",
-            "every": "0 9 * * *",
-            "key": "tz-bad",
-            "timezone": "Fake/Zone",
-        },
-        tool_context,
-    )
-    assert "error" in result.lower()
-
-
-async def test_schedule_every_with_line(
-    mock_docket: AsyncMock, tool_context: ToolContext
-):
-    register_docket_tools(mock_docket, tool_context)
-    result = await registry.execute(
-        "schedule_every",
-        {
-            "prompt_file": "tasks/monitor.md",
-            "every": "PT30M",
-            "key": "monitor",
-            "line": "monitoring",
-        },
-        tool_context,
-    )
-    assert "monitor" in result
-    call_kwargs = mock_docket.replace.return_value.call_args[1]
-    assert call_kwargs["line"] == "monitoring"
-
-
-async def test_schedule_every_silent_clears_room(
-    mock_docket: AsyncMock, tool_context: ToolContext
-):
-    register_docket_tools(mock_docket, tool_context)
-    result = await registry.execute(
-        "schedule_every",
-        {
-            "prompt_file": "tasks/quiet-work.md",
-            "every": "PT1H",
-            "key": "quiet",
-            "silent": True,
-        },
-        tool_context,
-    )
-    assert "silently" in result
-    call_kwargs = mock_docket.replace.return_value.call_args[1]
-    assert call_kwargs["room_id"] == ""
-
-
-async def test_schedule_every_thread_passthrough(
-    mock_docket: AsyncMock, tool_context: ToolContext
-):
-    tool_context.thread_id = "parent_1"
-    register_docket_tools(mock_docket, tool_context)
-    await registry.execute(
-        "schedule_every",
-        {"prompt_file": "tasks/thread-work.md", "every": "PT30M", "key": "threaded"},
-        tool_context,
-    )
-    call_kwargs = mock_docket.replace.return_value.call_args[1]
-    assert call_kwargs["thread_id"] == "parent_1"
-
-
-async def test_schedule_every_with_cron_shorthand(
-    mock_docket: AsyncMock, tool_context: ToolContext
-):
-    register_docket_tools(mock_docket, tool_context)
-    result = await registry.execute(
-        "schedule_every",
-        {
-            "prompt_file": "tasks/daily-check.md",
-            "every": "@daily",
-            "key": "daily-check",
-        },
-        tool_context,
-    )
-    assert "daily-check" in result
-    mock_docket.replace.assert_called_once()
-
-
-async def test_schedule_every_rejects_colon_in_key(
-    mock_docket: AsyncMock, tool_context: ToolContext
-):
-    register_docket_tools(mock_docket, tool_context)
-    result = await registry.execute(
-        "schedule_every",
-        {
-            "prompt_file": "tasks/test.md",
-            "every": "PT30M",
-            "key": "search:index:foo",
-        },
-        tool_context,
-    )
-    assert "reserved for system tasks" in result
-    mock_docket.replace.assert_not_called()
-
-
-async def test_schedule_every_rejects_builtin_task_key(
-    mock_docket: AsyncMock, tool_context: ToolContext
-):
-    async def backup(  # pragma: no cover
-        perpetual: Perpetual = Perpetual(every=timedelta(minutes=5), automatic=True),
-    ) -> None: ...
-
-    mock_docket.tasks = {"backup": backup}
-
-    register_docket_tools(mock_docket, tool_context)
-    result = await registry.execute(
-        "schedule_every",
-        {"prompt_file": "tasks/test.md", "every": "PT30M", "key": "backup"},
-        tool_context,
-    )
-    assert "built-in system task" in result
-    mock_docket.replace.assert_not_called()
-
-
-# --- cancel_task tests ---
-
-
-async def test_cancel_task(mock_docket: AsyncMock, tool_context: ToolContext):
-    register_docket_tools(mock_docket, tool_context)
-    result = await registry.execute("cancel_task", {"key": "old-task"}, tool_context)
-    assert "Cancelled" in result
-    mock_docket.cancel.assert_called_once_with("old-task")
+def _make_antenna(bands: dict | None = None) -> Antenna:
+    """Build a minimal Antenna mock for tool registration."""
+    antenna = Antenna.__new__(Antenna)
+    antenna._bands = bands or {}
+    antenna._tunings = {}
+    antenna._tasks = {}
+    return antenna
 
 
 # --- list_scheduled tests ---
@@ -356,7 +27,7 @@ async def test_list_scheduled_empty(mock_docket: AsyncMock, tool_context: ToolCo
     snapshot.running = []
     mock_docket.snapshot.return_value = snapshot
 
-    register_docket_tools(mock_docket, tool_context)
+    register_scheduling_tools(mock_docket)
     result = await registry.execute("list_scheduled", {}, tool_context)
     assert result == "No scheduled tasks"
 
@@ -378,7 +49,7 @@ async def test_list_scheduled_with_tasks(
     snapshot.running = [running_task]
     mock_docket.snapshot.return_value = snapshot
 
-    register_docket_tools(mock_docket, tool_context)
+    register_scheduling_tools(mock_docket)
     result = await registry.execute("list_scheduled", {}, tool_context)
     assert "2 task(s)" in result
     assert "task-1" in result
@@ -399,10 +70,10 @@ async def test_list_scheduled_shows_every_for_recurring(
     snapshot.running = []
     mock_docket.snapshot.return_value = snapshot
 
-    register_docket_tools(mock_docket, tool_context)
+    register_scheduling_tools(mock_docket)
     result = await registry.execute("list_scheduled", {}, tool_context)
     assert "recurring-1" in result
-    assert "every PT30M" in result or "PT30M" in result
+    assert "PT30M" in result
 
 
 async def test_list_scheduled_future_prompt(
@@ -418,7 +89,7 @@ async def test_list_scheduled_future_prompt(
     snapshot.running = []
     mock_docket.snapshot.return_value = snapshot
 
-    register_docket_tools(mock_docket, tool_context)
+    register_scheduling_tools(mock_docket)
     result = await registry.execute("list_scheduled", {}, tool_context)
     assert "tasks/reminder.md" in result
 
@@ -435,7 +106,35 @@ async def test_list_scheduled_running_prompt(
     snapshot.running = [task]
     mock_docket.snapshot.return_value = snapshot
 
-    register_docket_tools(mock_docket, tool_context)
+    register_scheduling_tools(mock_docket)
     result = await registry.execute("list_scheduled", {}, tool_context)
     assert "tasks/reminder.md" in result
     assert "RUNNING" in result
+
+
+# --- list_bands tests ---
+
+
+async def test_list_bands_empty(mock_docket: AsyncMock, tool_context: ToolContext):
+    register_antenna_tools(_make_antenna())
+    result = await registry.execute("list_bands", {}, tool_context)
+    assert "No bands available" in result
+
+
+async def test_list_bands_with_bands(mock_docket: AsyncMock, tool_context: ToolContext):
+    band = MemoryBand(name="wicket")
+    band.description = "SSE webhook relay"
+    register_antenna_tools(_make_antenna(bands={"wicket": band}))
+    result = await registry.execute("list_bands", {}, tool_context)
+    assert "1 band(s)" in result
+    assert "wicket" in result
+    assert "SSE webhook relay" in result
+
+
+async def test_list_bands_no_description(
+    mock_docket: AsyncMock, tool_context: ToolContext
+):
+    band = MemoryBand(name="simple")
+    register_antenna_tools(_make_antenna(bands={"simple": band}))
+    result = await registry.execute("list_bands", {}, tool_context)
+    assert "simple" in result

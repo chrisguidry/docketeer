@@ -34,7 +34,6 @@ from docketeer.dependencies import (
 from docketeer.executor import discover_executor
 from docketeer.handlers import process_messages
 from docketeer.plugins import discover_all, discover_one
-from docketeer.scheduling import register_docket_tools
 from docketeer.search import discover_search
 from docketeer.tools import ToolContext, registry
 from docketeer.vault import discover_vault
@@ -229,6 +228,11 @@ async def main() -> None:  # pragma: no cover
         environment.USAGE_PATH.mkdir(parents=True, exist_ok=True)
         log.info("Data directory: %s", environment.DATA_DIR.resolve())
 
+        # Migrate backstage JSON configs to workspace markdown
+        from docketeer.migration import migrate_backstage
+
+        migrate_backstage(environment.DATA_DIR, environment.WORKSPACE_PATH)
+
         # Discover plugins
         client, register_chat_tools = discover_chat_backend()
         executor = discover_executor()
@@ -242,7 +246,7 @@ async def main() -> None:  # pragma: no cover
         search = discover_search(docket=docket)
 
         # Set tool description template vars based on executor type
-        from docketeer.tools.executor import SCRATCH_TARGET, WORKSPACE_TARGET
+        from docketeer.executor import SCRATCH_TARGET, WORKSPACE_TARGET
 
         if executor.remaps_paths:
             registry.template_vars["workspace"] = str(WORKSPACE_TARGET)
@@ -272,23 +276,40 @@ async def main() -> None:  # pragma: no cover
         _register_task_plugins(docket)
 
         # Start antenna (realtime event feeds)
-        from docketeer.antenna import Antenna
-        from docketeer.antenna_tools import register_antenna_tools
+        from docketeer.antenna import Antenna, AntennaHook, register_antenna_tools
+        from docketeer.hooks import hook_registry
+        from docketeer.tasks import SchedulingHook, register_scheduling_tools
 
         antenna = await stack.enter_async_context(
             Antenna(
                 brain.process,
-                environment.DATA_DIR,
                 environment.WORKSPACE_PATH,
                 vault=vault,
             )
         )
-        register_antenna_tools(antenna)
 
-        # Register tools (core chat + provider-specific + docket)
+        # Wire workspace hooks
+        antenna_hook = AntennaHook()
+        antenna_hook.set_antenna(antenna)
+        hook_registry.register(antenna_hook)
+
+        scheduling_hook = SchedulingHook()
+        scheduling_hook.set_docket(docket)
+        hook_registry.register(scheduling_hook)
+
+        # Discover plugin-contributed hooks
+        for hook_factory in discover_all("docketeer.hooks"):
+            hook = hook_factory()
+            hook_registry.register(hook)
+
+        # Startup scan: reconcile workspace files with runtime state
+        await hook_registry.scan_all(environment.WORKSPACE_PATH)
+
+        # Register domain tools
         _register_core_chat_tools(client)
         register_chat_tools(client, tool_context)
-        register_docket_tools(docket, tool_context)
+        register_antenna_tools(antenna)
+        register_scheduling_tools(docket)
 
         worker = await stack.enter_async_context(Worker(docket))
         worker_task = asyncio.create_task(worker.run_forever())

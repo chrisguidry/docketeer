@@ -6,14 +6,13 @@ import secrets
 from urllib.parse import parse_qs, urlparse
 
 import httpx
-from docket import Docket
 from mcp.shared.exceptions import McpError
 
 from docketeer.plugins import PluginUnavailable
 from docketeer.tools import ToolContext, registry
 from docketeer.vault import SecretEnvRef, SecretResolutionError, resolve_env
 
-from . import config
+from .config import MCPServerConfig, load_servers, save_server
 from .manager import manager
 from .oauth import (
     REDIRECT_URI,
@@ -38,17 +37,10 @@ async def _check_auth_required(url: str) -> bool:
         return False
 
 
-def current_docket() -> Docket:
-    """Resolve the current Docket from dependencies."""
-    from docketeer.dependencies import _docket_var
-
-    return _docket_var.get()
-
-
 @registry.tool(emoji=":electric_plug:")
 async def list_mcp_servers(ctx: ToolContext) -> str:
     """List configured MCP servers and their connection status."""
-    servers = config.load_servers()
+    servers = load_servers(ctx.workspace)
     if not servers:
         return "No MCP servers configured."
 
@@ -87,7 +79,7 @@ async def connect_mcp_server(
         return f"Already connected to {name!r}."
 
     manager.set_search(ctx.search)
-    servers = config.load_servers()
+    servers = load_servers(ctx.workspace)
     cfg = servers.get(name)
     if not cfg:
         return f"No server configured with name {name!r}."
@@ -165,7 +157,7 @@ async def connect_mcp_server(
 
 async def _start_oauth_flow(
     name: str,
-    cfg: config.MCPServerConfig,
+    cfg: MCPServerConfig,
     client_id: str,
     client_secret: str,
     scopes: str,
@@ -266,11 +258,11 @@ async def mcp_oauth_complete(
     await ctx.vault.store(token_secret, access_token)
 
     # Update server config with auth secret path
-    servers = config.load_servers()
+    servers = load_servers(ctx.workspace)
     cfg = servers.get(server)
     if cfg:
         cfg.auth = token_secret
-        config.save_server(cfg)
+        save_server(ctx.workspace, cfg)
 
     # Clean up pending state
     del manager._pending_oauth[server]
@@ -308,9 +300,11 @@ async def _schedule_token_refresh(
     """Schedule a one-shot refresh task before the token expires."""
     from datetime import datetime, timedelta
 
+    from docketeer.dependencies import _docket_var
+
     from .tasks import mcp_oauth_refresh
 
-    docket = current_docket()
+    docket = _docket_var.get()
     fire_at = datetime.now().astimezone() + timedelta(seconds=max(expires_in - 300, 60))
     await docket.add(
         mcp_oauth_refresh, when=fire_at, key=f"mcp-refresh-{token_secret}"
@@ -383,82 +377,3 @@ async def use_mcp_tool(
         return await manager.call_tool(server, tool, arguments or {})
     except (ValueError, OSError, McpError) as e:
         return f"Error calling {server}/{tool}: {e}"
-
-
-@registry.tool(emoji=":electric_plug:")
-async def add_mcp_server(
-    ctx: ToolContext,
-    name: str,
-    command: str = "",
-    args: list[str] | None = None,
-    env: dict[str, str | dict[str, str]] | None = None,
-    url: str = "",
-    headers: dict[str, str] | None = None,
-    network_access: bool = False,
-) -> str:
-    """Save a new MCP server configuration. Environment variables can
-    reference vault secrets, which are resolved automatically at connect
-    time — you never need to read or handle the raw secret values yourself.
-
-    Workflow: use list_secrets to find available credentials, then pass
-    them as {{"secret": "vault/path"}} in env. For bearer-token auth, set
-    the auth field on the server config (done automatically by OAuth, or
-    manually via store_secret + config update).
-
-    name: identifier for the server
-    command: executable to run (for stdio servers)
-    args: command arguments
-    env: environment variables — values are either plain strings or
-        {{"secret": "vault/path"}} objects for vault-backed secrets. Example:
-        {{"TZ": "UTC", "API_KEY": {{"secret": "mcp/my-server/api-key"}}}}
-    url: server URL (for HTTP servers)
-    headers: HTTP headers
-    network_access: whether the server needs network access (stdio only)
-    """
-    if not command and not url:
-        return "Must provide either command (stdio) or url (HTTP)."
-
-    env_dict = config._parse_env(env or {})
-
-    cfg = config.MCPServerConfig(
-        name=name,
-        command=command,
-        args=args or [],
-        env=env_dict,
-        url=url,
-        headers=headers or {},
-        network_access=network_access,
-    )
-    try:
-        config.save_server(cfg)
-    except ValueError as e:
-        return str(e)
-
-    kind = f"command `{command}`" if command else f"url `{url}`"
-    return f"Saved server {name!r} ({kind})."
-
-
-@registry.tool(emoji=":electric_plug:")
-async def remove_mcp_server(ctx: ToolContext, name: str) -> str:
-    """Remove an MCP server configuration.
-
-    name: server name to remove
-    """
-    if manager.is_connected(name):
-        await manager.disconnect(name)
-
-    servers = config.load_servers()
-    cfg = servers.get(name)
-    if cfg and cfg.auth:
-        try:
-            docket = current_docket()
-            await docket.cancel(f"mcp-refresh-{cfg.auth}")
-        except Exception:
-            log.debug("Could not cancel refresh task for %s", name, exc_info=True)
-
-    await manager.deindex_server(name)
-    config.remove_tool_catalog(name)
-
-    if config.remove_server(name):
-        return f"Removed server {name!r}."
-    return f"No server configured with name {name!r}."

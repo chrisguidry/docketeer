@@ -1,15 +1,12 @@
 """Tests for MCP server configuration."""
 
-import json
 from pathlib import Path
 
-import pytest
-
+from docketeer.hooks import parse_frontmatter
 from docketeer.vault import SecretEnvRef
 from docketeer_mcp.config import (
     CachedToolInfo,
     MCPServerConfig,
-    _validate_name,
     load_all_tool_catalogs,
     load_servers,
     load_tool_catalog,
@@ -38,33 +35,18 @@ def test_config_neither():
     assert not c.is_http
 
 
-def test_validate_name_valid():
-    for name in ["time", "my_server", "a-b-c", "_private", "A1"]:
-        _validate_name(name)
+def test_load_servers_no_dir(workspace: Path):
+    assert load_servers(workspace) == {}
 
 
-def test_validate_name_invalid():
-    for name in ["", "123", "has space", "no!bang", "a/b"]:
-        with pytest.raises(ValueError, match="Invalid server name"):
-            _validate_name(name)
-
-
-def test_load_servers_no_dir(data_dir: Path):
-    assert load_servers() == {}
-
-
-def test_load_servers_stdio(mcp_dir: Path):
-    (mcp_dir / "time.json").write_text(
-        json.dumps(
-            {
-                "command": "uvx",
-                "args": ["mcp-server-time"],
-                "env": {"TZ": "UTC"},
-                "networkAccess": True,
-            }
-        )
+def test_load_servers_stdio(workspace: Path):
+    mcp_dir = workspace / "mcp"
+    mcp_dir.mkdir()
+    (mcp_dir / "time.md").write_text(
+        "---\ncommand: uvx\nargs: [mcp-server-time]\n"
+        "env:\n  TZ: UTC\nnetwork_access: true\n---\n"
     )
-    servers = load_servers()
+    servers = load_servers(workspace)
     assert "time" in servers
     s = servers["time"]
     assert s.name == "time"
@@ -75,16 +57,14 @@ def test_load_servers_stdio(mcp_dir: Path):
     assert s.is_stdio
 
 
-def test_load_servers_http(mcp_dir: Path):
-    (mcp_dir / "weather.json").write_text(
-        json.dumps(
-            {
-                "url": "https://weather.example.com/mcp",
-                "headers": {"Authorization": "Bearer tok"},
-            }
-        )
+def test_load_servers_http(workspace: Path):
+    mcp_dir = workspace / "mcp"
+    mcp_dir.mkdir()
+    (mcp_dir / "weather.md").write_text(
+        "---\nurl: https://weather.example.com/mcp\n"
+        "headers:\n  Authorization: Bearer tok\n---\n"
     )
-    servers = load_servers()
+    servers = load_servers(workspace)
     assert "weather" in servers
     s = servers["weather"]
     assert s.url == "https://weather.example.com/mcp"
@@ -92,22 +72,39 @@ def test_load_servers_http(mcp_dir: Path):
     assert s.is_http
 
 
-def test_load_servers_skips_bad_json(mcp_dir: Path):
-    (mcp_dir / "good.json").write_text('{"command": "echo"}')
-    (mcp_dir / "bad.json").write_text("not json{{{")
-    servers = load_servers()
+def test_load_servers_skips_unreadable(workspace: Path):
+    mcp_dir = workspace / "mcp"
+    mcp_dir.mkdir()
+    (mcp_dir / "good.md").write_text("---\ncommand: echo\n---\n")
+    bad = mcp_dir / "bad.md"
+    bad.write_text("---\ncommand: echo\n---\n")
+    bad.chmod(0o000)
+    servers = load_servers(workspace)
+    assert "good" in servers
+    assert "bad" not in servers
+    bad.chmod(0o644)
+
+
+def test_load_servers_skips_no_frontmatter(workspace: Path):
+    mcp_dir = workspace / "mcp"
+    mcp_dir.mkdir()
+    (mcp_dir / "good.md").write_text("---\ncommand: echo\n---\n")
+    (mcp_dir / "bad.md").write_text("Just plain text, no frontmatter.")
+    servers = load_servers(workspace)
     assert "good" in servers
     assert "bad" not in servers
 
 
-def test_load_servers_sorted(mcp_dir: Path):
-    (mcp_dir / "beta.json").write_text('{"command": "b"}')
-    (mcp_dir / "alpha.json").write_text('{"command": "a"}')
-    servers = load_servers()
+def test_load_servers_sorted(workspace: Path):
+    mcp_dir = workspace / "mcp"
+    mcp_dir.mkdir()
+    (mcp_dir / "beta.md").write_text("---\ncommand: b\n---\n")
+    (mcp_dir / "alpha.md").write_text("---\ncommand: a\n---\n")
+    servers = load_servers(workspace)
     assert list(servers.keys()) == ["alpha", "beta"]
 
 
-def test_save_server_stdio(mcp_dir: Path):
+def test_save_server_stdio(workspace: Path):
     config = MCPServerConfig(
         name="time",
         command="uvx",
@@ -115,65 +112,79 @@ def test_save_server_stdio(mcp_dir: Path):
         env={"TZ": "UTC"},
         network_access=True,
     )
-    save_server(config)
-    data = json.loads((mcp_dir / "time.json").read_text())
-    assert data["command"] == "uvx"
-    assert data["args"] == ["mcp-server-time"]
-    assert data["env"] == {"TZ": "UTC"}
-    assert data["networkAccess"] is True
+    save_server(workspace, config)
+    content = (workspace / "mcp" / "time.md").read_text()
+    meta, _ = parse_frontmatter(content)
+    assert meta["command"] == "uvx"
+    assert meta["args"] == ["mcp-server-time"]
+    assert meta["env"] == {"TZ": "UTC"}
+    assert meta["network_access"] is True
 
 
-def test_save_server_stdio_minimal(mcp_dir: Path):
+def test_save_server_stdio_minimal(workspace: Path):
     config = MCPServerConfig(name="simple", command="echo")
-    save_server(config)
-    data = json.loads((mcp_dir / "simple.json").read_text())
-    assert data == {"command": "echo", "networkAccess": False}
+    save_server(workspace, config)
+    content = (workspace / "mcp" / "simple.md").read_text()
+    meta, _ = parse_frontmatter(content)
+    assert meta == {"command": "echo"}
 
 
-def test_save_server_http(mcp_dir: Path):
+def test_save_server_http(workspace: Path):
     config = MCPServerConfig(
         name="api",
         url="https://api.example.com/mcp",
         headers={"X-Key": "secret"},
     )
-    save_server(config)
-    data = json.loads((mcp_dir / "api.json").read_text())
-    assert data["url"] == "https://api.example.com/mcp"
-    assert data["headers"] == {"X-Key": "secret"}
+    save_server(workspace, config)
+    content = (workspace / "mcp" / "api.md").read_text()
+    meta, _ = parse_frontmatter(content)
+    assert meta["url"] == "https://api.example.com/mcp"
+    assert meta["headers"] == {"X-Key": "secret"}
 
 
-def test_save_server_http_minimal(mcp_dir: Path):
+def test_save_server_http_minimal(workspace: Path):
     config = MCPServerConfig(name="bare", url="https://example.com/mcp")
-    save_server(config)
-    data = json.loads((mcp_dir / "bare.json").read_text())
-    assert data == {"url": "https://example.com/mcp"}
+    save_server(workspace, config)
+    content = (workspace / "mcp" / "bare.md").read_text()
+    meta, _ = parse_frontmatter(content)
+    assert meta == {"url": "https://example.com/mcp"}
 
 
-def test_save_server_creates_dir(data_dir: Path):
-    save_server(MCPServerConfig(name="test", command="echo"))
-    assert (data_dir / "mcp" / "test.json").is_file()
+def test_save_server_creates_dir(workspace: Path):
+    save_server(workspace, MCPServerConfig(name="test", command="echo"))
+    assert (workspace / "mcp" / "test.md").is_file()
 
 
-def test_save_server_empty_config(mcp_dir: Path):
+def test_save_server_empty_config(workspace: Path):
     config = MCPServerConfig(name="empty")
-    save_server(config)
-    data = json.loads((mcp_dir / "empty.json").read_text())
-    assert data == {}
+    save_server(workspace, config)
+    content = (workspace / "mcp" / "empty.md").read_text()
+    meta, _ = parse_frontmatter(content)
+    assert meta == {}
 
 
-def test_save_server_invalid_name(data_dir: Path):
-    with pytest.raises(ValueError, match="Invalid server name"):
-        save_server(MCPServerConfig(name="bad name!", command="echo"))
+def test_save_server_preserves_body(workspace: Path):
+    mcp_dir = workspace / "mcp"
+    mcp_dir.mkdir()
+    (mcp_dir / "time.md").write_text("---\ncommand: uvx\n---\nServer notes here.")
+    config = MCPServerConfig(name="time", command="npx")
+    save_server(workspace, config)
+    content = (mcp_dir / "time.md").read_text()
+    meta, body = parse_frontmatter(content)
+    assert meta["command"] == "npx"
+    assert body == "Server notes here."
 
 
-def test_remove_server_exists(mcp_dir: Path):
-    (mcp_dir / "doomed.json").write_text("{}")
-    assert remove_server("doomed") is True
-    assert not (mcp_dir / "doomed.json").exists()
+def test_remove_server_exists(workspace: Path):
+    mcp_dir = workspace / "mcp"
+    mcp_dir.mkdir()
+    (mcp_dir / "doomed.md").write_text("---\ncommand: echo\n---\n")
+    assert remove_server(workspace, "doomed") is True
+    assert not (mcp_dir / "doomed.md").exists()
 
 
-def test_remove_server_missing(mcp_dir: Path):
-    assert remove_server("nonexistent") is False
+def test_remove_server_missing(workspace: Path):
+    assert remove_server(workspace, "nonexistent") is False
 
 
 # --- auth field ---
@@ -184,70 +195,70 @@ def test_config_auth_default():
     assert c.auth == ""
 
 
-def test_load_servers_with_auth(mcp_dir: Path):
-    (mcp_dir / "api.json").write_text(
-        json.dumps(
-            {
-                "url": "https://api.example.com/mcp",
-                "auth": "mcp/api/token",
-            }
-        )
+def test_load_servers_with_auth(workspace: Path):
+    mcp_dir = workspace / "mcp"
+    mcp_dir.mkdir()
+    (mcp_dir / "api.md").write_text(
+        "---\nurl: https://api.example.com/mcp\nauth: mcp/api/token\n---\n"
     )
-    servers = load_servers()
+    servers = load_servers(workspace)
     assert servers["api"].auth == "mcp/api/token"
 
 
-def test_load_servers_without_auth(mcp_dir: Path):
-    (mcp_dir / "api.json").write_text(
-        json.dumps({"url": "https://api.example.com/mcp"})
-    )
-    servers = load_servers()
+def test_load_servers_without_auth(workspace: Path):
+    mcp_dir = workspace / "mcp"
+    mcp_dir.mkdir()
+    (mcp_dir / "api.md").write_text("---\nurl: https://api.example.com/mcp\n---\n")
+    servers = load_servers(workspace)
     assert servers["api"].auth == ""
 
 
-def test_save_server_http_with_auth(mcp_dir: Path):
+def test_save_server_http_with_auth(workspace: Path):
     config = MCPServerConfig(
         name="api",
         url="https://api.example.com/mcp",
         auth="mcp/api/token",
     )
-    save_server(config)
-    data = json.loads((mcp_dir / "api.json").read_text())
-    assert data["auth"] == "mcp/api/token"
+    save_server(workspace, config)
+    content = (workspace / "mcp" / "api.md").read_text()
+    meta, _ = parse_frontmatter(content)
+    assert meta["auth"] == "mcp/api/token"
 
 
-def test_save_server_http_without_auth(mcp_dir: Path):
+def test_save_server_http_without_auth(workspace: Path):
     config = MCPServerConfig(name="api", url="https://api.example.com/mcp")
-    save_server(config)
-    data = json.loads((mcp_dir / "api.json").read_text())
-    assert "auth" not in data
+    save_server(workspace, config)
+    content = (workspace / "mcp" / "api.md").read_text()
+    meta, _ = parse_frontmatter(content)
+    assert "auth" not in meta
 
 
 # --- secret env refs ---
 
 
-def test_load_servers_with_secret_env(mcp_dir: Path):
-    (mcp_dir / "gw.json").write_text(
-        json.dumps(
-            {
-                "command": "uvx",
-                "args": ["google-workspace-mcp"],
-                "env": {
-                    "TZ": "UTC",
-                    "CLIENT_ID": {"secret": "mcp/gw/client-id"},
-                    "CLIENT_SECRET": {"secret": "mcp/gw/client-secret"},
-                },
-            }
-        )
+def test_load_servers_with_secret_env(workspace: Path):
+    mcp_dir = workspace / "mcp"
+    mcp_dir.mkdir()
+    (mcp_dir / "gw.md").write_text(
+        "---\n"
+        "command: uvx\n"
+        "args: [google-workspace-mcp]\n"
+        "env:\n"
+        "  TZ: UTC\n"
+        "  CLIENT_ID:\n"
+        "    secret: mcp/gw/client-id\n"
+        "  CLIENT_SECRET:\n"
+        "    secret: mcp/gw/client-secret\n"
+        "---\n"
     )
-    servers = load_servers()
+    servers = load_servers(workspace)
     env = servers["gw"].env
     assert env["TZ"] == "UTC"
     assert env["CLIENT_ID"] == SecretEnvRef(secret="mcp/gw/client-id")
     assert env["CLIENT_SECRET"] == SecretEnvRef(secret="mcp/gw/client-secret")
 
 
-def test_save_server_with_secret_env(mcp_dir: Path):
+def test_save_server_with_secret_env(workspace: Path):
     cfg = MCPServerConfig(
         name="gw",
         command="uvx",
@@ -256,24 +267,31 @@ def test_save_server_with_secret_env(mcp_dir: Path):
             "CLIENT_ID": SecretEnvRef(secret="mcp/gw/client-id"),
         },
     )
-    save_server(cfg)
-    data = json.loads((mcp_dir / "gw.json").read_text())
-    assert data["env"]["TZ"] == "UTC"
-    assert data["env"]["CLIENT_ID"] == {"secret": "mcp/gw/client-id"}
+    save_server(workspace, cfg)
+    content = (workspace / "mcp" / "gw.md").read_text()
+    meta, _ = parse_frontmatter(content)
+    assert meta["env"]["TZ"] == "UTC"
+    assert meta["env"]["CLIENT_ID"] == {"secret": "mcp/gw/client-id"}
 
 
-def test_load_save_roundtrip_secret_env(mcp_dir: Path):
-    original_env = {
-        "PLAIN": "value",
-        "SECRET": {"secret": "vault/path"},
-    }
-    (mcp_dir / "rt.json").write_text(
-        json.dumps({"command": "echo", "env": original_env})
+def test_load_save_roundtrip_secret_env(workspace: Path):
+    mcp_dir = workspace / "mcp"
+    mcp_dir.mkdir()
+    (mcp_dir / "rt.md").write_text(
+        "---\n"
+        "command: echo\n"
+        "env:\n"
+        "  PLAIN: value\n"
+        "  SECRET:\n"
+        "    secret: vault/path\n"
+        "---\n"
     )
-    servers = load_servers()
-    save_server(servers["rt"])
-    data = json.loads((mcp_dir / "rt.json").read_text())
-    assert data["env"] == original_env
+    servers = load_servers(workspace)
+    save_server(workspace, servers["rt"])
+    content = (mcp_dir / "rt.md").read_text()
+    meta, _ = parse_frontmatter(content)
+    assert meta["env"]["PLAIN"] == "value"
+    assert meta["env"]["SECRET"] == {"secret": "vault/path"}
 
 
 # --- tool catalog persistence ---
