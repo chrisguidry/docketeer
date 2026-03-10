@@ -396,10 +396,7 @@ class SlackClient(ChatClient):
         return None
 
     async def reply_thread_id(self, msg: IncomingMessage) -> str:
-        if msg.thread_id:
-            return msg.thread_id
-        _channel, ts = decode_message_id(msg.message_id)
-        return ts
+        return msg.thread_id or decode_message_id(msg.message_id)[1]
 
     async def set_thread_status(
         self,
@@ -437,9 +434,7 @@ class SlackClient(ChatClient):
 
     async def room_slug(self, room_id: str) -> str:
         room = self._rooms.get(room_id)
-        if room and room.name:
-            return room.name
-        return room_id
+        return room.name if room and room.name else room_id
 
     async def room_context(self, room_id: str, username: str) -> str:
         room = self._rooms.get(room_id)

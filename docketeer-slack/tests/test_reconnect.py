@@ -1,10 +1,12 @@
 import json
 from datetime import UTC, datetime
+from typing import cast
 from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
 import websockets
+from websockets import ClientConnection
 
 from docketeer.chat import RoomInfo, RoomKind, RoomMessage
 from docketeer_slack.client import SlackClient
@@ -50,13 +52,16 @@ async def test_fake_socket_exhaustion():
 
 
 async def test_incoming_messages_yields_and_dedupes(slack_client: SlackClient):
-    slack_client._ws = _FakeSocket(
-        [
-            json.dumps({"envelope_id": "e1", "payload": {}}),
-            json.dumps({"envelope_id": "e2", "payload": {}}),
-            json.dumps({"envelope_id": "e3", "payload": {}}),
-            json.dumps({"envelope_id": "e4", "payload": {}}),
-        ]
+    slack_client._ws = cast(
+        ClientConnection,
+        _FakeSocket(
+            [
+                json.dumps({"envelope_id": "e1", "payload": {}}),
+                json.dumps({"envelope_id": "e2", "payload": {}}),
+                json.dumps({"envelope_id": "e3", "payload": {}}),
+                json.dumps({"envelope_id": "e4", "payload": {}}),
+            ]
+        ),
     )
     events = [
         None,
@@ -104,11 +109,12 @@ async def test_incoming_messages_reconnects_after_disconnect(slack_client: Slack
     first = _DisconnectingSocket()
     second = _FakeSocket([json.dumps({"envelope_id": "e1", "payload": {}})])
 
+    count = 0
+
     async def open_socket() -> None:
-        if not hasattr(open_socket, "count"):
-            open_socket.count = 0
-        open_socket.count += 1
-        slack_client._ws = first if open_socket.count == 1 else second
+        nonlocal count
+        count += 1
+        slack_client._ws = cast(ClientConnection, first if count == 1 else second)
 
     message = slack_client._incoming_from_message(
         {"channel": "D1", "user": "U1", "text": "ok", "ts": "1718123456.123456"},

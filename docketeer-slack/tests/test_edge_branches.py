@@ -1,8 +1,11 @@
 import asyncio
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
+from typing import cast
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from websockets import ClientConnection
 
 from docketeer.chat import RoomInfo, RoomKind
 from docketeer_slack.client import SlackClient
@@ -10,16 +13,16 @@ from docketeer_slack.client import SlackClient
 
 async def test_incoming_messages_skips_ack_without_envelope(slack_client: SlackClient):
     class OneShotSocket:
-        def __aiter__(self) -> object:
+        def __aiter__(self) -> AsyncIterator[str]:
             return self._iter()
 
-        async def _iter(self) -> object:
+        async def _iter(self) -> AsyncIterator[str]:
             yield "{}"
 
         async def close(self) -> None:
             pass
 
-    slack_client._ws = OneShotSocket()
+    slack_client._ws = cast(ClientConnection, OneShotSocket())
     with (
         patch.object(slack_client, "_open_socket", new_callable=AsyncMock),
         patch.object(slack_client, "_prime_history", new_callable=AsyncMock),
@@ -58,11 +61,14 @@ async def test_incoming_messages_yields_without_timestamp_update(
     slack_client: SlackClient,
 ):
     class OneShotSocket:
-        def __aiter__(self) -> object:
+        def __init__(self) -> None:
+            self.done = False
+
+        def __aiter__(self) -> "OneShotSocket":
             return self
 
         async def __anext__(self) -> str:
-            if hasattr(self, "done"):
+            if self.done:
                 raise StopAsyncIteration
             self.done = True
             return '{"payload": {}}'
@@ -81,7 +87,7 @@ async def test_incoming_messages_yields_without_timestamp_update(
     slack_client._high_water = datetime(2026, 2, 7, 12, 0, tzinfo=UTC)
 
     async def open_socket() -> None:
-        slack_client._ws = socket
+        slack_client._ws = cast(ClientConnection, socket)
 
     with (
         patch.object(slack_client, "_open_socket", side_effect=open_socket),
@@ -104,7 +110,9 @@ async def test_fetch_messages_before_after_params(
     before = datetime(2026, 2, 6, 12, 0, tzinfo=UTC)
     after = datetime(2026, 2, 6, 11, 0, tzinfo=UTC)
     await slack_client.fetch_messages("C1", before=before, after=after)
-    params = api_get.await_args.kwargs["params"]
+    await_args = api_get.await_args
+    assert await_args is not None
+    params = await_args.kwargs["params"]
     assert params["latest"] == before.timestamp()
     assert params["oldest"] == after.timestamp()
 
@@ -133,16 +141,18 @@ async def test_list_rooms_cursor_branch(slack_client: SlackClient):
         {"channels": [], "response_metadata": {"next_cursor": ""}},
     ]
 
+    call_count = 0
+
     async def fake_api_get(
         _method: str, *, params: dict[str, object] | None = None
     ) -> dict[str, object]:
-        if fake_api_get.calls:
+        nonlocal call_count
+        if call_count:
             assert params is not None
             assert params["cursor"] == "NEXT"
-        fake_api_get.calls += 1
-        return results[fake_api_get.calls - 1]
+        call_count += 1
+        return results[call_count - 1]
 
-    fake_api_get.calls = 0
     with patch.object(slack_client, "_api_get", side_effect=fake_api_get):
         rooms = await slack_client.list_rooms()
     assert rooms == []
@@ -177,14 +187,14 @@ async def test_incoming_messages_without_socket_in_finally(slack_client: SlackCl
         def __bool__(self) -> bool:
             return False
 
-        def __aiter__(self) -> object:
+        def __aiter__(self) -> "FalseySocket":
             return self
 
         async def __anext__(self) -> str:
             raise StopAsyncIteration
 
     async def open_socket() -> None:
-        slack_client._ws = FalseySocket()
+        slack_client._ws = cast(ClientConnection, FalseySocket())
 
     with (
         patch.object(slack_client, "_open_socket", side_effect=open_socket),
