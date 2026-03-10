@@ -7,6 +7,7 @@ import json
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import AsyncExitStack
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -36,6 +37,14 @@ from docketeer_slack.parsing import (
 log = logging.getLogger(__name__)
 
 API_BASE = "https://slack.com/api"
+
+
+@dataclass
+class SlackReplyStream:
+    channel_id: str
+    stream_ts: str
+    thread_id: str
+    user_id: str = ""
 
 
 class SlackClient(ChatClient):
@@ -414,6 +423,68 @@ class SlackClient(ChatClient):
                 "thread_ts": thread_id,
                 "status": status,
             },
+        )
+
+    async def start_reply_stream(
+        self,
+        msg: IncomingMessage,
+        thread_id: str,
+        text: str,
+    ) -> SlackReplyStream | None:
+        if not thread_id or not text:
+            return None
+        data: dict[str, Any] = {
+            "channel": msg.room_id,
+            "thread_ts": thread_id,
+            "markdown_text": text,
+        }
+        if self._team_id:
+            data["recipient_team_id"] = self._team_id
+        if msg.kind is RoomKind.direct and msg.user_id:
+            data["recipient_user_id"] = msg.user_id
+        payload = await self._api_post(
+            "chat.startStream",
+            token=self.bot_token,
+            data=data,
+        )
+        stream_ts = payload.get("ts", "")
+        if not stream_ts:
+            raise httpx.HTTPError("Slack chat.startStream did not return ts")
+        return SlackReplyStream(
+            channel_id=msg.room_id,
+            stream_ts=stream_ts,
+            thread_id=thread_id,
+            user_id=msg.user_id if msg.kind is RoomKind.direct else "",
+        )
+
+    async def append_reply_stream(self, stream: Any, text: str) -> None:
+        if not isinstance(stream, SlackReplyStream) or not text:
+            return
+        await self._api_post(
+            "chat.appendStream",
+            token=self.bot_token,
+            data={
+                "channel": stream.channel_id,
+                "ts": stream.stream_ts,
+                "markdown_text": text,
+            },
+        )
+
+    async def stop_reply_stream(self, stream: Any) -> None:
+        if not isinstance(stream, SlackReplyStream):
+            return
+        data: dict[str, Any] = {
+            "channel": stream.channel_id,
+            "ts": stream.stream_ts,
+        }
+        if self._team_id:
+            data["recipient_team_id"] = self._team_id
+        if stream.user_id:
+            data["recipient_user_id"] = stream.user_id
+        await self._api_post(
+            "chat.stopStream",
+            token=self.bot_token,
+            data=data,
         )
 
     async def react(self, message_id: str, emoji: str) -> None:

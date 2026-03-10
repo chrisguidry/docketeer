@@ -1,5 +1,6 @@
 """Tests for stream_message and content block serialization."""
 
+from collections.abc import AsyncIterator
 from unittest.mock import MagicMock
 
 from anthropic.types import TextBlock, ToolUseBlock
@@ -124,6 +125,67 @@ async def test_stream_message_with_on_first_text(mock_client: MagicMock) -> None
         on_first_text=on_first_text,
     )
     assert callback_calls == [True]
+
+
+async def test_stream_message_with_on_text(mock_client: MagicMock) -> None:
+    """stream_message forwards incremental text chunks to on_text."""
+    text_block = make_text_block("Hello!")
+    response = make_response([text_block])
+
+    mock_client.messages.stream.return_value = FakeStream(response)
+
+    chunks: list[str] = []
+
+    async def on_text(text: str) -> None:
+        chunks.append(text)
+
+    await stream_message(
+        client=mock_client,
+        model=MODEL,
+        system=[],
+        messages=[],
+        tools=[],
+        on_text=on_text,
+    )
+    assert chunks == ["Hello"]
+
+
+async def test_stream_message_with_on_first_text_and_on_text(
+    mock_client: MagicMock,
+) -> None:
+    """on_first_text fires once and on_text receives every stream chunk."""
+
+    class _ChunkedStream(FakeStream):
+        def _make_text_stream(self) -> AsyncIterator[str]:
+            async def gen() -> AsyncIterator[str]:
+                yield "Hel"
+                yield "lo"
+                yield "!"
+
+            return gen()
+
+    text_block = make_text_block("Hello!")
+    response = make_response([text_block])
+    mock_client.messages.stream.return_value = _ChunkedStream(response)
+
+    events: list[str] = []
+
+    async def on_first_text() -> None:
+        events.append("first")
+
+    async def on_text(text: str) -> None:
+        events.append(text)
+
+    await stream_message(
+        client=mock_client,
+        model=MODEL,
+        system=[],
+        messages=[],
+        tools=[],
+        on_first_text=on_first_text,
+        on_text=on_text,
+    )
+    assert events == ["first", "Hel", "lo", "!"]
 
 
 async def test_stream_message_skips_non_text_blocks(mock_client: MagicMock) -> None:
