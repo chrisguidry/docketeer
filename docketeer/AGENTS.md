@@ -27,6 +27,12 @@ plugin tests when modifying public interfaces.
   phases.
 - **`plugins.py`** — entry point discovery. `discover_one()` for single-select
   plugins, `discover_all()` for multi-load.
+- **`tools/`** — built-in tool implementations (workspace files, vault,
+  executor). The `__init__.py` has the tool registry and `ToolContext`.
+- **`plugins.py`** — entry point discovery. `discover_one()` for auto-selected
+  single-select plugins, `discover_explicit()` for optional single-select
+  plugins that stay disabled until explicitly configured, `discover_all()` for
+  multi-load.
 - **`prompt.py`** — system prompt assembly from prompt providers.
 - **`tasks.py`** — Docket task definitions (nudge) and the `SchedulingHook`
   for file-based task scheduling.
