@@ -151,7 +151,7 @@ async def _fetch_one(
     mailbox: str,
     uid: int,
 ) -> Signal | None:
-    response = await client.uid("fetch", str(uid), "(RFC822)")
+    response = await client.uid("fetch", str(uid), "(BODY.PEEK[])")
     log.debug(
         "FETCH UID %d: result=%s, %d lines, first=%r",
         uid,
