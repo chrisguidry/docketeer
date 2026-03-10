@@ -78,7 +78,7 @@ async def handle_message(
     room_ctx = await client.room_context(msg.room_id, msg.username)
     slug = await client.room_slug(msg.room_id)
 
-    thread_id = msg.thread_id
+    thread_id = await client.reply_thread_id(msg)
     tool_emojis: set[str] = set()
 
     async def _on_tool_start(tool_name: str) -> None:
@@ -99,6 +99,7 @@ async def handle_message(
     )
 
     await client.react(msg.message_id, ":brain:")
+    await client.set_thread_status(msg.room_id, thread_id, "is thinking...")
     try:
         response = await brain.process(
             line=msg.room_id,
@@ -118,6 +119,7 @@ async def handle_message(
         response = BrainResponse(text=APOLOGY)
     finally:
         await client.unreact(msg.message_id, ":brain:")
+        await client.set_thread_status(msg.room_id, thread_id, "")
         for emoji in tool_emojis:
             await client.unreact(msg.message_id, emoji)
         await client.send_typing(msg.room_id, False)

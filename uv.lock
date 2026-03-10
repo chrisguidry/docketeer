@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -23,6 +23,7 @@ members = [
     "docketeer-monty",
     "docketeer-rocketchat",
     "docketeer-search",
+    "docketeer-slack",
     "docketeer-subprocess",
     "docketeer-tui",
     "docketeer-web",
@@ -46,6 +47,7 @@ dev = [
     { name = "docketeer-monty", editable = "docketeer-monty" },
     { name = "docketeer-rocketchat", editable = "docketeer-rocketchat" },
     { name = "docketeer-search", editable = "docketeer-search" },
+    { name = "docketeer-slack", editable = "docketeer-slack" },
     { name = "docketeer-subprocess", editable = "docketeer-subprocess" },
     { name = "docketeer-tui", editable = "docketeer-tui" },
     { name = "docketeer-web", editable = "docketeer-web" },
@@ -697,6 +699,22 @@ dependencies = [
 requires-dist = [
     { name = "docketeer", editable = "docketeer" },
     { name = "fastembed" },
+]
+
+[[package]]
+name = "docketeer-slack"
+source = { editable = "docketeer-slack" }
+dependencies = [
+    { name = "docketeer" },
+    { name = "httpx" },
+    { name = "websockets" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "docketeer", editable = "docketeer" },
+    { name = "httpx" },
+    { name = "websockets" },
 ]
 
 [[package]]
