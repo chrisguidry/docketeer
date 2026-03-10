@@ -1,0 +1,32 @@
+"""Slack backend for Docketeer."""
+
+from docketeer.chat import ChatClient
+from docketeer.tools import ToolContext, registry, safe_path
+from docketeer_slack.client import SlackClient
+
+
+def create_client() -> SlackClient:
+    """Create and return a SlackClient instance."""
+    return SlackClient()
+
+
+def register_tools(client: ChatClient, tool_context: ToolContext) -> None:
+    """Register Slack-specific tools (send_file)."""
+
+    @registry.tool(emoji=":paperclip:")
+    async def send_file(ctx: ToolContext, path: str, message: str = "") -> str:
+        """Send a file from the workspace to the current chat room.
+
+        path: relative path to the file in workspace
+        message: optional message to include with the file
+        """
+        target = safe_path(ctx.workspace, path)
+        if not target.exists():
+            return f"File not found: {path}"
+        if target.is_dir():
+            return f"Cannot send a directory: {path}"
+
+        await client.upload_file(
+            ctx.chat_room, str(target), message=message, thread_id=ctx.thread_id
+        )
+        return f"Sent {path} to chat"
