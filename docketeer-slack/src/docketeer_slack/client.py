@@ -418,7 +418,7 @@ class SlackClient(ChatClient):
         }
         if self._team_id:
             data["recipient_team_id"] = self._team_id
-        if msg.kind is RoomKind.direct and msg.user_id:
+        if msg.user_id:
             data["recipient_user_id"] = msg.user_id
         payload = await self._api_post(
             "chat.startStream",
@@ -432,7 +432,7 @@ class SlackClient(ChatClient):
             channel_id=msg.room_id,
             stream_ts=stream_ts,
             thread_id=thread_id,
-            user_id=msg.user_id if msg.kind is RoomKind.direct else "",
+            user_id=msg.user_id,
         )
 
     async def append_reply_stream(self, stream: Any, text: str) -> None:

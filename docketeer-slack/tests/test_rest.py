@@ -50,14 +50,14 @@ async def test_start_reply_stream_channel(slack_client: SlackClient):
         channel_id="C1",
         stream_ts="1718.1",
         thread_id="1718",
-        user_id="",
+        user_id="U1",
     )
     body = route.calls[0].request.content.decode()
     assert "channel=C1" in body
     assert "thread_ts=1718" in body
     assert "markdown_text=hello" in body
     assert "recipient_team_id=" in body
-    assert "recipient_user_id" not in body
+    assert "recipient_user_id=U1" in body
 
 
 @respx.mock
@@ -101,6 +101,33 @@ async def test_start_reply_stream_without_team_id(slack_client: SlackClient):
     )
     body = route.calls[0].request.content.decode()
     assert "recipient_team_id" not in body
+
+
+@respx.mock
+async def test_start_reply_stream_without_user_id(slack_client: SlackClient):
+    route = respx.post("https://slack.com/api/chat.startStream")
+    route.mock(return_value=httpx.Response(200, json={"ok": True, "ts": "1718.1"}))
+    stream = await slack_client.start_reply_stream(
+        IncomingMessage(
+            message_id="C1:1718",
+            user_id="",
+            username="alice",
+            display_name="Alice",
+            text="hi",
+            room_id="C1",
+            kind=RoomKind.public,
+        ),
+        "1718",
+        "hello",
+    )
+    assert stream == SlackReplyStream(
+        channel_id="C1",
+        stream_ts="1718.1",
+        thread_id="1718",
+        user_id="",
+    )
+    body = route.calls[0].request.content.decode()
+    assert "recipient_user_id" not in body
 
 
 @respx.mock
