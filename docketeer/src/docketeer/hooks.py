@@ -58,6 +58,15 @@ def render_frontmatter(meta: dict, body: str) -> str:
     return f"---\n{raw}\n---\n"
 
 
+def read_line_context(workspace: Path, line: str) -> str:
+    """Read the body of a line's markdown file, if it exists."""
+    path = workspace / "lines" / f"{line}.md"
+    if not path.exists():
+        return ""
+    _, body = parse_frontmatter(path.read_text())
+    return body.strip()
+
+
 @dataclass
 class HookResult:
     """Result from a hook's validate call."""

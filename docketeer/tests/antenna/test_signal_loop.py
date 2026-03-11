@@ -185,7 +185,7 @@ async def test_deliver_signal_with_line_body(tmp_path: Path):
     lines_dir = workspace / "lines"
     lines_dir.mkdir()
     (lines_dir / "opensource.md").write_text(
-        "---\n---\nNotify Chris about external contributors."
+        "Notify Chris about external contributors."
     )
 
     process = AsyncMock(return_value=BrainResponse(text=""))
@@ -209,7 +209,7 @@ async def test_deliver_signal_with_line_and_tuning_body(tmp_path: Path):
     lines_dir = workspace / "lines"
     lines_dir.mkdir()
     (lines_dir / "opensource.md").write_text(
-        "---\n---\nNotify Chris about external contributors."
+        "Notify Chris about external contributors."
     )
 
     process = AsyncMock(return_value=BrainResponse(text=""))

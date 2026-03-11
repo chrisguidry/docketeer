@@ -7,6 +7,7 @@ from docketeer.hooks import (
     HookResult,
     WorkspaceHook,
     parse_frontmatter,
+    read_line_context,
     render_frontmatter,
     strip_frontmatter,
 )
@@ -88,6 +89,27 @@ class TestStripFrontmatter:
     def test_no_frontmatter_returns_all(self):
         content = "Just text."
         assert strip_frontmatter(content) == "Just text."
+
+
+class TestReadLineContext:
+    def test_returns_body(self, tmp_path: Path):
+        lines_dir = tmp_path / "lines"
+        lines_dir.mkdir()
+        (lines_dir / "research.md").write_text(
+            "---\ntag: research\n---\nFocus on academic papers."
+        )
+        assert read_line_context(tmp_path, "research") == "Focus on academic papers."
+
+    def test_returns_empty_when_no_file(self, tmp_path: Path):
+        assert read_line_context(tmp_path, "nonexistent") == ""
+
+    def test_strips_frontmatter(self, tmp_path: Path):
+        lines_dir = tmp_path / "lines"
+        lines_dir.mkdir()
+        (lines_dir / "email.md").write_text(
+            "---\ntag: inbox\n---\nHandle email carefully."
+        )
+        assert read_line_context(tmp_path, "email") == "Handle email carefully."
 
 
 class FakeHook:

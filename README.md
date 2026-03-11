@@ -154,8 +154,11 @@ Lines are just names: a DM with `chris` uses the line `chris`, a channel uses
   on the line `chris` so the reply lands in the same conversation.
 
 All lines share the same workspace. Each line can have a context file at
-`lines/{name}.md` that gets loaded into the system prompt whenever that line
-is active, giving the agent standing instructions for that context.
+`lines/{name}.md` whose body gets injected as system context whenever that
+line is active — whether the message comes from a chat conversation, a
+scheduled task, or a realtime signal. This gives the agent standing
+instructions for that context ("only flag important emails", "notify Chris
+about external contributors") that it can update itself as it learns.
 
 ### Brain
 
@@ -178,9 +181,10 @@ let the agent read and write its own files.
 
 A [Redis-backed task scheduler](https://github.com/chrisguidry/docket) that
 gives the agent autonomy. The built-in `nudge` task lets the agent schedule
-future prompts for itself — each scheduled task runs on its own line with
-persistent conversation history. Task plugins (like `docketeer-autonomy`) can
-add their own recurring tasks.
+future prompts for itself — each scheduled task runs on a line with persistent
+conversation history. If the task specifies a `line:` and that line has a
+context file, the line's instructions are injected as system context. Task
+plugins (like `docketeer-autonomy`) can add their own recurring tasks.
 
 ### Antenna
 
@@ -189,13 +193,17 @@ external services — `docketeer-wicket` connects to an SSE endpoint,
 `docketeer-atproto` connects to the Bluesky Jetstream WebSocket relay. Each
 band produces signals: structured events with a topic, timestamp, and payload.
 
-Tunings tell the Antenna what to listen for and where to send it. For example,
-you might tune into your Wicket band filtered to `pull_request` events and
-route them to the `opensource` line, where the agent already has context about
-your projects. Or tune into the ATProto Jetstream filtered to mentions of your
-DID and route those to a `bluesky-mentions` line. The agent can set up and
-tear down tunings at runtime with `tune`, `detune`, `list_tunings`, and
-`list_bands` tools — no restarts needed.
+Tunings tell the Antenna what to listen for and where to send it. Each tuning
+routes signals to a line — if that line has a context file at `lines/{name}.md`,
+the line's instructions are injected as system context alongside any notes in
+the tuning file's body. This means multiple tunings can share a line and its
+behavioral instructions. For example, several GitHub repo tunings might all
+deliver to the `opensource` line, which has instructions about when to notify
+the user vs. log silently.
+
+The agent can set up and tear down tunings at runtime by writing files to
+`tunings/` — no restarts needed. Line context files are read fresh on every
+signal delivery, so the agent can refine its own instructions over time.
 
 ### Vault
 

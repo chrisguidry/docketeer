@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 
 from docketeer.antenna import Band, ProcessFn, Signal, Tuning, passes_filters
-from docketeer.hooks import parse_frontmatter
+from docketeer.hooks import parse_frontmatter, read_line_context
 from docketeer.prompt import MessageContent, SystemBlock
 
 log = logging.getLogger(__name__)
@@ -87,7 +87,7 @@ async def deliver_signal(
 
     system_context: list[SystemBlock] = []
 
-    line_body = _read_file_body(workspace / "lines" / f"{tuning.target_line}.md")
+    line_body = read_line_context(workspace, tuning.target_line)
     if line_body:
         system_context.append(SystemBlock(text=line_body))
 

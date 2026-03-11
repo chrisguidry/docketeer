@@ -121,6 +121,44 @@ async def test_nudge_with_explicit_line(workspace: Path, task_files: dict):
     assert brain.process.call_args[0][0] == "research"
 
 
+async def test_nudge_injects_line_context(workspace: Path, task_files: dict):
+    lines_dir = workspace / "lines"
+    lines_dir.mkdir()
+    (lines_dir / "research.md").write_text("Focus on academic papers and citations.")
+
+    brain = AsyncMock()
+    brain.process.return_value = BrainResponse(text="done")
+    client = AsyncMock()
+
+    await nudge(
+        prompt_file=task_files["hey_there"],
+        line="research",
+        brain=brain,
+        client=client,
+        task_key="hey-there",
+    )
+
+    kwargs = brain.process.call_args[1]
+    assert len(kwargs["system_context"]) == 1
+    assert "academic papers" in kwargs["system_context"][0].text
+
+
+async def test_nudge_no_line_context_when_no_file(workspace: Path, task_files: dict):
+    brain = AsyncMock()
+    brain.process.return_value = BrainResponse(text="done")
+    client = AsyncMock()
+
+    await nudge(
+        prompt_file=task_files["hey_there"],
+        brain=brain,
+        client=client,
+        task_key="hey-there",
+    )
+
+    kwargs = brain.process.call_args[1]
+    assert kwargs["system_context"] == []
+
+
 async def test_nudge_no_send_on_empty_response(workspace: Path, task_files: dict):
     brain = AsyncMock()
     brain.process.return_value = BrainResponse(text="")

@@ -24,10 +24,11 @@ from docketeer.dependencies import CurrentBrain, CurrentChatClient
 from docketeer.hooks import (
     HookResult,
     parse_frontmatter,
+    read_line_context,
     render_frontmatter,
     strip_frontmatter,
 )
-from docketeer.prompt import BrainResponse, MessageContent
+from docketeer.prompt import BrainResponse, MessageContent, SystemBlock
 from docketeer.tools import ToolContext, registry, safe_path
 
 log = logging.getLogger(__name__)
@@ -83,10 +84,20 @@ async def nudge(
     content = MessageContent(timestamp=now, text=prompt, thread_id=thread_id)
 
     target_line = line or f"__task__:{task_key}"
+
+    system_context: list[SystemBlock] = []
+    line_body = read_line_context(environment.WORKSPACE_PATH, target_line)
+    if line_body:
+        system_context.append(SystemBlock(text=line_body))
+
     key = f"nudge:{task_key}"
     try:
         response: BrainResponse = await brain.process(
-            target_line, content, tier=tier or CHAT_MODEL, chat_room=room_id
+            target_line,
+            content,
+            tier=tier or CHAT_MODEL,
+            chat_room=room_id,
+            system_context=system_context,
         )
     except BackendAuthError:
         raise
@@ -146,10 +157,20 @@ async def nudge_every(
     content = MessageContent(timestamp=now, text=prompt, thread_id=thread_id)
 
     target_line = line or f"__task__:{task_key}"
+
+    system_context: list[SystemBlock] = []
+    line_body = read_line_context(environment.WORKSPACE_PATH, target_line)
+    if line_body:
+        system_context.append(SystemBlock(text=line_body))
+
     key = f"nudge_every:{task_key}"
     try:
         response: BrainResponse = await brain.process(
-            target_line, content, tier=tier or CHAT_MODEL, chat_room=room_id
+            target_line,
+            content,
+            tier=tier or CHAT_MODEL,
+            chat_room=room_id,
+            system_context=system_context,
         )
     except BackendAuthError:
         raise

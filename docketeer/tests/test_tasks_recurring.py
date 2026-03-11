@@ -104,6 +104,33 @@ async def test_nudge_every_cron_with_timezone(workspace: Path, task_files: dict)
     assert next_time.hour == 9
 
 
+async def test_nudge_every_injects_line_context(workspace: Path, task_files: dict):
+    lines_dir = workspace / "lines"
+    lines_dir.mkdir()
+    (lines_dir / "monitoring.md").write_text(
+        "Check system health and report anomalies."
+    )
+
+    brain = AsyncMock()
+    brain.process.return_value = BrainResponse(text="ok")
+    client = AsyncMock()
+    perpetual = MagicMock()
+
+    await nudge_every(
+        prompt_file=task_files["check_status"],
+        every="PT30M",
+        line="monitoring",
+        brain=brain,
+        client=client,
+        perpetual=perpetual,
+        task_key="check-status",
+    )
+
+    kwargs = brain.process.call_args[1]
+    assert len(kwargs["system_context"]) == 1
+    assert "system health" in kwargs["system_context"][0].text
+
+
 async def test_nudge_every_silent_no_message(workspace: Path, task_files: dict):
     brain = AsyncMock()
     brain.process.return_value = BrainResponse(text="done")
