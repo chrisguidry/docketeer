@@ -228,10 +228,10 @@ async def main() -> None:  # pragma: no cover
         environment.USAGE_PATH.mkdir(parents=True, exist_ok=True)
         log.info("Data directory: %s", environment.DATA_DIR.resolve())
 
-        # Migrate backstage JSON configs to workspace markdown
-        from docketeer.migration import migrate_backstage
+        # Run any pending data migrations
+        from docketeer.migrations import run_migrations
 
-        migrate_backstage(environment.DATA_DIR, environment.WORKSPACE_PATH)
+        run_migrations(environment.DATA_DIR, environment.WORKSPACE_PATH)
 
         # Discover plugins
         client, register_chat_tools = discover_chat_backend()

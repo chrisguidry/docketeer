@@ -102,6 +102,7 @@ class WicketBand(Band):
         if token is not None:
             headers["Authorization"] = f"Bearer {token}"
 
+        log.info("Connecting to SSE stream: %s", url)
         async with self._client.stream(
             "GET", url, params=params, headers=headers
         ) as response:

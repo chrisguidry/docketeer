@@ -1,7 +1,8 @@
-"""One-time migration from backstage JSON configs to workspace markdown.
+"""Migrate backstage JSON configs to workspace markdown.
 
 Converts DATA_DIR/tunings/*.json and DATA_DIR/mcp/*.json into workspace
 markdown files with YAML frontmatter, then removes the source JSON files.
+Also moves per-tuning data directories (cursor, signal logs) to workspace.
 """
 
 import json
@@ -130,13 +131,8 @@ def _migrate_data_dirs(
         log.info("Migrated %s data dir '%s' to workspace", label, child.name)
 
 
-def migrate_backstage(data_dir: Path, workspace: Path) -> None:
-    """Migrate backstage JSON configs to workspace markdown.
-
-    Safe to call multiple times — skips files that already exist in
-    the workspace and only processes *.json files in the expected
-    directories.
-    """
+def run(data_dir: Path, workspace: Path) -> None:
+    """Migrate backstage JSON configs to workspace markdown."""
     _migrate_directory(
         data_dir / "tunings",
         workspace / "tunings",

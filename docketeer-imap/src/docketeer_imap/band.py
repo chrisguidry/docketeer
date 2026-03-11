@@ -60,11 +60,14 @@ class ImapBand(Band):
         secrets: dict[str, str] | None = None,
     ) -> AsyncGenerator[Signal, None]:
         config = _validate_secrets(secrets)
-        client = IMAP4_SSL(config["host"], int(config["port"]))
+        host, port = config["host"], int(config["port"])
+        log.info("Connecting to %s:%d as %s", host, port, config["username"])
+        client = IMAP4_SSL(host, port)
         try:
             await client.wait_hello_from_server()
             await client.login(config["username"], config["password"])
             await client.select(topic)
+            log.info("Selected mailbox '%s'", topic)
 
             last_uid = int(last_signal_id) if last_signal_id else 0
 
@@ -73,6 +76,7 @@ class ImapBand(Band):
                     last_uid = int(signal.signal_id)
                     yield signal
 
+            log.info("Entering IDLE loop on '%s'", topic)
             while True:
                 idle = await client.idle_start(timeout=IDLE_TIMEOUT)
                 push = await client.wait_server_push()
@@ -92,6 +96,7 @@ class ImapBand(Band):
                     last_uid = int(signal.signal_id)
                     yield signal
         finally:
+            log.info("Disconnecting from %s:%d", host, port)
             await client.logout()
 
     def remote_filter_hints(

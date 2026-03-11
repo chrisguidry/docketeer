@@ -123,6 +123,14 @@ async def run_tuning(
     last_signal_id = _load_cursor(workspace, tuning.name)
     delay = reconnect_delay
 
+    log.info(
+        "Starting tuning '%s' on band '%s' (topic=%s, cursor=%s)",
+        tuning.name,
+        tuning.band,
+        tuning.topic,
+        last_signal_id or "(none)",
+    )
+
     while True:
         try:
             async for signal in band.listen(
