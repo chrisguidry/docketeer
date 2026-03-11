@@ -8,7 +8,7 @@ import pytest
 import websockets
 from websockets import ClientConnection
 
-from docketeer.chat import RoomInfo, RoomKind, RoomMessage
+from docketeer.chat import IncomingReaction, RoomInfo, RoomKind, RoomMessage
 from docketeer_slack.client import SlackClient
 
 
@@ -103,6 +103,49 @@ async def test_incoming_messages_yields_and_dedupes(slack_client: SlackClient):
         second = await anext(stream)
     assert [first.text, second.text] == ["hello", "world"]
     assert slack_client._high_water == datetime.fromtimestamp(1718123457.123456, tz=UTC)
+
+
+async def test_incoming_messages_yields_reactions_and_dedupes(
+    slack_client: SlackClient,
+):
+    reaction = IncomingReaction(
+        user_id="U1",
+        username="U1",
+        display_name="U1",
+        emoji=":thumbsup:",
+        reacted_msg_id="D1:1718123456.123456",
+        room_id="D1",
+        kind=RoomKind.direct,
+    )
+    message = slack_client._incoming_from_message(
+        {"channel": "D1", "user": "U1", "text": "hi", "ts": "1718123458.123456"},
+        kind=RoomKind.direct,
+    )
+    slack_client._ws = cast(
+        ClientConnection,
+        _FakeSocket(
+            [
+                json.dumps({"envelope_id": "e1", "payload": {}}),
+                json.dumps({"envelope_id": "e2", "payload": {}}),
+                json.dumps({"envelope_id": "e3", "payload": {}}),
+            ]
+        ),
+    )
+    with (
+        patch.object(slack_client, "_open_socket", new_callable=AsyncMock),
+        patch.object(slack_client, "_prime_history", new_callable=AsyncMock),
+        patch.object(
+            slack_client,
+            "_parse_socket_event",
+            side_effect=[reaction, reaction, message],
+        ),
+    ):
+        stream = slack_client.incoming_messages()
+        first = await anext(stream)
+        second = await anext(stream)
+    assert isinstance(first, IncomingReaction)
+    assert first.emoji == ":thumbsup:"
+    assert second.text == "hi"
 
 
 async def test_incoming_messages_reconnects_after_disconnect(slack_client: SlackClient):

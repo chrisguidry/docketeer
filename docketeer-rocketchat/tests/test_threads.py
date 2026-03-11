@@ -76,6 +76,20 @@ async def test_send_message_without_thread_id(rc: RocketChatClient):
     assert "tmid" not in body
 
 
+@respx.mock
+async def test_send_message_calls_on_message_sent(rc: RocketChatClient):
+    route = respx.post("http://localhost:3000/api/v1/chat.postMessage")
+    route.mock(return_value=httpx.Response(200, json={"success": True}))
+    calls: list[tuple[str, str]] = []
+
+    async def recorder(room_id: str, text: str) -> None:
+        calls.append((room_id, text))
+
+    rc._on_message_sent = recorder
+    await rc.send_message("room1", "hello")
+    assert calls == [("room1", "hello")]
+
+
 # --- upload_file: tmid in media confirm ---
 
 

@@ -74,6 +74,23 @@ class IncomingMessage:
     is_own: bool = False
 
 
+@dataclass
+class IncomingReaction:
+    """A reaction event from a chat backend."""
+
+    user_id: str
+    username: str
+    display_name: str
+    emoji: str
+    reacted_msg_id: str
+    room_id: str
+    kind: RoomKind
+    timestamp: datetime | None = None
+
+
+ChatEvent = IncomingMessage | IncomingReaction
+
+
 OnHistoryCallback = Callable[["RoomInfo", list["RoomMessage"]], Awaitable[None]]
 
 
@@ -94,7 +111,7 @@ class ChatClient(ABC):
     def incoming_messages(
         self,
         on_history: OnHistoryCallback | None = None,
-    ) -> AsyncGenerator[IncomingMessage, None]: ...
+    ) -> AsyncGenerator[ChatEvent, None]: ...
 
     @abstractmethod
     async def send_message(

@@ -66,7 +66,6 @@ class RocketChatClient(ChatClient):
         stack.push_async_callback(self._http.aclose)
         self._conn_stack = stack
 
-        # Authenticate via REST
         resp = await self._http.post(
             "/login",
             json={
@@ -136,6 +135,8 @@ class RocketChatClient(ChatClient):
         if thread_id:
             body["tmid"] = thread_id
         await self._post("chat.postMessage", **body)
+        if self._on_message_sent:
+            await self._on_message_sent(room_id, text)
 
     async def upload_file(
         self, room_id: str, file_path: str, message: str = "", *, thread_id: str = ""
@@ -279,7 +280,6 @@ class RocketChatClient(ChatClient):
         return rooms
 
     async def set_status(self, status: str, message: str = "") -> None:
-        """Set the bot's presence status (online, busy, away, offline)."""
         delay = 1
         for attempt in range(4):  # pragma: no branch
             try:

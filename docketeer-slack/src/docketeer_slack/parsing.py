@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from docketeer.chat import Attachment, RoomKind
+from docketeer.chat import Attachment, IncomingReaction, RoomKind
 
 
 def encode_message_id(channel_id: str, ts: str) -> str:
@@ -54,6 +54,39 @@ def parse_attachments(files: list[dict[str, Any]] | None) -> list[Attachment]:
         if url:
             attachments.append(Attachment(url=url, media_type=media_type, title=title))
     return attachments
+
+
+def parse_reaction_event(
+    event: dict[str, Any],
+    *,
+    bot_user_id: str = "",
+    kind: RoomKind = RoomKind.direct,
+) -> IncomingReaction | None:
+    """Parse a Slack reaction_added event into an IncomingReaction."""
+    user_id = event.get("user", "")
+    if user_id == bot_user_id:
+        return None
+
+    item = event.get("item", {})
+    if item.get("type") != "message":
+        return None
+
+    channel = item.get("channel", "")
+    ts = item.get("ts", "")
+    if not channel or not ts:
+        return None
+
+    reaction = event.get("reaction", "")
+    return IncomingReaction(
+        user_id=user_id,
+        username=user_id,
+        display_name=user_id,
+        emoji=f":{reaction}:",
+        reacted_msg_id=encode_message_id(channel, ts),
+        room_id=channel,
+        kind=kind,
+        timestamp=parse_slack_ts(event.get("event_ts", "")),
+    )
 
 
 def should_ignore_message(message: dict[str, Any], *, bot_user_id: str = "") -> bool:

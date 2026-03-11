@@ -2,12 +2,13 @@ from datetime import UTC, datetime
 
 import pytest
 
-from docketeer.chat import RoomKind
+from docketeer.chat import IncomingReaction, RoomKind
 from docketeer_slack.parsing import (
     conversation_kind,
     decode_message_id,
     encode_message_id,
     parse_attachments,
+    parse_reaction_event,
     parse_slack_ts,
     should_ignore_message,
 )
@@ -86,3 +87,61 @@ def test_parse_attachments_skips_missing_url():
 )
 def test_should_ignore_message(message: dict, bot_user_id: str, expected: bool):
     assert should_ignore_message(message, bot_user_id=bot_user_id) is expected
+
+
+def test_parse_reaction_event():
+    event = {
+        "user": "U1",
+        "reaction": "thumbsup",
+        "item": {"type": "message", "channel": "D1", "ts": "1718123456.123456"},
+        "event_ts": "1718123457.000000",
+    }
+    result = parse_reaction_event(event, bot_user_id="U_BOT")
+    assert isinstance(result, IncomingReaction)
+    assert result.emoji == ":thumbsup:"
+    assert result.reacted_msg_id == "D1:1718123456.123456"
+    assert result.room_id == "D1"
+    assert result.user_id == "U1"
+    assert result.kind is RoomKind.direct
+
+
+def test_parse_reaction_event_with_channel_kind():
+    event = {
+        "user": "U1",
+        "reaction": "thumbsup",
+        "item": {"type": "message", "channel": "C1", "ts": "1718123456.123456"},
+        "event_ts": "1718123457.000000",
+    }
+    result = parse_reaction_event(event, kind=RoomKind.public)
+    assert isinstance(result, IncomingReaction)
+    assert result.kind is RoomKind.public
+
+
+def test_parse_reaction_event_bot_ignored():
+    event = {
+        "user": "U_BOT",
+        "reaction": "brain",
+        "item": {"type": "message", "channel": "D1", "ts": "1718123456.123456"},
+        "event_ts": "1718123457.000000",
+    }
+    assert parse_reaction_event(event, bot_user_id="U_BOT") is None
+
+
+def test_parse_reaction_event_non_message_ignored():
+    event = {
+        "user": "U1",
+        "reaction": "thumbsup",
+        "item": {"type": "file", "file": "F1"},
+        "event_ts": "1718123457.000000",
+    }
+    assert parse_reaction_event(event) is None
+
+
+def test_parse_reaction_event_missing_channel_ignored():
+    event = {
+        "user": "U1",
+        "reaction": "thumbsup",
+        "item": {"type": "message", "channel": "", "ts": "1718123456.123456"},
+        "event_ts": "1718123457.000000",
+    }
+    assert parse_reaction_event(event) is None

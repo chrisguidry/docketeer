@@ -25,6 +25,7 @@ from rich.text import Text
 
 from docketeer.chat import (
     ChatClient,
+    ChatEvent,
     IncomingMessage,
     OnHistoryCallback,
     RoomInfo,
@@ -113,7 +114,7 @@ class TUIClient(ChatClient):
     async def incoming_messages(
         self,
         on_history: OnHistoryCallback | None = None,
-    ) -> AsyncGenerator[IncomingMessage, None]:
+    ) -> AsyncGenerator[ChatEvent, None]:
         while not self._closed:
             try:
                 text = await self._read_input()

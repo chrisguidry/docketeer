@@ -12,6 +12,7 @@ from typing import Any
 from docketeer.antenna import Band, Signal, SignalFilter
 from docketeer.chat import (
     ChatClient,
+    ChatEvent,
     IncomingMessage,
     OnHistoryCallback,
     RoomInfo,
@@ -61,7 +62,7 @@ class MemoryChat(ChatClient):
         self.status_changes: list[tuple[str, str]] = []
         self.typing_events: list[tuple[str, bool]] = []
         self.reactions: list[Reaction] = []
-        self._incoming: asyncio.Queue[IncomingMessage | None] = asyncio.Queue()
+        self._incoming: asyncio.Queue[ChatEvent | None] = asyncio.Queue()
         self._room_messages: dict[str, list[RoomMessage]] = {}
         self._rooms: list[RoomInfo] = []
         self._attachments: dict[str, bytes] = {}
@@ -79,17 +80,17 @@ class MemoryChat(ChatClient):
     async def incoming_messages(
         self,
         on_history: OnHistoryCallback | None = None,
-    ) -> AsyncGenerator[IncomingMessage, None]:
+    ) -> AsyncGenerator[ChatEvent, None]:
         if on_history:
             for room in self._rooms:
                 messages = self._room_messages.get(room.room_id, [])
                 if messages:
                     await on_history(room, messages)
         while True:
-            msg = await self._incoming.get()
-            if msg is None:
+            event = await self._incoming.get()
+            if event is None:
                 break
-            yield msg
+            yield event
 
     async def send_message(
         self,

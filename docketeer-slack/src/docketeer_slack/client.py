@@ -19,7 +19,9 @@ from websockets import ClientConnection
 from docketeer import environment
 from docketeer.chat import (
     ChatClient,
+    ChatEvent,
     IncomingMessage,
+    IncomingReaction,
     OnHistoryCallback,
     RoomInfo,
     RoomKind,
@@ -30,6 +32,7 @@ from docketeer_slack.parsing import (
     conversation_kind,
     encode_message_id,
     parse_attachments,
+    parse_reaction_event,
     parse_slack_ts,
     should_ignore_message,
 )
@@ -164,7 +167,7 @@ class SlackClient(ChatClient):
     async def incoming_messages(
         self,
         on_history: OnHistoryCallback | None = None,
-    ) -> AsyncGenerator[IncomingMessage, None]:
+    ) -> AsyncGenerator[ChatEvent, None]:
         seen: set[str] = set()
         backoff = 1
 
@@ -178,9 +181,16 @@ class SlackClient(ChatClient):
                     envelope_id = event.get("envelope_id", "")
                     if envelope_id:
                         await self._ack(envelope_id)
-                    msg = await self._parse_socket_event(event)
-                    if not msg:
+                    result = await self._parse_socket_event(event)
+                    if not result:
                         continue
+                    if isinstance(result, IncomingReaction):
+                        key = f"{result.user_id}:{result.emoji}:{result.reacted_msg_id}"
+                        if key not in seen:
+                            seen.add(key)
+                            yield result
+                        continue
+                    msg = result
                     if msg.message_id in seen:
                         continue
                     seen.add(msg.message_id)
@@ -200,15 +210,18 @@ class SlackClient(ChatClient):
             await asyncio.sleep(backoff)
             backoff = min(backoff * 2, 60)
 
-    async def _parse_socket_event(
-        self, envelope: dict[str, Any]
-    ) -> IncomingMessage | None:
+    async def _parse_socket_event(self, envelope: dict[str, Any]) -> ChatEvent | None:
         payload = envelope.get("payload", {})
         event = payload.get("event", {})
         event_type = event.get("type")
 
         if event_type == "app_mention":
             return self._incoming_from_message(event, kind=RoomKind.public)
+
+        if event_type == "reaction_added":
+            room = self._rooms.get(event.get("item", {}).get("channel", ""))
+            kind = room.kind if room else RoomKind.direct
+            return parse_reaction_event(event, bot_user_id=self.user_id, kind=kind)
 
         if event_type != "message":
             return None
@@ -286,6 +299,8 @@ class SlackClient(ChatClient):
         if thread_id:
             body["thread_ts"] = thread_id
         await self._api_post("chat.postMessage", token=self.bot_token, json_body=body)
+        if self._on_message_sent:
+            await self._on_message_sent(room_id, text)
 
     async def upload_file(
         self, room_id: str, file_path: str, message: str = "", *, thread_id: str = ""
@@ -391,9 +406,6 @@ class SlackClient(ChatClient):
 
     async def send_typing(self, room_id: str, typing: bool) -> None:
         await interactions.send_typing(self, room_id, typing)
-
-    async def reply_thread_id(self, msg: IncomingMessage) -> str:
-        return await interactions.reply_thread_id(self, msg)
 
     async def set_thread_status(
         self,

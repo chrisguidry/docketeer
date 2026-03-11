@@ -1,4 +1,4 @@
-from docketeer.chat import RoomKind
+from docketeer.chat import IncomingMessage, IncomingReaction, RoomInfo, RoomKind
 from docketeer_slack.client import SlackClient
 
 
@@ -15,7 +15,7 @@ async def test_parse_socket_event_app_mention(slack_client: SlackClient):
         }
     }
     msg = await slack_client._parse_socket_event(event)
-    assert msg is not None
+    assert isinstance(msg, IncomingMessage)
     assert msg.message_id == "C1:1718123456.123456"
     assert msg.room_id == "C1"
     assert msg.kind is RoomKind.public
@@ -35,7 +35,7 @@ async def test_parse_socket_event_dm(slack_client: SlackClient):
         }
     }
     msg = await slack_client._parse_socket_event(event)
-    assert msg is not None
+    assert isinstance(msg, IncomingMessage)
     assert msg.kind is RoomKind.direct
     assert msg.message_id == "D1:1718123456.123456"
 
@@ -72,7 +72,7 @@ async def test_parse_socket_event_channel_mention_allowed(slack_client: SlackCli
         }
     }
     msg = await slack_client._parse_socket_event(event)
-    assert msg is not None
+    assert isinstance(msg, IncomingMessage)
     assert msg.kind is RoomKind.public
 
 
@@ -91,7 +91,7 @@ async def test_parse_socket_event_thread(slack_client: SlackClient):
         }
     }
     msg = await slack_client._parse_socket_event(event)
-    assert msg is not None
+    assert isinstance(msg, IncomingMessage)
     assert msg.thread_id == "1718123456.123456"
 
 
@@ -109,5 +109,52 @@ async def test_parse_socket_event_own_message(slack_client: SlackClient):
         }
     }
     msg = await slack_client._parse_socket_event(event)
-    assert msg is not None
+    assert isinstance(msg, IncomingMessage)
     assert msg.is_own is True
+
+
+async def test_parse_socket_event_reaction_added(slack_client: SlackClient):
+    event = {
+        "payload": {
+            "event": {
+                "type": "reaction_added",
+                "user": "U1",
+                "reaction": "thumbsup",
+                "item": {
+                    "type": "message",
+                    "channel": "D1",
+                    "ts": "1718123456.123456",
+                },
+                "event_ts": "1718123457.000000",
+            }
+        }
+    }
+    result = await slack_client._parse_socket_event(event)
+    assert isinstance(result, IncomingReaction)
+    assert result.emoji == ":thumbsup:"
+
+
+async def test_parse_socket_event_reaction_uses_known_room_kind(
+    slack_client: SlackClient,
+):
+    slack_client._rooms["C1"] = RoomInfo(
+        room_id="C1", kind=RoomKind.public, members=[], name="general"
+    )
+    event = {
+        "payload": {
+            "event": {
+                "type": "reaction_added",
+                "user": "U1",
+                "reaction": "thumbsup",
+                "item": {
+                    "type": "message",
+                    "channel": "C1",
+                    "ts": "1718123456.123456",
+                },
+                "event_ts": "1718123457.000000",
+            }
+        }
+    }
+    result = await slack_client._parse_socket_event(event)
+    assert isinstance(result, IncomingReaction)
+    assert result.kind is RoomKind.public

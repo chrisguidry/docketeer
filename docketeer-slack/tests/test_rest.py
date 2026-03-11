@@ -21,6 +21,20 @@ async def test_send_message(slack_client: SlackClient):
 
 
 @respx.mock
+async def test_send_message_calls_on_message_sent(slack_client: SlackClient):
+    route = respx.post("https://slack.com/api/chat.postMessage")
+    route.mock(return_value=httpx.Response(200, json={"ok": True}))
+    calls: list[tuple[str, str]] = []
+
+    async def recorder(room_id: str, text: str) -> None:
+        calls.append((room_id, text))
+
+    slack_client._on_message_sent = recorder
+    await slack_client.send_message("C1", "hello")
+    assert calls == [("C1", "hello")]
+
+
+@respx.mock
 async def test_send_message_with_attachments(slack_client: SlackClient):
     route = respx.post("https://slack.com/api/chat.postMessage")
     route.mock(return_value=httpx.Response(200, json={"ok": True}))

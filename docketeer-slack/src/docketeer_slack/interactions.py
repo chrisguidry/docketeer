@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from docketeer.chat import IncomingMessage
 from docketeer_slack.parsing import decode_message_id
 
 if TYPE_CHECKING:
@@ -15,10 +14,6 @@ async def set_status(_client: SlackClient, status: str, message: str = "") -> No
 
 async def send_typing(_client: SlackClient, room_id: str, typing: bool) -> None:
     return None
-
-
-async def reply_thread_id(_client: SlackClient, msg: IncomingMessage) -> str:
-    return msg.thread_id or decode_message_id(msg.message_id)[1]
 
 
 async def set_thread_status(

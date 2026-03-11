@@ -5,7 +5,13 @@ import logging
 
 from docketeer.brain import APOLOGY, CHAT_MODEL, Brain, ProcessCallbacks
 from docketeer.brain.backend import BackendAuthError
-from docketeer.chat import ChatClient, IncomingMessage, RoomInfo, RoomMessage
+from docketeer.chat import (
+    ChatClient,
+    IncomingMessage,
+    IncomingReaction,
+    RoomInfo,
+    RoomMessage,
+)
 from docketeer.prompt import BrainResponse, MessageContent
 from docketeer.tools import registry
 
@@ -18,27 +24,32 @@ async def process_messages(client: ChatClient, brain: Brain) -> None:
     async def _on_history(room: RoomInfo, messages: list[RoomMessage]) -> None:
         brain.load_history(line=room.room_id, messages=messages)
 
-    msg_iter = client.incoming_messages(on_history=_on_history).__aiter__()
-    next_msg = asyncio.create_task(anext(msg_iter, None))
+    event_iter = client.incoming_messages(on_history=_on_history).__aiter__()
+    next_event = asyncio.create_task(anext(event_iter, None))
 
     while True:
-        msg = await next_msg
-        if msg is None:
+        event = await next_event
+        if event is None:
             break
 
-        if msg.is_own:
-            await brain.record_own_message(msg.room_id, msg.text)
-            next_msg = asyncio.create_task(anext(msg_iter, None))
+        if isinstance(event, IncomingMessage) and event.is_own:
+            await brain.record_own_message(event.room_id, event.text)
+            next_event = asyncio.create_task(anext(event_iter, None))
             continue
 
         interrupted = asyncio.Event()
-        handle_task = asyncio.create_task(
-            handle_message(client, brain, msg, interrupted=interrupted)
-        )
-        next_msg = asyncio.create_task(anext(msg_iter, None))
+        if isinstance(event, IncomingReaction):
+            handle_task = asyncio.create_task(
+                handle_reaction(client, brain, event, interrupted=interrupted)
+            )
+        else:
+            handle_task = asyncio.create_task(
+                handle_message(client, brain, event, interrupted=interrupted)
+            )
+        next_event = asyncio.create_task(anext(event_iter, None))
 
         done, _ = await asyncio.wait(
-            {handle_task, next_msg}, return_when=asyncio.FIRST_COMPLETED
+            {handle_task, next_event}, return_when=asyncio.FIRST_COMPLETED
         )
 
         if handle_task not in done:
@@ -157,6 +168,61 @@ async def handle_message(
         await send_response(client, msg.room_id, response, thread_id=thread_id)
     except Exception:
         log.exception("Failed to send response to %s", msg.room_id)
+
+
+async def handle_reaction(
+    client: ChatClient,
+    brain: Brain,
+    reaction: IncomingReaction,
+    interrupted: asyncio.Event | None = None,
+) -> None:
+    """Handle an incoming reaction — lightweight path with no :brain: indicator."""
+    log.info(
+        "Reaction %s from %s in %s",
+        reaction.emoji,
+        reaction.username,
+        reaction.room_id,
+    )
+
+    if not brain.has_history(reaction.room_id):
+        log.info("  New room, loading history...")
+        history = await client.fetch_messages(reaction.room_id)
+        brain.load_history(line=reaction.room_id, messages=history)
+
+    content = MessageContent(
+        username=reaction.username,
+        message_id=reaction.reacted_msg_id,
+        timestamp=reaction.timestamp,
+        text=f"reacted with {reaction.emoji}",
+    )
+    room_ctx = await client.room_context(reaction.room_id, reaction.username)
+    slug = await client.room_slug(reaction.room_id)
+    callbacks = ProcessCallbacks(interrupted=interrupted)
+
+    try:
+        response = await brain.process(
+            line=reaction.room_id,
+            content=content,
+            callbacks=callbacks,
+            tier=CHAT_MODEL,
+            room_context=room_ctx,
+            room_slug=slug,
+            chat_room=reaction.room_id,
+        )
+    except BackendAuthError:
+        raise
+    except Exception:
+        log.exception(
+            "Error processing reaction from %s in %s",
+            reaction.username,
+            reaction.room_id,
+        )
+        response = BrainResponse(text=APOLOGY)
+
+    try:
+        await send_response(client, reaction.room_id, response)
+    except Exception:
+        log.exception("Failed to send reaction response to %s", reaction.room_id)
 
 
 async def build_content(client: ChatClient, msg: IncomingMessage) -> MessageContent:

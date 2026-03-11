@@ -113,7 +113,7 @@ async def test_reply_thread_id_from_existing_thread(slack_client: SlackClient):
     assert await slack_client.reply_thread_id(msg) == "1700"
 
 
-async def test_reply_thread_id_from_message_id(slack_client: SlackClient):
+async def test_reply_thread_id_no_thread(slack_client: SlackClient):
     from docketeer.chat import IncomingMessage, RoomKind
 
     msg = IncomingMessage(
@@ -125,7 +125,7 @@ async def test_reply_thread_id_from_message_id(slack_client: SlackClient):
         room_id="C1",
         kind=RoomKind.public,
     )
-    assert await slack_client.reply_thread_id(msg) == "1718"
+    assert await slack_client.reply_thread_id(msg) == ""
 
 
 @respx.mock
