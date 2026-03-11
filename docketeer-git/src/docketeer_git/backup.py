@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from docket.dependencies import Perpetual
+from docket.dependencies import Perpetual, Timeout
 
 from docketeer import environment
 from docketeer.brain.backend import InferenceBackend
@@ -113,6 +113,7 @@ async def _generate_commit_message(
 
 async def backup(
     perpetual: Perpetual = Perpetual(every=BACKUP_INTERVAL, automatic=True),
+    timeout: Timeout = Timeout(timedelta(seconds=60)),
     workspace: Path = WorkspacePath(),
     remote: str = EnvironmentStr("GIT_REMOTE", ""),
     branch: str = EnvironmentStr("GIT_BRANCH", "main"),
