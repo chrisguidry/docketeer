@@ -29,6 +29,7 @@ from docketeer.hooks import (
     strip_frontmatter,
 )
 from docketeer.prompt import BrainResponse, MessageContent, SystemBlock
+from docketeer.signal_loop import cull_signal_logs
 from docketeer.tools import ToolContext, registry, safe_path
 
 log = logging.getLogger(__name__)
@@ -199,7 +200,7 @@ async def nudge_every(
         perpetual.at(next_time)
 
 
-docketeer_tasks = [nudge, nudge_every]
+docketeer_tasks = [nudge, nudge_every, cull_signal_logs]
 
 
 # --- Scheduling hook ---

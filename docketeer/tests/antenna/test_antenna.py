@@ -7,6 +7,7 @@ from docketeer.antenna import (
     Signal,
     SignalFilter,
     Tuning,
+    _parse_tuning,
     discover_bands,
 )
 from docketeer.testing import MemoryBand
@@ -53,3 +54,20 @@ def test_discover_bands_loads_factories():
         bands = discover_bands()
     assert "test-band" in bands
     assert bands["test-band"].name == "test-band"
+
+
+def test_tuning_retention_days_defaults_to_7():
+    t = Tuning(name="t", band="b", topic="x")
+    assert t.retention_days == 7
+
+
+def test_parse_tuning_reads_retention_days():
+    meta = {"band": "imap", "topic": "INBOX", "retention_days": 30}
+    t = _parse_tuning("mail", meta)
+    assert t.retention_days == 30
+
+
+def test_parse_tuning_defaults_retention_days():
+    meta = {"band": "imap", "topic": "INBOX"}
+    t = _parse_tuning("mail", meta)
+    assert t.retention_days == 7

@@ -77,6 +77,7 @@ class Tuning:
     filters: list[SignalFilter] = field(default_factory=list)
     line: str = ""  # defaults to tuning name
     secrets: dict[str, str] | None = None
+    retention_days: int = 7
 
     @property
     def target_line(self) -> str:
@@ -312,6 +313,7 @@ def _parse_tuning(name: str, meta: dict) -> Tuning:
         filters=_parse_filters(meta.get("filters", [])),
         line=str(meta.get("line", "")),
         secrets=meta.get("secrets"),
+        retention_days=int(meta.get("retention_days", 7)),
     )
 
 

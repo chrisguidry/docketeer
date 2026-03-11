@@ -3,9 +3,13 @@
 import asyncio
 import json
 import logging
+from datetime import date, timedelta
 from pathlib import Path
 
+from docket.dependencies import Perpetual, Timeout
+
 from docketeer.antenna import Band, ProcessFn, Signal, Tuning, passes_filters
+from docketeer.dependencies import WorkspacePath
 from docketeer.hooks import parse_frontmatter, read_line_context
 from docketeer.prompt import MessageContent, SystemBlock
 
@@ -168,3 +172,50 @@ async def run_tuning(
             )
             await asyncio.sleep(delay)
             delay = min(delay * 2, max_reconnect_delay)
+
+
+def _retention_days_for_tuning(workspace: Path, tuning_name: str) -> int:
+    """Read retention_days from a tuning's frontmatter, defaulting to 7."""
+    md_path = workspace / "tunings" / f"{tuning_name}.md"
+    if not md_path.exists():
+        return 7
+    content = md_path.read_text()
+    meta, _ = parse_frontmatter(content)
+    return int(meta.get("retention_days", 7)) if meta else 7
+
+
+async def cull_signal_logs(
+    perpetual: Perpetual = Perpetual(every=timedelta(days=1), automatic=True),
+    timeout: Timeout = Timeout(timedelta(seconds=60)),
+    workspace: Path = WorkspacePath(),
+) -> None:
+    """Delete signal log files older than each tuning's retention period."""
+    tunings_dir = workspace / "tunings"
+    if not tunings_dir.is_dir():
+        return
+
+    today = date.today()
+
+    for entry in sorted(tunings_dir.iterdir()):
+        if not entry.is_dir():
+            continue
+
+        tuning_name = entry.name
+        retention = _retention_days_for_tuning(workspace, tuning_name)
+        cutoff = today - timedelta(days=retention)
+
+        for jsonl_file in sorted(entry.glob("*.jsonl")):
+            stem = jsonl_file.stem
+            try:
+                file_date = date.fromisoformat(stem)
+            except ValueError:
+                continue
+
+            if file_date < cutoff:
+                jsonl_file.unlink()
+                log.info(
+                    "Culled signal log %s/%s (retention=%d days)",
+                    tuning_name,
+                    jsonl_file.name,
+                    retention,
+                )
