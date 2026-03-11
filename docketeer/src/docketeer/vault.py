@@ -4,7 +4,7 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from docketeer.plugins import PluginUnavailable, discover_one
+from docketeer.plugins import PluginUnavailable, discover_explicit
 
 log = logging.getLogger(__name__)
 
@@ -185,14 +185,14 @@ def _register_vault_tools() -> None:
 
 
 def discover_vault() -> Vault:
-    """Discover the vault via entry_points.
+    """Discover the explicitly configured vault via entry_points.
 
-    Returns NullVault when no plugin is installed, so callers always
-    get a usable Vault without null checks.
+    Returns NullVault when DOCKETEER_VAULT is unset, so callers always get a
+    usable Vault without null checks.
     """
-    ep = discover_one("docketeer.vault", "VAULT")
+    ep = discover_explicit("docketeer.vault", "VAULT")
     if ep is None:
-        log.info("No vault plugin installed — secrets management unavailable")
+        log.info("Vault disabled — DOCKETEER_VAULT is not set")
         return NullVault()
     module = ep.load()
     return module.create_vault()

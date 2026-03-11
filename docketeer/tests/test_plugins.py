@@ -5,7 +5,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from docketeer.plugins import PluginUnavailable, discover_all, discover_one
+from docketeer.plugins import (
+    PluginUnavailable,
+    discover_all,
+    discover_explicit,
+    discover_one,
+)
 
 
 def test_plugin_unavailable_is_an_exception():
@@ -95,6 +100,41 @@ def test_multiple_plugins_env_var_overrides_default():
     ):
         result = discover_one("test.group", "TEST", default="beta")
     assert result is ep_a
+
+
+# --- discover_explicit ---
+
+
+def test_discover_explicit_returns_none_when_env_unset():
+    ep = _make_ep("onepassword")
+    with (
+        patch("docketeer.plugins.entry_points", return_value=[ep]),
+        patch.dict("os.environ", {}, clear=True),
+    ):
+        result = discover_explicit("test.group", "TEST")
+    assert result is None
+
+
+def test_discover_explicit_returns_selected_plugin():
+    ep_a = _make_ep("alpha")
+    ep_b = _make_ep("beta")
+    with (
+        patch("docketeer.plugins.entry_points", return_value=[ep_a, ep_b]),
+        patch.dict("os.environ", {"DOCKETEER_TEST": "beta"}),
+    ):
+        result = discover_explicit("test.group", "TEST")
+    assert result is ep_b
+
+
+def test_discover_explicit_raises_for_unknown_plugin():
+    ep_a = _make_ep("alpha")
+    ep_b = _make_ep("beta")
+    with (
+        patch("docketeer.plugins.entry_points", return_value=[ep_a, ep_b]),
+        patch.dict("os.environ", {"DOCKETEER_TEST": "gamma"}),
+    ):
+        with pytest.raises(RuntimeError, match="gamma.*alpha.*beta"):
+            discover_explicit("test.group", "TEST")
 
 
 # --- discover_all ---

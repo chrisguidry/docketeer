@@ -90,9 +90,12 @@ def _is_os_environ_get(node: ast.Call) -> bool:
     )
 
 
-def _is_discover_one_call(node: ast.Call) -> bool:
-    """Match `discover_one("docketeer.x", "ENV_NAME")`."""
-    return isinstance(node.func, ast.Name) and node.func.id == "discover_one"
+def _is_single_plugin_discovery_call(node: ast.Call) -> bool:
+    """Match single-plugin discovery helpers that consume `DOCKETEER_*` vars."""
+    return isinstance(node.func, ast.Name) and node.func.id in {
+        "discover_one",
+        "discover_explicit",
+    }
 
 
 _DOCKETEER_PREFIX = "DOCKETEER_"
@@ -126,7 +129,7 @@ def env_vars_in_source(pkg_dir: Path) -> set[str]:
                 ):
                     names.add(first_arg.value.removeprefix(_DOCKETEER_PREFIX))
 
-            elif _is_discover_one_call(node):
+            elif _is_single_plugin_discovery_call(node):
                 if len(node.args) < 2:
                     continue
                 second_arg = node.args[1]

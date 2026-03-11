@@ -56,3 +56,24 @@ def discover_one(group: str, env_name: str, *, default: str = "") -> EntryPoint 
         f"Multiple {group} plugins installed ({names}). "
         f"Set DOCKETEER_{env_name} to choose one."
     )
+
+
+def discover_explicit(group: str, env_name: str) -> EntryPoint | None:
+    """Find an explicitly selected entry point for an optional plugin group.
+
+    Returns ``None`` when ``DOCKETEER_{env_name}`` is unset. When set, the
+    value must match an installed plugin name or a RuntimeError is raised.
+    """
+    selected = os.environ.get(f"DOCKETEER_{env_name}")
+    if not selected:
+        return None
+
+    eps = list(entry_points(group=group))
+    for ep in eps:
+        if ep.name == selected:
+            return ep
+
+    names = ", ".join(sorted(ep.name for ep in eps)) or "none"
+    raise RuntimeError(
+        f"Unknown {group} plugin {selected!r}. Installed plugins: {names}."
+    )

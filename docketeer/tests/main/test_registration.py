@@ -98,7 +98,7 @@ def test_discover_vault_present():
 
     ep = MagicMock()
     ep.load.return_value = module
-    with patch("docketeer.vault.discover_one", return_value=ep):
+    with patch("docketeer.vault.discover_explicit", return_value=ep):
         result = discover_vault()
     assert result is vault
 
@@ -106,7 +106,7 @@ def test_discover_vault_present():
 def test_discover_vault_absent():
     from docketeer.vault import NullVault
 
-    with patch("docketeer.vault.discover_one", return_value=None):
+    with patch("docketeer.vault.discover_explicit", return_value=None):
         result = discover_vault()
     assert isinstance(result, NullVault)
 
