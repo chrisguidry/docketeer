@@ -28,7 +28,7 @@ def format_signal(tuning: Tuning, signal: Signal) -> str:
 
 def log_signal(workspace: Path, tuning: Tuning, signal: Signal) -> None:
     """Append a signal record to the tuning's daily JSONL log in the workspace."""
-    log_dir = workspace / "tunings" / tuning.name / "signals"
+    log_dir = workspace / "tunings" / tuning.name
     log_dir.mkdir(parents=True, exist_ok=True)
     date_str = signal.timestamp.strftime("%Y-%m-%d")
     path = log_dir / f"{date_str}.jsonl"

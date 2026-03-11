@@ -90,7 +90,7 @@ def test_log_signal_writes_jsonl(tmp_path: Path):
 
     log_signal(workspace, tuning, signal)
 
-    log_path = workspace / "tunings" / "github" / "signals" / "2026-01-01.jsonl"
+    log_path = workspace / "tunings" / "github" / "2026-01-01.jsonl"
     assert log_path.exists()
     record = json.loads(log_path.read_text().strip())
     assert record["signal_id"] == "s1"
@@ -109,7 +109,7 @@ def test_log_signal_appends_multiple(tmp_path: Path):
     log_signal(workspace, tuning, _make_signal(signal_id="s1"))
     log_signal(workspace, tuning, _make_signal(signal_id="s2"))
 
-    log_path = workspace / "tunings" / "t" / "signals" / "2026-01-01.jsonl"
+    log_path = workspace / "tunings" / "t" / "2026-01-01.jsonl"
     lines = log_path.read_text().strip().splitlines()
     assert len(lines) == 2
     assert json.loads(lines[0])["signal_id"] == "s1"
@@ -155,7 +155,7 @@ async def test_deliver_signal_logs_signal(tmp_path: Path):
 
     await deliver_signal(process, tuning, _make_signal(), workspace)
 
-    log_path = workspace / "tunings" / "github" / "signals" / "2026-01-01.jsonl"
+    log_path = workspace / "tunings" / "github" / "2026-01-01.jsonl"
     assert log_path.exists()
 
 

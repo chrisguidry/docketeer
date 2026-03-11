@@ -13,7 +13,7 @@ from watchfiles import Change, awatch
 log = logging.getLogger(__name__)
 logging.getLogger("watchfiles.main").setLevel(logging.INFO)
 
-_IGNORED_DIRS = {".git", "__pycache__", ".venv", "node_modules", "tmp", "signals"}
+_IGNORED_DIRS = {".git", "__pycache__", ".venv", "node_modules", "tmp"}
 
 
 @runtime_checkable
