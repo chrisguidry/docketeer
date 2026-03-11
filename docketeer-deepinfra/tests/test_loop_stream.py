@@ -99,6 +99,29 @@ async def test_on_first_text_callback_fires_once(mock_client: MagicMock):
     assert calls == [True]
 
 
+async def test_on_text_callback_fires_per_chunk(mock_client: MagicMock):
+    texts: list[str] = []
+
+    async def on_text(text: str) -> None:
+        texts.append(text)
+
+    mock_client.chat.completions.create.return_value = make_chunks(
+        content="Hello world"
+    )
+
+    await stream_message(
+        client=mock_client,
+        model=MODEL,
+        system=[],
+        messages=[MessageParam(role="user", content="test")],
+        tools=[],
+        on_text=on_text,
+        default_model="test-model",
+    )
+
+    assert texts == ["Hello world"]
+
+
 async def test_on_first_text_skipped_for_tool_only_response(mock_client: MagicMock):
     calls: list[bool] = []
 

@@ -9,6 +9,7 @@ import os
 import secrets
 from collections.abc import AsyncGenerator, Generator
 from contextlib import contextmanager
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
@@ -34,6 +35,15 @@ from docketeer.chat import (
 log = logging.getLogger(__name__)
 
 ROOM_ID = "terminal"
+
+
+@dataclass
+class _TUIStream:
+    """Tracks an in-progress streamed reply."""
+
+    parts: list[str] = field(default_factory=list)
+    lines_printed: int = 0
+    extra_lines: int = 0
 
 
 @contextmanager
@@ -65,6 +75,7 @@ class TUIClient(ChatClient):
         self._human_user_id = f"tui-{self._human_username}"
         self._reaction_emojis: list[str] = []
         self._reactions_printed = False
+        self._active_stream: _TUIStream | None = None
 
     async def __aenter__(self) -> TUIClient:
         from docketeer import environment
@@ -253,8 +264,73 @@ class TUIClient(ChatClient):
         if self._reactions_printed:
             # Move cursor up one line and clear it before reprinting
             self._console.file.write("\x1b[1A\x1b[2K")
+        elif self._active_stream:
+            self._active_stream.extra_lines += 1
         self._console.print(display)
         self._reactions_printed = True
+
+    async def start_reply_stream(
+        self,
+        msg: IncomingMessage,
+        thread_id: str,
+        text: str,
+    ) -> _TUIStream | None:
+        self._stop_reactions()
+        stream = _TUIStream()
+        stream.parts.append(text)
+        self._active_stream = stream
+        return stream
+
+    async def append_reply_stream(self, stream: Any, text: str) -> None:
+        assert isinstance(stream, _TUIStream)
+        stream.parts.append(text)
+        if stream.lines_printed:
+            self._reprint_stream_panel(stream)
+        else:
+            self._print_stream_panel(stream)
+
+    async def stop_reply_stream(self, stream: Any) -> None:
+        assert isinstance(stream, _TUIStream)
+        self._active_stream = None
+        text = "".join(stream.parts)
+        now = datetime.now(UTC)
+        msg_id = secrets.token_hex(8)
+        self._messages.append(
+            RoomMessage(
+                message_id=msg_id,
+                timestamp=now,
+                username=self.username,
+                display_name=self.username,
+                text=text,
+            )
+        )
+        self._reprint_stream_panel(stream)
+        if self._on_message_sent:
+            await self._on_message_sent(ROOM_ID, text)
+
+    def _print_stream_panel(self, stream: _TUIStream) -> None:
+        text = "".join(stream.parts)
+        panel = Panel(
+            Markdown(text),
+            title="[bold]docketeer[/bold]",
+            title_align="left",
+            border_style="blue",
+            box=box.ROUNDED,
+            padding=(0, 1),
+        )
+        with self._console.capture() as capture:
+            self._console.print(panel)
+        output = capture.get()
+        stream.lines_printed = output.count("\n")
+        self._console.file.write(output)
+        self._console.file.flush()
+
+    def _reprint_stream_panel(self, stream: _TUIStream) -> None:
+        total = stream.lines_printed + stream.extra_lines
+        if total:
+            self._console.file.write(f"\x1b[{total}A\x1b[J")
+        stream.extra_lines = 0
+        self._print_stream_panel(stream)
 
     async def unreact(self, message_id: str, emoji: str) -> None:
         pass

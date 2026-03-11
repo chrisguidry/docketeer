@@ -167,10 +167,14 @@ async def stream_response(
 
             if inner_type == "content_block_delta":
                 delta = inner.get("delta", {})
-                if delta.get("type") == "text_delta" and not first_text_fired:
-                    first_text_fired = True
-                    if callbacks and callbacks.on_first_text:
-                        await callbacks.on_first_text()
+                if delta.get("type") == "text_delta":
+                    text = delta.get("text", "")
+                    if not first_text_fired:
+                        first_text_fired = True
+                        if callbacks and callbacks.on_first_text:
+                            await callbacks.on_first_text()
+                    if text and callbacks and callbacks.on_text:
+                        await callbacks.on_text(text)
 
             elif inner_type == "content_block_start":
                 block = inner.get("content_block", {})

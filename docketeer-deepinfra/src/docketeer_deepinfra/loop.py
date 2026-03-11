@@ -65,6 +65,7 @@ async def agentic_loop(
             messages,
             effective_tools,
             on_first_text=callbacks_on_first_text,
+            on_text=callbacks_on_text,
             default_model=default_model,
         )
 
@@ -158,6 +159,7 @@ async def agentic_loop(
             messages,
             [],
             on_first_text=callbacks_on_first_text,
+            on_text=callbacks_on_text,
             default_model=default_model,
         )
         cached_tokens = 0
@@ -185,6 +187,7 @@ async def stream_message(
     messages: list[MessageParam],
     tools: list[ToolDefinition],
     on_first_text: Callable[[], Awaitable[None]] | None = None,
+    on_text: Callable[[str], Awaitable[None]] | None = None,
     default_model: str | None = None,
 ) -> ChatCompletion:
     """Stream a response from DeepInfra."""
@@ -215,11 +218,14 @@ async def stream_message(
     async for chunk in raw_stream:
         state.handle_chunk(chunk)
 
-        if not first_text_fired and on_first_text and chunk.choices:
+        if chunk.choices:
             delta = chunk.choices[0].delta
             if delta and delta.content:
-                await on_first_text()
-                first_text_fired = True
+                if not first_text_fired and on_first_text:
+                    await on_first_text()
+                    first_text_fired = True
+                if on_text:
+                    await on_text(delta.content)
 
     try:
         return state.get_final_completion()

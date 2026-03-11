@@ -371,6 +371,22 @@ async def test_stream_event_consecutive_tools():
     assert calls["on_tool_end"] == [True, True]
 
 
+async def test_stream_event_fires_on_text_per_chunk():
+    """Each text_delta fires on_text with the chunk text."""
+    cb, calls = _callbacks()
+    stream = _make_stream(
+        [
+            _text_delta_event("He"),
+            _text_delta_event("llo"),
+            _text_delta_event(""),
+            _assistant_event("Hello"),
+            _result_event("sess-14a"),
+        ]
+    )
+    await stream_response(stream, cb)
+    assert calls["on_text"] == ["He", "llo"]
+
+
 async def test_stream_event_assistant_skips_redundant_callbacks():
     """When stream_events fired callbacks, assistant events skip them."""
     cb, calls = _callbacks()
@@ -386,6 +402,24 @@ async def test_stream_event_assistant_skips_redundant_callbacks():
     assert calls["on_first_text"] == [True]
     assert calls["on_tool_start"] == []
     assert calls["on_tool_end"] == []
+
+
+async def test_stream_event_input_json_delta_ignored():
+    """Non-text content_block_delta events (like input_json) are ignored."""
+    cb, calls = _callbacks()
+    stream = _make_stream(
+        [
+            _stream_event(
+                "content_block_delta",
+                delta={"type": "input_json_delta", "partial_json": '{"key":'},
+            ),
+            _text_delta_event("Done."),
+            _assistant_event("Done."),
+            _result_event("sess-14b"),
+        ]
+    )
+    await stream_response(stream, cb)
+    assert calls["on_text"] == ["Done."]
 
 
 async def test_stream_event_no_callbacks():

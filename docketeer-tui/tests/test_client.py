@@ -6,7 +6,21 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from docketeer.chat import IncomingMessage, RoomKind
 from docketeer_tui.client import ROOM_ID, TUIClient
+
+
+def _make_msg() -> IncomingMessage:
+    return IncomingMessage(
+        message_id="m1",
+        user_id="u1",
+        username="chris",
+        display_name="Chris",
+        text="hi",
+        room_id=ROOM_ID,
+        kind=RoomKind.direct,
+        timestamp=datetime.now(UTC),
+    )
 
 
 async def test_context_manager():
@@ -106,8 +120,6 @@ async def test_fetch_messages_time_filters():
 
 
 async def test_list_rooms():
-    from docketeer.chat import RoomKind
-
     client = TUIClient()
     rooms = await client.list_rooms()
     assert len(rooms) == 1
@@ -168,8 +180,6 @@ async def test_incoming_messages_yields_input():
     assert messages[0].text == "hello"
     assert messages[0].room_id == ROOM_ID
     assert messages[0].username == client._human_username
-    from docketeer.chat import RoomKind
-
     assert messages[0].kind is RoomKind.direct
 
 
@@ -299,3 +309,96 @@ async def test_send_message_calls_on_message_sent_callback():
     client._on_message_sent = recorder
     await client.send_message("room1", "hello")
     assert calls == [("room1", "hello")]
+
+
+async def test_start_reply_stream_returns_handle():
+    client = TUIClient()
+    stream = await client.start_reply_stream(_make_msg(), "t1", "Hello")
+    assert stream is not None
+    assert stream.parts == ["Hello"]
+    assert stream.lines_printed == 0
+
+
+async def test_append_reply_stream_accumulates_text():
+    client = TUIClient()
+    stream = await client.start_reply_stream(_make_msg(), "t1", "He")
+    assert stream is not None
+    await client.append_reply_stream(stream, "llo")
+    assert stream.parts == ["He", "llo"]
+    assert stream.lines_printed > 0
+
+
+async def test_append_reply_stream_reprints_existing():
+    client = TUIClient()
+    stream = await client.start_reply_stream(_make_msg(), "t1", "He")
+    assert stream is not None
+    await client.append_reply_stream(stream, "llo")
+    first_lines = stream.lines_printed
+    await client.append_reply_stream(stream, " world")
+    assert stream.parts == ["He", "llo", " world"]
+    assert stream.lines_printed >= first_lines
+
+
+async def test_stop_reply_stream_stores_message():
+    client = TUIClient()
+    stream = await client.start_reply_stream(_make_msg(), "t1", "Hello ")
+    assert stream is not None
+    await client.append_reply_stream(stream, "world")
+    await client.stop_reply_stream(stream)
+    assert len(client._messages) == 1
+    assert client._messages[0].text == "Hello world"
+
+
+async def test_stop_reply_stream_calls_on_message_sent():
+    client = TUIClient()
+    calls: list[tuple[str, str]] = []
+
+    async def recorder(room_id: str, text: str) -> None:
+        calls.append((room_id, text))
+
+    client._on_message_sent = recorder
+    stream = await client.start_reply_stream(_make_msg(), "t1", "done")
+    assert stream is not None
+    await client.stop_reply_stream(stream)
+    assert calls == [(ROOM_ID, "done")]
+
+
+def test_reprint_stream_panel_no_prior_output():
+    from docketeer_tui.client import _TUIStream
+
+    client = TUIClient()
+    stream = _TUIStream()
+    stream.parts.append("hello")
+    client._reprint_stream_panel(stream)
+    assert stream.lines_printed > 0
+
+
+async def test_react_during_streaming_tracks_extra_lines():
+    client = TUIClient()
+    stream = await client.start_reply_stream(_make_msg(), "t1", "thinking...")
+    assert stream is not None
+    assert stream.extra_lines == 0
+
+    # First append prints the panel
+    await client.append_reply_stream(stream, "...")
+    assert stream.lines_printed > 0
+
+    await client.react("m1", ":globe_with_meridians:")
+    assert stream.extra_lines == 1
+
+    # Second react on same line (reactions_printed=True) doesn't add extra
+    await client.react("m1", ":brain:")
+    assert stream.extra_lines == 1
+
+    # Reprint clears extra lines
+    await client.append_reply_stream(stream, " done")
+    assert stream.extra_lines == 0
+
+
+async def test_start_reply_stream_clears_reactions():
+    client = TUIClient()
+    await client.react("m1", ":brain:")
+    assert client._reactions_printed
+    stream = await client.start_reply_stream(_make_msg(), "t1", "hi")
+    assert stream is not None
+    assert not client._reactions_printed
