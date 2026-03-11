@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -30,12 +31,21 @@ tmp/
 """
 
 
+@dataclass
+class GitResult:
+    """Captured output from a git subprocess."""
+
+    returncode: int
+    stdout: bytes
+    stderr: bytes
+
+
 async def _git(
     cwd: Path,
     *args: str,
     env: dict[str, str] | None = None,
-) -> asyncio.subprocess.Process:
-    """Run a git command and return the completed process."""
+) -> GitResult:
+    """Run a git command and return the captured result."""
     proc = await asyncio.create_subprocess_exec(
         "git",
         *args,
@@ -44,8 +54,9 @@ async def _git(
         stderr=asyncio.subprocess.PIPE,
         env={**os.environ, **env} if env else None,
     )
-    await proc.wait()
-    return proc
+    stdout, stderr = await proc.communicate()
+    assert proc.returncode is not None
+    return GitResult(returncode=proc.returncode, stdout=stdout, stderr=stderr)
 
 
 async def _git_config(cwd: Path, key: str, value: str) -> None:
@@ -75,10 +86,8 @@ async def _init_repo(
 
 async def _has_changes(workspace: Path) -> bool:
     """Check if the workspace has any uncommitted changes or untracked files."""
-    status = await _git(workspace, "status", "--porcelain")
-    assert status.stdout is not None
-    output = await status.stdout.read()
-    return bool(output.strip())
+    result = await _git(workspace, "status", "--porcelain")
+    return bool(result.stdout.strip())
 
 
 async def _generate_commit_message(
@@ -130,9 +139,8 @@ async def backup(
 
     await _git(workspace, "add", ".")
 
-    diff_proc = await _git(workspace, "diff", "--cached")
-    assert diff_proc.stdout is not None
-    diff_text = (await diff_proc.stdout.read()).decode()
+    diff_result = await _git(workspace, "diff", "--cached")
+    diff_text = diff_result.stdout.decode()
 
     message = await _generate_commit_message(backend, diff_text)
 
@@ -149,6 +157,4 @@ async def backup(
     if remote:
         result = await _git(workspace, "push", "-u", "origin", branch)
         if result.returncode != 0:
-            assert result.stderr is not None
-            stderr = (await result.stderr.read()).decode()
-            log.warning("Push failed: %s", stderr)
+            log.warning("Push failed: %s", result.stderr.decode())

@@ -7,7 +7,13 @@ from unittest.mock import AsyncMock
 import pytest
 
 from docketeer.brain.backend import InferenceBackend
-from docketeer_git.backup import _generate_commit_message, _git, _git_config, backup
+from docketeer_git.backup import (
+    GitResult,
+    _generate_commit_message,
+    _git,
+    _git_config,
+    backup,
+)
 
 
 @pytest.fixture()
@@ -174,6 +180,7 @@ async def test_sets_author_config(workspace: Path):
 
 async def test_git_helper(tmp_path: Path):
     result = await _git(tmp_path, "init")
+    assert isinstance(result, GitResult)
     assert result.returncode == 0
 
 
