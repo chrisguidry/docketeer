@@ -63,9 +63,8 @@ def _save_cursor(workspace: Path, tuning_name: str, signal_id: str) -> None:
     path.write_text(signal_id + "\n")
 
 
-def _read_tuning_purpose(workspace: Path, tuning: Tuning) -> str:
-    """Read the purpose/system_context for a tuning from its workspace file body."""
-    path = workspace / "tunings" / f"{tuning.name}.md"
+def _read_file_body(path: Path) -> str:
+    """Read a workspace markdown file and return the body (after frontmatter)."""
     if not path.exists():
         return ""
     content = path.read_text()
@@ -87,9 +86,14 @@ async def deliver_signal(
     content = MessageContent(text=text)
 
     system_context: list[SystemBlock] = []
-    purpose = _read_tuning_purpose(workspace, tuning)
-    if purpose:
-        system_context.append(SystemBlock(text=purpose))
+
+    line_body = _read_file_body(workspace / "lines" / f"{tuning.target_line}.md")
+    if line_body:
+        system_context.append(SystemBlock(text=line_body))
+
+    tuning_body = _read_file_body(workspace / "tunings" / f"{tuning.name}.md")
+    if tuning_body:
+        system_context.append(SystemBlock(text=tuning_body))
 
     response = await process_fn(
         line=line,

@@ -159,7 +159,7 @@ async def test_deliver_signal_logs_signal(tmp_path: Path):
     assert log_path.exists()
 
 
-async def test_deliver_signal_with_purpose_prompt(tmp_path: Path):
+async def test_deliver_signal_with_tuning_body(tmp_path: Path):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     tunings_dir = workspace / "tunings"
@@ -178,7 +178,52 @@ async def test_deliver_signal_with_purpose_prompt(tmp_path: Path):
     assert "security" in kwargs["system_context"][0].text
 
 
-async def test_deliver_signal_no_purpose_prompt(tmp_path: Path):
+async def test_deliver_signal_with_line_body(tmp_path: Path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "tunings").mkdir()
+    lines_dir = workspace / "lines"
+    lines_dir.mkdir()
+    (lines_dir / "opensource.md").write_text(
+        "---\n---\nNotify Chris about external contributors."
+    )
+
+    process = AsyncMock(return_value=BrainResponse(text=""))
+    tuning = Tuning(name="github", band="wicket", topic="events", line="opensource")
+
+    await deliver_signal(process, tuning, _make_signal(), workspace)
+
+    kwargs = process.call_args.kwargs
+    assert len(kwargs["system_context"]) == 1
+    assert "external contributors" in kwargs["system_context"][0].text
+
+
+async def test_deliver_signal_with_line_and_tuning_body(tmp_path: Path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    tunings_dir = workspace / "tunings"
+    tunings_dir.mkdir()
+    (tunings_dir / "github-prs.md").write_text(
+        "---\nband: wicket\ntopic: events\nline: opensource\n---\nFocus on PRs."
+    )
+    lines_dir = workspace / "lines"
+    lines_dir.mkdir()
+    (lines_dir / "opensource.md").write_text(
+        "---\n---\nNotify Chris about external contributors."
+    )
+
+    process = AsyncMock(return_value=BrainResponse(text=""))
+    tuning = Tuning(name="github-prs", band="wicket", topic="events", line="opensource")
+
+    await deliver_signal(process, tuning, _make_signal(), workspace)
+
+    kwargs = process.call_args.kwargs
+    assert len(kwargs["system_context"]) == 2
+    assert "external contributors" in kwargs["system_context"][0].text
+    assert "PRs" in kwargs["system_context"][1].text
+
+
+async def test_deliver_signal_no_context(tmp_path: Path):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     process = AsyncMock(return_value=BrainResponse(text=""))
