@@ -14,6 +14,12 @@ from docketeer_anthropic.claude_code_backend import ClaudeCodeBackend
 TIER = "smart"
 
 
+def _extract_prompt_texts(ndjson_prompt: str) -> list[str]:
+    """Extract text values from a stream-json NDJSON prompt."""
+    envelope = json.loads(ndjson_prompt)
+    return [b["text"] for b in envelope["message"]["content"] if b["type"] == "text"]
+
+
 def _mock_executor() -> AsyncMock:
     return AsyncMock()
 
@@ -61,7 +67,8 @@ async def test_first_call_sends_latest_message(backend: ClaudeCodeBackend):
             None,
         )
     assert result == "Hi Chris!"
-    assert mock.call_args[0][3] == "@chris: hello"
+    texts = _extract_prompt_texts(mock.call_args[0][3])
+    assert texts == ["@chris: hello"]
     assert mock.call_args[1].get("resume_session_id") is None
 
 
@@ -83,10 +90,12 @@ async def test_first_call_includes_history_in_prompt(backend: ClaudeCodeBackend)
             Path("/tmp"),
             None,
         )
-    prompt = mock.call_args[0][3]
-    assert "[21:10] @peps: earlier question" in prompt
-    assert "[assistant] Earlier reply." in prompt
-    assert "[21:19] @peps: latest message" in prompt
+    texts = _extract_prompt_texts(mock.call_args[0][3])
+    assert texts == [
+        "[21:10] @peps: earlier question",
+        "[assistant] Earlier reply.",
+        "[21:19] @peps: latest message",
+    ]
 
 
 async def test_first_call_passes_workspace_from_tool_context(
@@ -175,7 +184,8 @@ async def test_subsequent_call_uses_resume(backend: ClaudeCodeBackend):
             Path("/tmp"),
             None,
         )
-    assert mock.call_args[0][3] == "@chris: how are you?"
+    texts = _extract_prompt_texts(mock.call_args[0][3])
+    assert texts == ["@chris: how are you?"]
     assert mock.call_args[1]["resume_session_id"] == assigned_id
 
 
@@ -220,7 +230,8 @@ async def test_compaction_resets_session(backend: ClaudeCodeBackend):
             Path("/tmp"),
             None,
         )
-    assert mock.call_args[0][3] == "compacted summary"
+    texts = _extract_prompt_texts(mock.call_args[0][3])
+    assert texts == ["compacted summary"]
     assert mock.call_args[1].get("resume_session_id") is None
 
 

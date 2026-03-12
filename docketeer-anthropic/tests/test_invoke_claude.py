@@ -289,3 +289,9 @@ def test_build_claude_args_with_session_id():
     assert args[args.index("--session-id") + 1] == "sess-2"
     assert "--system-prompt" in args
     assert "--model" in args
+
+
+def test_build_claude_args_includes_input_format_stream_json():
+    args = _build_claude_args("model", "sys", session_id="sess-1")
+    assert "--input-format" in args
+    assert args[args.index("--input-format") + 1] == "stream-json"

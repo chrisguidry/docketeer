@@ -15,10 +15,10 @@ from docketeer import environment
 from docketeer.audit import log_usage, record_usage
 from docketeer.brain.backend import InferenceBackend, Usage
 from docketeer.executor import ClaudeInvocation, CommandExecutor, RunningProcess
+from docketeer.prompt import MessageParam
 from docketeer_anthropic.claude_code_output import (
     check_process_exit,
-    format_prompt,
-    save_message_images,
+    format_stream_json_input,
     stream_response,
 )
 
@@ -134,33 +134,28 @@ class ClaudeCodeBackend(InferenceBackend):
             else:
                 log.info("New session %s for line %s", session_id, line or "(none)")
 
-        image_dir = self.claude_dir / "images"
-        image_paths = save_message_images(messages, image_dir)
-
-        prompt = format_prompt(messages, resume=resume_session_id is not None)
+        prompt = format_stream_json_input(
+            messages, resume=resume_session_id is not None
+        )
         log.info("Prompt (%d chars): %.200s", len(prompt), prompt)
 
         use_mcp = bool(tools and tool_context and self._mcp_socket)
-        try:
-            text, _, result_event = await _invoke_claude(
-                self.executor,
-                model_id,
-                system_text,
-                prompt,
-                self.oauth_token,
-                self.claude_dir,
-                tool_context.workspace,
-                audit_path,
-                session_id=session_id,
-                resume_session_id=resume_session_id,
-                mcp_socket_path=self._mcp_socket_path if use_mcp else None,
-                mcp_socket=self._mcp_socket if use_mcp else None,
-                tool_context=tool_context if use_mcp else None,
-                callbacks=callbacks,
-            )
-        finally:
-            for p in image_paths:
-                p.unlink(missing_ok=True)
+        text, _, result_event = await _invoke_claude(
+            self.executor,
+            model_id,
+            system_text,
+            prompt,
+            self.oauth_token,
+            self.claude_dir,
+            tool_context.workspace,
+            audit_path,
+            session_id=session_id,
+            resume_session_id=resume_session_id,
+            mcp_socket_path=self._mcp_socket_path if use_mcp else None,
+            mcp_socket=self._mcp_socket if use_mcp else None,
+            tool_context=tool_context if use_mcp else None,
+            callbacks=callbacks,
+        )
 
         effective_session_id = resume_session_id or session_id
         log.info(
@@ -232,11 +227,14 @@ class ClaudeCodeBackend(InferenceBackend):
         audit.mkdir(exist_ok=True)
 
         log.info("utility_complete: prompt (%d chars): %.200s", len(prompt), prompt)
+        ndjson_prompt = format_stream_json_input(
+            [MessageParam(role="user", content=prompt)]
+        )
         text, _, _ = await _invoke_claude(
             self.executor,
             "claude-haiku-4-5-20251001",
             "You are a helpful assistant. Be concise.",
-            prompt,
+            ndjson_prompt,
             self.oauth_token,
             self.claude_dir,
             scratch,
@@ -269,6 +267,8 @@ def _build_claude_args(
     """Build the argument list for claude -p (everything after the binary)."""
     args = [
         "-p",
+        "--input-format",
+        "stream-json",
         "--output-format",
         "stream-json",
         "--include-partial-messages",

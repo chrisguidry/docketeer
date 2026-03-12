@@ -3,13 +3,10 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import json
 import logging
 import re
-from pathlib import Path
 from typing import TYPE_CHECKING
-from uuid import uuid4
 
 from docketeer.brain.backend import (
     BackendAuthError,
@@ -42,72 +39,57 @@ def extract_text(message: MessageParam) -> str:
     return "\n".join(parts)
 
 
-_MEDIA_TYPE_EXT: dict[str, str] = {
-    "image/png": ".png",
-    "image/jpeg": ".jpg",
-    "image/gif": ".gif",
-    "image/webp": ".webp",
-}
+def _message_to_content_blocks(msg: MessageParam) -> list[dict]:
+    """Convert a MessageParam's content to stream-json content blocks."""
+    if isinstance(msg.content, str):
+        return [{"type": "text", "text": msg.content}] if msg.content else []
+    blocks: list[dict] = []
+    for block in msg.content:
+        if isinstance(block, (ImageBlockParam, TextBlockParam)):
+            blocks.append(block.to_dict())
+        elif isinstance(block, str):
+            blocks.append({"type": "text", "text": block})
+        elif isinstance(block, dict) and block.get("type") == "text":
+            blocks.append({"type": "text", "text": block.get("text", "")})
+    return blocks
 
 
-def save_message_images(messages: list[MessageParam], image_dir: Path) -> list[Path]:
-    """Save base64 images from messages to disk and return file paths.
+def format_stream_json_input(
+    messages: list[MessageParam],
+    *,
+    resume: bool = False,
+) -> str:
+    """Build NDJSON input for ``claude -p --input-format stream-json``.
 
-    Each ImageBlockParam is replaced in-place with a TextBlockParam referencing
-    the saved file, so format_prompt will include the path for Claude Code's
-    Read tool.
-    """
-    paths: list[Path] = []
-    image_dir.mkdir(parents=True, exist_ok=True)
+    Images are passed inline as base64 content blocks, so Claude sees them
+    natively without needing the Read tool.
 
-    for msg in messages:
-        if isinstance(msg.content, str):
-            continue
-        new_content: list = []
-        for block in msg.content:
-            if isinstance(block, ImageBlockParam):
-                ext = _MEDIA_TYPE_EXT.get(block.source.media_type, ".bin")
-                filename = f"{uuid4().hex[:12]}{ext}"
-                path = image_dir / filename
-                path.write_bytes(base64.b64decode(block.source.data))
-                paths.append(path)
-                new_content.append(
-                    TextBlockParam(
-                        text=f"The user attached an image. Read it at: {path}"
-                    )
-                )
-            else:
-                new_content.append(block)
-        msg.content = new_content
-
-    return paths
-
-
-def format_prompt(messages: list, *, resume: bool = False) -> str:
-    """Build the prompt to send to claude -p.
-
-    For resumed sessions, only the latest message is needed since Claude Code
-    has the prior context internally.  For new sessions, include the full
-    conversation history so Claude Code can see what was said before it joined.
+    For resumed sessions, only the latest message is sent.  For new sessions,
+    the full conversation history is packed into a single user message (with
+    assistant turns prefixed ``[assistant]``) so Claude Code gets context.
     """
     if not messages:
         return ""
 
     if resume or len(messages) <= 1:
-        return extract_text(messages[-1])
+        content = _message_to_content_blocks(messages[-1])
+    else:
+        content: list[dict] = []
+        for msg in messages:
+            blocks = _message_to_content_blocks(msg)
+            if not blocks:
+                continue
+            if msg.role == "assistant":
+                text = extract_text(msg)
+                content.append({"type": "text", "text": f"[assistant] {text}"})
+            else:
+                content.extend(blocks)
 
-    parts: list[str] = []
-    for msg in messages:
-        text = extract_text(msg)
-        if not text:
-            continue
-        role = msg.role
-        if role == "assistant":
-            parts.append(f"[assistant] {text}")
-        else:
-            parts.append(text)
-
-    return "\n".join(parts)
+    envelope = {
+        "type": "user",
+        "message": {"role": "user", "content": content},
+    }
+    return json.dumps(envelope)
 
 
 def check_process_exit(

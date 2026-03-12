@@ -1,7 +1,6 @@
-"""Tests for claude_code_output: parsing, error handling, and format_prompt."""
+"""Tests for claude_code_output: parsing, error handling, and format_stream_json_input."""
 
 import json
-from pathlib import Path
 
 import pytest
 
@@ -16,9 +15,8 @@ from docketeer_anthropic.claude_code_output import (
     check_error,
     check_process_exit,
     extract_text,
-    format_prompt,
+    format_stream_json_input,
     parse_response,
-    save_message_images,
 )
 
 # -- extract_text --
@@ -78,105 +76,155 @@ def test_extract_text_image_block_placeholder():
     assert extract_text(msg) == "look\n[image]"
 
 
-# -- save_message_images --
+# -- format_stream_json_input --
 
 
-def test_save_message_images_writes_files(tmp_path: Path):
-    import base64
+def _parse_ndjson(text: str) -> list[dict]:
+    """Parse newline-delimited JSON into a list of dicts."""
+    return [json.loads(line) for line in text.strip().split("\n") if line.strip()]
 
-    raw_bytes = b"\x89PNG\r\n\x1a\n"
-    encoded = base64.b64encode(raw_bytes).decode()
+
+def test_format_stream_json_input_empty():
+    assert format_stream_json_input([]) == ""
+
+
+def test_format_stream_json_input_single_text_message():
+    messages = [MessageParam(role="user", content="hello")]
+    result = format_stream_json_input(messages)
+    lines = _parse_ndjson(result)
+    assert len(lines) == 1
+    assert lines[0]["type"] == "user"
+    assert lines[0]["message"]["role"] == "user"
+    content = lines[0]["message"]["content"]
+    assert content == [{"type": "text", "text": "hello"}]
+
+
+def test_format_stream_json_input_single_message_with_image():
     img = ImageBlockParam(
-        source=Base64ImageSourceParam(media_type="image/png", data=encoded)
+        source=Base64ImageSourceParam(media_type="image/png", data="abc123")
     )
-    msg = MessageParam(role="user", content=[TextBlockParam(text="hi"), img])
-
-    paths = save_message_images([msg], tmp_path / "images")
-
-    assert len(paths) == 1
-    assert paths[0].suffix == ".png"
-    assert paths[0].read_bytes() == raw_bytes
-    assert isinstance(msg.content[1], TextBlockParam)
-    assert str(paths[0]) in msg.content[1].text
-
-
-def test_save_message_images_no_images(tmp_path: Path):
-    msg = MessageParam(role="user", content="just text")
-    paths = save_message_images([msg], tmp_path / "images")
-    assert paths == []
-
-
-def test_save_message_images_jpeg_extension(tmp_path: Path):
-    import base64
-
-    encoded = base64.b64encode(b"\xff\xd8\xff").decode()
-    img = ImageBlockParam(
-        source=Base64ImageSourceParam(media_type="image/jpeg", data=encoded)
-    )
-    msg = MessageParam(role="user", content=[img])
-
-    paths = save_message_images([msg], tmp_path / "images")
-    assert paths[0].suffix == ".jpg"
-
-
-def test_save_message_images_unknown_media_type(tmp_path: Path):
-    import base64
-
-    encoded = base64.b64encode(b"\x00").decode()
-    img = ImageBlockParam(
-        source=Base64ImageSourceParam(media_type="image/tiff", data=encoded)
-    )
-    msg = MessageParam(role="user", content=[img])
-
-    paths = save_message_images([msg], tmp_path / "images")
-    assert paths[0].suffix == ".bin"
-
-
-# -- format_prompt --
-
-
-def test_format_prompt_single_message():
-    messages = [MessageParam(role="user", content="[21:19] @peps: hello")]
-    assert format_prompt(messages) == "[21:19] @peps: hello"
-
-
-def test_format_prompt_includes_history_for_new_session():
     messages = [
-        MessageParam(role="user", content="[21:10] @peps: first message"),
+        MessageParam(role="user", content=[TextBlockParam(text="look at this"), img])
+    ]
+    result = format_stream_json_input(messages)
+    lines = _parse_ndjson(result)
+    assert len(lines) == 1
+    content = lines[0]["message"]["content"]
+    assert len(content) == 2
+    assert content[0] == {"type": "text", "text": "look at this"}
+    assert content[1] == {
+        "type": "image",
+        "source": {"type": "base64", "media_type": "image/png", "data": "abc123"},
+    }
+
+
+def test_format_stream_json_input_history_new_session():
+    messages = [
+        MessageParam(role="user", content="first message"),
         MessageParam(role="assistant", content="Got it."),
-        MessageParam(role="user", content="[21:15] @peps: second message"),
-        MessageParam(role="assistant", content="Sure thing."),
-        MessageParam(role="user", content="[21:19] @peps: latest question"),
+        MessageParam(role="user", content="second message"),
     ]
-    result = format_prompt(messages)
-    assert "[21:10] @peps: first message" in result
-    assert "[assistant] Got it." in result
-    assert "[21:15] @peps: second message" in result
-    assert "[assistant] Sure thing." in result
-    assert "[21:19] @peps: latest question" in result
+    result = format_stream_json_input(messages)
+    lines = _parse_ndjson(result)
+    assert len(lines) == 1
+    content = lines[0]["message"]["content"]
+    texts = [b["text"] for b in content]
+    assert texts == ["first message", "[assistant] Got it.", "second message"]
 
 
-def test_format_prompt_resume_sends_only_latest():
+def test_format_stream_json_input_resume_sends_only_latest():
     messages = [
-        MessageParam(role="user", content="[21:10] @peps: old message"),
+        MessageParam(role="user", content="old message"),
         MessageParam(role="assistant", content="Old reply."),
-        MessageParam(role="user", content="[21:19] @peps: new message"),
+        MessageParam(role="user", content="new message"),
     ]
-    result = format_prompt(messages, resume=True)
-    assert result == "[21:19] @peps: new message"
+    result = format_stream_json_input(messages, resume=True)
+    lines = _parse_ndjson(result)
+    assert len(lines) == 1
+    content = lines[0]["message"]["content"]
+    assert content == [{"type": "text", "text": "new message"}]
 
 
-def test_format_prompt_empty_messages():
-    assert format_prompt([]) == ""
-
-
-def test_format_prompt_skips_empty_content():
+def test_format_stream_json_input_skips_empty_content():
     messages = [
         MessageParam(role="user", content=""),
-        MessageParam(role="user", content="[21:19] @peps: hello"),
+        MessageParam(role="user", content="hello"),
     ]
-    result = format_prompt(messages)
-    assert result == "[21:19] @peps: hello"
+    result = format_stream_json_input(messages)
+    lines = _parse_ndjson(result)
+    content = lines[0]["message"]["content"]
+    assert content == [{"type": "text", "text": "hello"}]
+
+
+def test_format_stream_json_input_resume_with_image():
+    img = ImageBlockParam(
+        source=Base64ImageSourceParam(media_type="image/jpeg", data="img64")
+    )
+    messages = [
+        MessageParam(role="user", content="old"),
+        MessageParam(role="user", content=[TextBlockParam(text="new"), img]),
+    ]
+    result = format_stream_json_input(messages, resume=True)
+    lines = _parse_ndjson(result)
+    content = lines[0]["message"]["content"]
+    assert len(content) == 2
+    assert content[1]["source"]["media_type"] == "image/jpeg"
+
+
+def test_format_stream_json_input_raw_strings_in_list():
+    messages = [MessageParam(role="user", content=["hello", "world"])]
+    result = format_stream_json_input(messages)
+    lines = _parse_ndjson(result)
+    content = lines[0]["message"]["content"]
+    texts = [b["text"] for b in content]
+    assert texts == ["hello", "world"]
+
+
+def test_format_stream_json_input_skips_unknown_dict_blocks():
+    messages = [
+        MessageParam(
+            role="user",
+            content=[
+                {"type": "text", "text": "kept"},
+                {"type": "tool_result", "content": "dropped"},
+            ],
+        )
+    ]
+    result = format_stream_json_input(messages)
+    lines = _parse_ndjson(result)
+    content = lines[0]["message"]["content"]
+    assert content == [{"type": "text", "text": "kept"}]
+
+
+def test_format_stream_json_input_dict_text_blocks():
+    messages = [
+        MessageParam(
+            role="user",
+            content=[{"type": "text", "text": "from dict"}],
+        )
+    ]
+    result = format_stream_json_input(messages)
+    lines = _parse_ndjson(result)
+    content = lines[0]["message"]["content"]
+    assert content == [{"type": "text", "text": "from dict"}]
+
+
+def test_format_stream_json_input_history_with_images():
+    img = ImageBlockParam(
+        source=Base64ImageSourceParam(media_type="image/png", data="b64data")
+    )
+    messages = [
+        MessageParam(role="user", content=[TextBlockParam(text="see this"), img]),
+        MessageParam(role="assistant", content="I see it."),
+        MessageParam(role="user", content="what is it?"),
+    ]
+    result = format_stream_json_input(messages)
+    lines = _parse_ndjson(result)
+    content = lines[0]["message"]["content"]
+    assert content[0] == {"type": "text", "text": "see this"}
+    assert content[1]["type"] == "image"
+    assert content[2] == {"type": "text", "text": "[assistant] I see it."}
+    assert content[3] == {"type": "text", "text": "what is it?"}
 
 
 # -- parse_response --

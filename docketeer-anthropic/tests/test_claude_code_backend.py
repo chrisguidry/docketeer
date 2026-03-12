@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import base64
+import json
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -148,25 +148,27 @@ async def test_utility_complete(backend: ClaudeCodeBackend):
     with _patch_invoke(("summary text", None, None)) as mock:
         result = await backend.utility_complete("summarize this")
     assert result == "summary text"
-    # The prompt is now the 4th positional arg (after executor, model, system_text)
-    assert mock.call_args[0][3] == "summarize this"
+    # The prompt (4th positional arg) is NDJSON wrapping the text
+    prompt_ndjson = mock.call_args[0][3]
+    envelope = json.loads(prompt_ndjson)
+    assert envelope["message"]["content"] == [
+        {"type": "text", "text": "summarize this"}
+    ]
     # scratch and audit dirs are created under claude_dir
     assert (backend.claude_dir / "scratch").is_dir()
     assert (backend.claude_dir / "audit").is_dir()
 
 
-# -- image handling --
+# -- image handling via stream-json --
 
 
-async def test_images_saved_and_cleaned_up(backend: ClaudeCodeBackend):
-    raw_bytes = b"\x89PNG"
-    encoded = base64.b64encode(raw_bytes).decode()
+async def test_images_passed_inline_as_stream_json(backend: ClaudeCodeBackend):
     img = ImageBlockParam(
-        source=Base64ImageSourceParam(media_type="image/png", data=encoded)
+        source=Base64ImageSourceParam(media_type="image/png", data="abc123")
     )
     messages = [MessageParam(role="user", content=[TextBlockParam(text="hi"), img])]
 
-    with _patch_invoke(("reply", "sess-1", None)):
+    with _patch_invoke(("reply", "sess-1", None)) as mock:
         await backend.run_agentic_loop(
             TIER,
             [],
@@ -178,28 +180,22 @@ async def test_images_saved_and_cleaned_up(backend: ClaudeCodeBackend):
             None,
         )
 
-    # Images should be cleaned up after invocation
-    image_dir = backend.claude_dir / "images"
-    remaining = list(image_dir.glob("*")) if image_dir.exists() else []
-    assert remaining == []
+    # The prompt (4th positional arg) should be NDJSON with inline image
+    prompt_ndjson = mock.call_args[0][3]
+    envelope = json.loads(prompt_ndjson)
+    content = envelope["message"]["content"]
+    assert content[0] == {"type": "text", "text": "hi"}
+    assert content[1]["type"] == "image"
+    assert content[1]["source"]["data"] == "abc123"
 
 
-async def test_images_cleaned_up_on_error(backend: ClaudeCodeBackend):
-    raw_bytes = b"\x89PNG"
-    encoded = base64.b64encode(raw_bytes).decode()
+async def test_no_image_files_created(backend: ClaudeCodeBackend):
     img = ImageBlockParam(
-        source=Base64ImageSourceParam(media_type="image/png", data=encoded)
+        source=Base64ImageSourceParam(media_type="image/png", data="abc123")
     )
     messages = [MessageParam(role="user", content=[img])]
 
-    mock_invoke = AsyncMock(side_effect=RuntimeError("boom"))
-    with (
-        patch(
-            "docketeer_anthropic.claude_code_backend._invoke_claude",
-            mock_invoke,
-        ),
-        pytest.raises(RuntimeError, match="boom"),
-    ):
+    with _patch_invoke(("reply", "sess-1", None)):
         await backend.run_agentic_loop(
             TIER,
             [],
@@ -211,15 +207,15 @@ async def test_images_cleaned_up_on_error(backend: ClaudeCodeBackend):
             None,
         )
 
+    # No image files should be written to disk
     image_dir = backend.claude_dir / "images"
-    remaining = list(image_dir.glob("*")) if image_dir.exists() else []
-    assert remaining == []
+    assert not image_dir.exists()
 
 
-async def test_no_images_no_change(backend: ClaudeCodeBackend):
+async def test_text_only_prompt_is_stream_json(backend: ClaudeCodeBackend):
     messages = [MessageParam(role="user", content="hello")]
 
-    with _patch_invoke(("reply", "sess-1", None)):
+    with _patch_invoke(("reply", "sess-1", None)) as mock:
         result = await backend.run_agentic_loop(
             TIER,
             [],
@@ -232,3 +228,7 @@ async def test_no_images_no_change(backend: ClaudeCodeBackend):
         )
 
     assert result == "reply"
+    prompt_ndjson = mock.call_args[0][3]
+    envelope = json.loads(prompt_ndjson)
+    assert envelope["type"] == "user"
+    assert envelope["message"]["content"] == [{"type": "text", "text": "hello"}]
