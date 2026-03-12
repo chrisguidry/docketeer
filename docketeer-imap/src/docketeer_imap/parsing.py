@@ -1,6 +1,7 @@
 """Parse raw RFC822 email bytes into a structured dataclass."""
 
 import email
+import os
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -9,6 +10,33 @@ from email.message import EmailMessage
 from email.utils import parsedate_to_datetime
 
 MAX_BODY_LENGTH = 10_000
+
+DEFAULT_BLOCKED_HEADER_PREFIXES = (
+    "ARC-",
+    "Authentication-Results",
+    "DKIM-",
+    "DKIMCheck",
+    "MIME-Version",
+    "Received",
+    "Return-Path",
+    "SpamTally",
+    "X-Brightmail-",
+    "X-DKIM",
+    "X-Forwarded-",
+    "X-Gm-",
+    "X-Google-",
+    "X-Originating-IP",
+    "X-Received",
+    "X-Spam-",
+    "X-Zone-",
+)
+
+
+def _blocked_header_prefixes() -> tuple[str, ...]:
+    override = os.environ.get("DOCKETEER_IMAP_BLOCKED_HEADER_PREFIXES")
+    if override is not None:
+        return tuple(p.strip() for p in override.split(",") if p.strip())
+    return DEFAULT_BLOCKED_HEADER_PREFIXES
 
 
 @dataclass(frozen=True)
@@ -26,9 +54,11 @@ class ParsedEmail:
 def parse_email(raw: bytes) -> ParsedEmail:
     msg: EmailMessage = email.message_from_bytes(raw, policy=policy.default)
 
+    blocked = tuple(p.lower() for p in _blocked_header_prefixes())
     headers: dict[str, str] = {}
     for key in msg:
-        headers[key] = str(msg[key])
+        if not any(key.lower().startswith(prefix) for prefix in blocked):
+            headers[key] = str(msg[key])
 
     date = _parse_date(msg)
     body = _extract_body(msg)

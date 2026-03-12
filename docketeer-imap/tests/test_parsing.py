@@ -3,7 +3,14 @@
 from datetime import UTC, datetime
 from unittest.mock import patch
 
-from docketeer_imap.parsing import ParsedEmail, parse_email
+import pytest
+
+from docketeer_imap.parsing import (
+    DEFAULT_BLOCKED_HEADER_PREFIXES,
+    ParsedEmail,
+    _blocked_header_prefixes,
+    parse_email,
+)
 
 
 def _plain_email(
@@ -261,3 +268,79 @@ def test_parse_multipart_empty() -> None:
 
     parsed = parse_email(raw)
     assert parsed.body == ""
+
+
+def test_blocked_headers_excluded() -> None:
+    raw = _plain_email(
+        extra_headers=(
+            "DKIM-Signature: v=1; a=rsa-sha256; d=example.com\r\n"
+            "X-Spam-Score: 0.5\r\n"
+            "ARC-Seal: i=1; a=rsa-sha256\r\n"
+            "X-GitHub-Event: push\r\n"
+        ),
+    )
+    parsed = parse_email(raw)
+
+    assert "X-GitHub-Event" in parsed.headers
+    assert "DKIM-Signature" not in parsed.headers
+    assert "X-Spam-Score" not in parsed.headers
+    assert "ARC-Seal" not in parsed.headers
+
+
+@pytest.mark.parametrize(
+    "prefix",
+    DEFAULT_BLOCKED_HEADER_PREFIXES,
+    ids=DEFAULT_BLOCKED_HEADER_PREFIXES,
+)
+def test_each_default_prefix_blocks(prefix: str) -> None:
+    header_name = prefix if not prefix.endswith("-") else f"{prefix}Test"
+    raw = _plain_email(extra_headers=f"{header_name}: some value\r\n")
+    parsed = parse_email(raw)
+
+    assert header_name not in parsed.headers
+
+
+def test_blocked_header_prefixes_envvar(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DOCKETEER_IMAP_BLOCKED_HEADER_PREFIXES", "X-Custom-,X-Other-")
+    prefixes = _blocked_header_prefixes()
+
+    assert prefixes == ("X-Custom-", "X-Other-")
+
+
+def test_blocked_header_prefixes_envvar_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DOCKETEER_IMAP_BLOCKED_HEADER_PREFIXES", "")
+    prefixes = _blocked_header_prefixes()
+
+    assert prefixes == ()
+
+
+def test_blocked_header_prefixes_default() -> None:
+    assert _blocked_header_prefixes() == DEFAULT_BLOCKED_HEADER_PREFIXES
+
+
+def test_envvar_disables_all_filtering(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DOCKETEER_IMAP_BLOCKED_HEADER_PREFIXES", "")
+    raw = _plain_email(
+        extra_headers="DKIM-Signature: v=1; a=rsa-sha256\r\nX-Spam-Score: 0.5\r\n",
+    )
+    parsed = parse_email(raw)
+
+    assert "DKIM-Signature" in parsed.headers
+    assert "X-Spam-Score" in parsed.headers
+
+
+def test_blocked_prefixes_match_case_insensitively() -> None:
+    raw = _plain_email(
+        extra_headers=(
+            "dkim-signature: v=1; a=rsa-sha256\r\n"
+            "x-spam-score: 0.5\r\n"
+            "x-github-event: push\r\n"
+        ),
+    )
+    parsed = parse_email(raw)
+
+    assert "dkim-signature" not in parsed.headers
+    assert "x-spam-score" not in parsed.headers
+    assert "x-github-event" in parsed.headers

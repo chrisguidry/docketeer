@@ -37,7 +37,28 @@ Each new email produces a signal with:
 - **payload** — `{from, to, cc, subject, date, message_id, body, headers}`
 - **summary** — `"From: sender — Subject: subject line"`
 
-The `headers` dict contains all message headers, so you can filter on anything:
+The `headers` dict contains message headers with noisy infrastructure headers
+(DKIM signatures, ARC chains, spam reports, MTA routing, etc.) filtered out by
+default. The remaining headers are the ones useful for filtering and context.
+
+To customize which headers are blocked, set
+`DOCKETEER_IMAP_BLOCKED_HEADER_PREFIXES` to a comma-separated list of
+case-insensitive prefixes:
+
+```sh
+# Only block spam-related headers
+export DOCKETEER_IMAP_BLOCKED_HEADER_PREFIXES="X-Spam-,SpamTally"
+
+# Disable all header filtering
+export DOCKETEER_IMAP_BLOCKED_HEADER_PREFIXES=""
+```
+
+The default blocked prefixes are: `ARC-`, `Authentication-Results`, `DKIM-`,
+`DKIMCheck`, `MIME-Version`, `Received`, `Return-Path`, `SpamTally`,
+`X-Brightmail-`, `X-DKIM`, `X-Forwarded-`, `X-Gm-`, `X-Google-`,
+`X-Originating-IP`, `X-Received`, `X-Spam-`, `X-Zone-`.
+
+You can filter on any header that passes through:
 
 ```
 {path: "payload.headers.X-GitHub-Event", op: "eq", value: "pull_request"}
