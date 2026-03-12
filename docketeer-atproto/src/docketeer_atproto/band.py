@@ -15,8 +15,7 @@ from docketeer.antenna import Band, Signal, SignalFilter
 log = logging.getLogger(__name__)
 
 DEFAULT_RELAY_URLS = [
-    "wss://jetstream1.us-east.bsky.network/subscribe",
-    "wss://jetstream2.us-east.bsky.network/subscribe",
+    "wss://jetstream.waow.tech/subscribe",
 ]
 
 

@@ -438,9 +438,7 @@ class TestListen:
 class TestRelayUrlConfig:
     def test_default_relay_urls(self) -> None:
         band = JetstreamBand()
-        assert len(band._relay_urls) == 2
-        assert "jetstream1" in band._relay_urls[0]
-        assert "jetstream2" in band._relay_urls[1]
+        assert band._relay_urls == ["wss://jetstream.waow.tech/subscribe"]
 
     def test_custom_relay_url(self) -> None:
         with patch.dict(
@@ -454,11 +452,9 @@ class TestRelayUrlConfig:
         band = JetstreamBand()
         first = band._pick_relay()
         second = band._pick_relay()
-        third = band._pick_relay()
 
         assert first == DEFAULT_RELAY_URLS[0]
-        assert second == DEFAULT_RELAY_URLS[1]
-        assert third == DEFAULT_RELAY_URLS[0]
+        assert second == DEFAULT_RELAY_URLS[0]
 
     def test_round_robin_single_relay(self) -> None:
         with patch.dict(
@@ -490,5 +486,5 @@ class TestRelayUrlConfig:
                 pass  # pragma: no cover
 
         assert len(captured_urls) == 2
-        assert "jetstream1" in captured_urls[0]
-        assert "jetstream2" in captured_urls[1]
+        assert "jetstream.waow.tech" in captured_urls[0]
+        assert "jetstream.waow.tech" in captured_urls[1]

@@ -14,12 +14,9 @@ automatically available.
 |--------------------------------|--------------------------------------|------------------------------------|
 | `DOCKETEER_ATPROTO_RELAY_URL`  | _(round-robin, see below)_           | Override with a single Jetstream relay URL. |
 
-By default, the band round-robins between the two public Jetstream relays on
-each reconnect:
-- `wss://jetstream1.us-east.bsky.network/subscribe`
-- `wss://jetstream2.us-east.bsky.network/subscribe`
+By default, the band connects to `wss://jetstream.waow.tech/subscribe`.
 
-Setting `DOCKETEER_ATPROTO_RELAY_URL` pins to a single relay.
+Setting `DOCKETEER_ATPROTO_RELAY_URL` overrides with a different relay.
 
 ## Event types
 
