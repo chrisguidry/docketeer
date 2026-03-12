@@ -10,6 +10,7 @@ from watchfiles import Change
 from docketeer.watcher import (
     WorkspaceWatcher,
     _format_workspace_pulse,
+    _is_tuning_cursor,
     _workspace_filter,
 )
 
@@ -81,11 +82,11 @@ def test_drain_returns_empty_when_no_new_changes(watcher: WorkspaceWatcher):
         "/workspace/node_modules/pkg/index.js",
         "/workspace/tmp/scratch.txt",
         "/workspace/sub/.git/HEAD",
+        "/workspace/tunings/email/cursor",
+        "/workspace/tunings/atproto/cursor",
     ],
 )
-def test_filter_skips_ignored_dirs(path: str):
-    from watchfiles import Change
-
+def test_filter_skips_ignored_paths(path: str):
     assert _workspace_filter(Change.modified, path) is False
 
 
@@ -96,12 +97,26 @@ def test_filter_skips_ignored_dirs(path: str):
         "/workspace/journal/2026-03-03.md",
         "/workspace/people/chris/profile.md",
         "/workspace/SOUL.md",
+        "/workspace/tunings/email.md",
+        "/workspace/tunings/email/2026-03-11.jsonl",
     ],
 )
 def test_filter_allows_normal_files(path: str):
-    from watchfiles import Change
-
     assert _workspace_filter(Change.modified, path) is True
+
+
+@pytest.mark.parametrize(
+    ("parts", "expected"),
+    [
+        (("/", "workspace", "tunings", "email", "cursor"), True),
+        (("/", "workspace", "tunings", "atproto", "cursor"), True),
+        (("/", "workspace", "tunings", "email.md"), False),
+        (("/", "workspace", "tunings"), False),
+        (("/", "workspace", "notes", "cursor"), False),
+    ],
+)
+def test_is_tuning_cursor(parts: tuple[str, ...], expected: bool):
+    assert _is_tuning_cursor(parts) is expected
 
 
 def test_format_pulse_few_files():

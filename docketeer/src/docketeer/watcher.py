@@ -26,9 +26,22 @@ class Watcher(Protocol):
 
 
 def _workspace_filter(_change: Change, path: str) -> bool:
-    """Skip noisy directories that don't represent meaningful workspace changes."""
+    """Skip noisy directories and high-churn data files."""
     parts = Path(path).parts
-    return not any(part in _IGNORED_DIRS for part in parts)
+    if any(part in _IGNORED_DIRS for part in parts):
+        return False
+
+    # tunings/<name>/cursor updates on every signal — ignore them
+    return not _is_tuning_cursor(parts)
+
+
+def _is_tuning_cursor(parts: tuple[str, ...]) -> bool:
+    """True for tunings/<name>/cursor files (updated on every signal)."""
+    try:
+        idx = parts.index("tunings")
+    except ValueError:
+        return False
+    return len(parts) >= idx + 3 and parts[-1] == "cursor"
 
 
 def _format_workspace_pulse(changed: set[str]) -> str:
