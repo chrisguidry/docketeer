@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import base64
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from docketeer.prompt import MessageParam
+from docketeer.prompt import (
+    Base64ImageSourceParam,
+    ImageBlockParam,
+    MessageParam,
+    TextBlockParam,
+)
 from docketeer_anthropic.claude_code_backend import ClaudeCodeBackend
 
 TIER = "smart"
@@ -147,3 +153,82 @@ async def test_utility_complete(backend: ClaudeCodeBackend):
     # scratch and audit dirs are created under claude_dir
     assert (backend.claude_dir / "scratch").is_dir()
     assert (backend.claude_dir / "audit").is_dir()
+
+
+# -- image handling --
+
+
+async def test_images_saved_and_cleaned_up(backend: ClaudeCodeBackend):
+    raw_bytes = b"\x89PNG"
+    encoded = base64.b64encode(raw_bytes).decode()
+    img = ImageBlockParam(
+        source=Base64ImageSourceParam(media_type="image/png", data=encoded)
+    )
+    messages = [MessageParam(role="user", content=[TextBlockParam(text="hi"), img])]
+
+    with _patch_invoke(("reply", "sess-1", None)):
+        await backend.run_agentic_loop(
+            TIER,
+            [],
+            messages,
+            [],
+            _mock_tool_context(),
+            Path("/tmp"),
+            Path("/tmp"),
+            None,
+        )
+
+    # Images should be cleaned up after invocation
+    image_dir = backend.claude_dir / "images"
+    remaining = list(image_dir.glob("*")) if image_dir.exists() else []
+    assert remaining == []
+
+
+async def test_images_cleaned_up_on_error(backend: ClaudeCodeBackend):
+    raw_bytes = b"\x89PNG"
+    encoded = base64.b64encode(raw_bytes).decode()
+    img = ImageBlockParam(
+        source=Base64ImageSourceParam(media_type="image/png", data=encoded)
+    )
+    messages = [MessageParam(role="user", content=[img])]
+
+    mock_invoke = AsyncMock(side_effect=RuntimeError("boom"))
+    with (
+        patch(
+            "docketeer_anthropic.claude_code_backend._invoke_claude",
+            mock_invoke,
+        ),
+        pytest.raises(RuntimeError, match="boom"),
+    ):
+        await backend.run_agentic_loop(
+            TIER,
+            [],
+            messages,
+            [],
+            _mock_tool_context(),
+            Path("/tmp"),
+            Path("/tmp"),
+            None,
+        )
+
+    image_dir = backend.claude_dir / "images"
+    remaining = list(image_dir.glob("*")) if image_dir.exists() else []
+    assert remaining == []
+
+
+async def test_no_images_no_change(backend: ClaudeCodeBackend):
+    messages = [MessageParam(role="user", content="hello")]
+
+    with _patch_invoke(("reply", "sess-1", None)):
+        result = await backend.run_agentic_loop(
+            TIER,
+            [],
+            messages,
+            [],
+            _mock_tool_context(),
+            Path("/tmp"),
+            Path("/tmp"),
+            None,
+        )
+
+    assert result == "reply"

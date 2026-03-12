@@ -1,6 +1,12 @@
 """Tests for message and tool serialization in the agentic loop."""
 
-from docketeer.prompt import MessageParam, SystemBlock, TextBlockParam
+from docketeer.prompt import (
+    Base64ImageSourceParam,
+    ImageBlockParam,
+    MessageParam,
+    SystemBlock,
+    TextBlockParam,
+)
 
 
 class TestSerializeMessages:
@@ -29,6 +35,37 @@ class TestSerializeMessages:
         assert result[0]["role"] == "tool"
         assert result[0]["tool_call_id"] == "call_abc"
         assert result[0]["content"] == "file list"
+
+    def test_serialize_image_block_to_openai_format(self) -> None:
+        from docketeer_deepinfra.loop import _serialize_messages
+
+        img = ImageBlockParam(
+            source=Base64ImageSourceParam(media_type="image/png", data="aWZha2U=")
+        )
+        result = _serialize_messages([], [MessageParam(role="user", content=[img])])
+        block = result[0]["content"][0]
+        assert block["type"] == "image_url"
+        assert block["image_url"]["url"] == "data:image/png;base64,aWZha2U="
+
+    def test_serialize_mixed_text_and_image(self) -> None:
+        from docketeer_deepinfra.loop import _serialize_messages
+
+        img = ImageBlockParam(
+            source=Base64ImageSourceParam(media_type="image/jpeg", data="abc123")
+        )
+        result = _serialize_messages(
+            [],
+            [
+                MessageParam(
+                    role="user",
+                    content=[TextBlockParam(text="look at this"), img],
+                )
+            ],
+        )
+        content = result[0]["content"]
+        assert content[0] == {"type": "text", "text": "look at this"}
+        assert content[1]["type"] == "image_url"
+        assert "data:image/jpeg;base64,abc123" in content[1]["image_url"]["url"]
 
     def test_serialize_content_as_list_with_to_dict(self) -> None:
         from docketeer_deepinfra.loop import _serialize_messages

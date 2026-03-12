@@ -147,6 +147,28 @@ async def test_deliver_signal_calls_process(tmp_path: Path):
     assert "signal" in kwargs["content"].text.lower()
 
 
+async def test_deliver_signal_passes_images(tmp_path: Path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    process = AsyncMock(return_value=BrainResponse(text="noted"))
+    tuning = Tuning(name="github", band="wicket", topic="events")
+
+    images = [("image/png", b"\x89PNG")]
+    signal = Signal(
+        band="test",
+        signal_id="s1",
+        timestamp=datetime(2026, 1, 1, 12, 0, tzinfo=UTC),
+        topic="events.push",
+        payload={"action": "created"},
+        summary="A push event",
+        images=images,
+    )
+    await deliver_signal(process, tuning, signal, workspace)
+
+    kwargs = process.call_args.kwargs
+    assert kwargs["content"].images == images
+
+
 async def test_deliver_signal_logs_signal(tmp_path: Path):
     workspace = tmp_path / "workspace"
     workspace.mkdir()

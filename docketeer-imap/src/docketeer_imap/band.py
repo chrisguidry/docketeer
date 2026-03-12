@@ -185,6 +185,7 @@ async def _fetch_one(
             "headers": parsed.headers,
         },
         summary=f"From: {parsed.from_} — Subject: {parsed.subject}",
+        images=parsed.images,
     )
 
 

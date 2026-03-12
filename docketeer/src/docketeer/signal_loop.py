@@ -87,7 +87,7 @@ async def deliver_signal(
 
     line = tuning.target_line
     text = format_signal(tuning, signal)
-    content = MessageContent(text=text)
+    content = MessageContent(text=text, images=signal.images)
 
     system_context: list[SystemBlock] = []
 

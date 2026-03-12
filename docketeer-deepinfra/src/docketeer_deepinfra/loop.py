@@ -260,7 +260,17 @@ def _serialize_messages(
             # Normal content list
             serialized_content = []
             for b in msg.content:
-                if isinstance(b, (TextBlockParam, ImageBlockParam)):
+                if isinstance(b, ImageBlockParam):
+                    src = b.source
+                    serialized_content.append(
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:{src.media_type};base64,{src.data}",
+                            },
+                        }
+                    )
+                elif isinstance(b, TextBlockParam):
                     serialized_content.append(b.to_dict())
                 elif isinstance(b, dict):
                     serialized_content.append(b)

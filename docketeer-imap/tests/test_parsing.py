@@ -349,6 +349,90 @@ def test_html_preserves_lists() -> None:
     assert "Third item" in parsed.body
 
 
+def _multipart_with_image(
+    *,
+    image_content_type: str = "image/png",
+    image_data: bytes = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100,
+    plain: str = "See attached image.",
+) -> bytes:
+    boundary = "img-boundary"
+    import base64
+
+    encoded = base64.b64encode(image_data).decode()
+    return (
+        "From: alice@example.com\r\n"
+        "To: bob@example.com\r\n"
+        "Subject: Photo\r\n"
+        "Date: Mon, 09 Mar 2026 12:00:00 +0000\r\n"
+        "Message-ID: <img@example.com>\r\n"
+        "MIME-Version: 1.0\r\n"
+        f"Content-Type: multipart/mixed; boundary={boundary}\r\n"
+        "\r\n"
+        f"--{boundary}\r\n"
+        "Content-Type: text/plain; charset=utf-8\r\n"
+        "\r\n"
+        f"{plain}\r\n"
+        f"--{boundary}\r\n"
+        f"Content-Type: {image_content_type}\r\n"
+        "Content-Transfer-Encoding: base64\r\n"
+        "Content-Disposition: attachment; filename=photo.png\r\n"
+        "\r\n"
+        f"{encoded}\r\n"
+        f"--{boundary}--\r\n"
+    ).encode()
+
+
+def test_parse_extracts_image_attachment() -> None:
+    raw = _multipart_with_image()
+    parsed = parse_email(raw)
+
+    assert len(parsed.images) == 1
+    content_type, data = parsed.images[0]
+    assert content_type == "image/png"
+    assert data[:4] == b"\x89PNG"
+
+
+def test_parse_skips_oversized_image() -> None:
+    big_image = b"\x89PNG" + b"\x00" * (6 * 1024 * 1024)
+    raw = _multipart_with_image(image_data=big_image)
+    parsed = parse_email(raw)
+
+    assert parsed.images == []
+
+
+def test_parse_skips_non_image_attachment() -> None:
+    boundary = "pdf-boundary"
+    raw = (
+        "From: alice@example.com\r\n"
+        "To: bob@example.com\r\n"
+        "Subject: Document\r\n"
+        "Date: Mon, 09 Mar 2026 12:00:00 +0000\r\n"
+        "Message-ID: <doc@example.com>\r\n"
+        "MIME-Version: 1.0\r\n"
+        f"Content-Type: multipart/mixed; boundary={boundary}\r\n"
+        "\r\n"
+        f"--{boundary}\r\n"
+        "Content-Type: text/plain; charset=utf-8\r\n"
+        "\r\n"
+        "See attached.\r\n"
+        f"--{boundary}\r\n"
+        "Content-Type: application/pdf\r\n"
+        "Content-Transfer-Encoding: base64\r\n"
+        "\r\n"
+        "JVBER\r\n"
+        f"--{boundary}--\r\n"
+    ).encode()
+    parsed = parse_email(raw)
+
+    assert parsed.images == []
+
+
+def test_parse_plain_email_has_no_images() -> None:
+    parsed = parse_email(_plain_email())
+
+    assert parsed.images == []
+
+
 def test_blocked_prefixes_match_case_insensitively() -> None:
     raw = _plain_email(
         extra_headers=(

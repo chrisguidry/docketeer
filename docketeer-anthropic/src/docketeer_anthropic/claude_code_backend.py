@@ -18,6 +18,7 @@ from docketeer.executor import ClaudeInvocation, CommandExecutor, RunningProcess
 from docketeer_anthropic.claude_code_output import (
     check_process_exit,
     format_prompt,
+    save_message_images,
     stream_response,
 )
 
@@ -133,26 +134,33 @@ class ClaudeCodeBackend(InferenceBackend):
             else:
                 log.info("New session %s for line %s", session_id, line or "(none)")
 
+        image_dir = self.claude_dir / "images"
+        image_paths = save_message_images(messages, image_dir)
+
         prompt = format_prompt(messages, resume=resume_session_id is not None)
         log.info("Prompt (%d chars): %.200s", len(prompt), prompt)
 
         use_mcp = bool(tools and tool_context and self._mcp_socket)
-        text, _, result_event = await _invoke_claude(
-            self.executor,
-            model_id,
-            system_text,
-            prompt,
-            self.oauth_token,
-            self.claude_dir,
-            tool_context.workspace,
-            audit_path,
-            session_id=session_id,
-            resume_session_id=resume_session_id,
-            mcp_socket_path=self._mcp_socket_path if use_mcp else None,
-            mcp_socket=self._mcp_socket if use_mcp else None,
-            tool_context=tool_context if use_mcp else None,
-            callbacks=callbacks,
-        )
+        try:
+            text, _, result_event = await _invoke_claude(
+                self.executor,
+                model_id,
+                system_text,
+                prompt,
+                self.oauth_token,
+                self.claude_dir,
+                tool_context.workspace,
+                audit_path,
+                session_id=session_id,
+                resume_session_id=resume_session_id,
+                mcp_socket_path=self._mcp_socket_path if use_mcp else None,
+                mcp_socket=self._mcp_socket if use_mcp else None,
+                tool_context=tool_context if use_mcp else None,
+                callbacks=callbacks,
+            )
+        finally:
+            for p in image_paths:
+                p.unlink(missing_ok=True)
 
         effective_session_id = resume_session_id or session_id
         log.info(

@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 import re
+from pathlib import Path
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from docketeer.brain.backend import (
     BackendAuthError,
     BackendError,
     ContextTooLargeError,
 )
-from docketeer.prompt import MessageParam, TextBlockParam
+from docketeer.prompt import ImageBlockParam, MessageParam, TextBlockParam
 
 if TYPE_CHECKING:
     from docketeer.brain.core import ProcessCallbacks
@@ -30,11 +33,54 @@ def extract_text(message: MessageParam) -> str:
     for block in content:
         if isinstance(block, str):
             parts.append(block)
+        elif isinstance(block, ImageBlockParam):
+            parts.append("[image]")
         elif isinstance(block, dict) and block.get("type") == "text":
             parts.append(block.get("text", ""))
         elif isinstance(block, TextBlockParam):
             parts.append(block.text)
     return "\n".join(parts)
+
+
+_MEDIA_TYPE_EXT: dict[str, str] = {
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
+}
+
+
+def save_message_images(messages: list[MessageParam], image_dir: Path) -> list[Path]:
+    """Save base64 images from messages to disk and return file paths.
+
+    Each ImageBlockParam is replaced in-place with a TextBlockParam referencing
+    the saved file, so format_prompt will include the path for Claude Code's
+    Read tool.
+    """
+    paths: list[Path] = []
+    image_dir.mkdir(parents=True, exist_ok=True)
+
+    for msg in messages:
+        if isinstance(msg.content, str):
+            continue
+        new_content: list = []
+        for block in msg.content:
+            if isinstance(block, ImageBlockParam):
+                ext = _MEDIA_TYPE_EXT.get(block.source.media_type, ".bin")
+                filename = f"{uuid4().hex[:12]}{ext}"
+                path = image_dir / filename
+                path.write_bytes(base64.b64decode(block.source.data))
+                paths.append(path)
+                new_content.append(
+                    TextBlockParam(
+                        text=f"The user attached an image. Read it at: {path}"
+                    )
+                )
+            else:
+                new_content.append(block)
+        msg.content = new_content
+
+    return paths
 
 
 def format_prompt(messages: list, *, resume: bool = False) -> str:

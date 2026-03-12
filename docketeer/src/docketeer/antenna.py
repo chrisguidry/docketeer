@@ -53,6 +53,7 @@ class Signal:
     topic: str
     payload: dict[str, Any]
     summary: str = ""
+    images: list[tuple[str, bytes]] = field(default_factory=list)
 
 
 FilterOp = Literal["eq", "ne", "contains", "icontains", "startswith", "exists"]

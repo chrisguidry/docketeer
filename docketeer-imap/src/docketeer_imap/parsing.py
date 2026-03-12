@@ -2,7 +2,7 @@
 
 import email
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from email import policy
 from email.message import EmailMessage
@@ -11,6 +11,7 @@ from email.utils import parsedate_to_datetime
 import html2text
 
 MAX_BODY_LENGTH = 10_000
+MAX_IMAGE_SIZE = 5 * 1024 * 1024
 
 DEFAULT_BLOCKED_HEADER_PREFIXES = (
     "ARC-",
@@ -50,6 +51,7 @@ class ParsedEmail:
     date: datetime
     body: str
     headers: dict[str, str]
+    images: list[tuple[str, bytes]] = field(default_factory=list)
 
 
 def parse_email(raw: bytes) -> ParsedEmail:
@@ -63,6 +65,7 @@ def parse_email(raw: bytes) -> ParsedEmail:
 
     date = _parse_date(msg)
     body = _extract_body(msg)
+    images = _extract_images(msg)
 
     return ParsedEmail(
         message_id=str(msg.get("Message-ID", "")),
@@ -73,6 +76,7 @@ def parse_email(raw: bytes) -> ParsedEmail:
         date=date,
         body=body[:MAX_BODY_LENGTH],
         headers=headers,
+        images=images,
     )
 
 
@@ -105,6 +109,26 @@ def _extract_body(msg: EmailMessage) -> str:
     if content_type == "text/html":
         return _html_to_markdown(content)
     return content
+
+
+def _extract_images(msg: EmailMessage) -> list[tuple[str, bytes]]:
+    """Extract image attachments from a multipart email."""
+    images: list[tuple[str, bytes]] = []
+    if not msg.is_multipart():
+        return images
+
+    for part in msg.walk():
+        content_type = part.get_content_type()
+        if not content_type.startswith("image/"):
+            continue
+        data = part.get_content()
+        if not isinstance(data, bytes):
+            continue  # pragma: no cover
+        if len(data) > MAX_IMAGE_SIZE:
+            continue
+        images.append((content_type, data))
+
+    return images
 
 
 def _html_to_markdown(html: str) -> str:

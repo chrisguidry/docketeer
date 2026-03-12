@@ -1,17 +1,24 @@
 """Tests for claude_code_output: parsing, error handling, and format_prompt."""
 
 import json
+from pathlib import Path
 
 import pytest
 
 from docketeer.brain.backend import BackendAuthError, BackendError, ContextTooLargeError
-from docketeer.prompt import MessageParam, TextBlockParam
+from docketeer.prompt import (
+    Base64ImageSourceParam,
+    ImageBlockParam,
+    MessageParam,
+    TextBlockParam,
+)
 from docketeer_anthropic.claude_code_output import (
     check_error,
     check_process_exit,
     extract_text,
     format_prompt,
     parse_response,
+    save_message_images,
 )
 
 # -- extract_text --
@@ -58,6 +65,71 @@ def test_extract_text_text_block_params():
         content=[TextBlockParam(text="hello"), TextBlockParam(text="world")],
     )
     assert extract_text(msg) == "hello\nworld"
+
+
+def test_extract_text_image_block_placeholder():
+    img = ImageBlockParam(
+        source=Base64ImageSourceParam(media_type="image/png", data="abc")
+    )
+    msg = MessageParam(
+        role="user",
+        content=[TextBlockParam(text="look"), img],
+    )
+    assert extract_text(msg) == "look\n[image]"
+
+
+# -- save_message_images --
+
+
+def test_save_message_images_writes_files(tmp_path: Path):
+    import base64
+
+    raw_bytes = b"\x89PNG\r\n\x1a\n"
+    encoded = base64.b64encode(raw_bytes).decode()
+    img = ImageBlockParam(
+        source=Base64ImageSourceParam(media_type="image/png", data=encoded)
+    )
+    msg = MessageParam(role="user", content=[TextBlockParam(text="hi"), img])
+
+    paths = save_message_images([msg], tmp_path / "images")
+
+    assert len(paths) == 1
+    assert paths[0].suffix == ".png"
+    assert paths[0].read_bytes() == raw_bytes
+    assert isinstance(msg.content[1], TextBlockParam)
+    assert str(paths[0]) in msg.content[1].text
+
+
+def test_save_message_images_no_images(tmp_path: Path):
+    msg = MessageParam(role="user", content="just text")
+    paths = save_message_images([msg], tmp_path / "images")
+    assert paths == []
+
+
+def test_save_message_images_jpeg_extension(tmp_path: Path):
+    import base64
+
+    encoded = base64.b64encode(b"\xff\xd8\xff").decode()
+    img = ImageBlockParam(
+        source=Base64ImageSourceParam(media_type="image/jpeg", data=encoded)
+    )
+    msg = MessageParam(role="user", content=[img])
+
+    paths = save_message_images([msg], tmp_path / "images")
+    assert paths[0].suffix == ".jpg"
+
+
+def test_save_message_images_unknown_media_type(tmp_path: Path):
+    import base64
+
+    encoded = base64.b64encode(b"\x00").decode()
+    img = ImageBlockParam(
+        source=Base64ImageSourceParam(media_type="image/tiff", data=encoded)
+    )
+    msg = MessageParam(role="user", content=[img])
+
+    paths = save_message_images([msg], tmp_path / "images")
+    assert paths[0].suffix == ".bin"
 
 
 # -- format_prompt --
