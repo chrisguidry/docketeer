@@ -17,6 +17,7 @@ classifiers = [
 dependencies = [
     "docketeer",
     "aioimaplib",
+    "html2text",
 ]
 
 [project.urls]

@@ -100,10 +100,11 @@ def test_parse_multipart_prefers_text() -> None:
     assert "HTML" not in parsed.body
 
 
-def test_parse_html_only_strips_tags() -> None:
+def test_parse_html_only_converts_to_markdown() -> None:
     parsed = parse_email(_html_only_email(html="<p>Hello <b>world</b></p>"))
 
-    assert parsed.body == "Hello world"
+    assert "Hello" in parsed.body
+    assert "world" in parsed.body
 
 
 def test_parse_encoded_subject() -> None:
@@ -208,7 +209,7 @@ def test_parse_all_headers_present() -> None:
     assert "Subject" in parsed.headers
 
 
-def test_parse_html_strips_entities() -> None:
+def test_parse_html_decodes_entities() -> None:
     parsed = parse_email(_html_only_email(html="<p>A &amp; B</p>"))
     assert "A & B" in parsed.body
 
@@ -243,7 +244,7 @@ def test_parse_multipart_html_fallback() -> None:
     ).encode()
 
     parsed = parse_email(raw)
-    assert parsed.body == "HTML only in multipart"
+    assert "HTML only in multipart" in parsed.body
 
 
 def test_parse_multipart_empty() -> None:
@@ -329,6 +330,23 @@ def test_envvar_disables_all_filtering(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert "DKIM-Signature" in parsed.headers
     assert "X-Spam-Score" in parsed.headers
+
+
+def test_html_preserves_links() -> None:
+    html = '<p>Check <a href="https://example.com/path">this link</a> out</p>'
+    parsed = parse_email(_html_only_email(html=html))
+
+    assert "https://example.com/path" in parsed.body
+    assert "this link" in parsed.body
+
+
+def test_html_preserves_lists() -> None:
+    html = "<ul><li>First item</li><li>Second item</li><li>Third item</li></ul>"
+    parsed = parse_email(_html_only_email(html=html))
+
+    assert "First item" in parsed.body
+    assert "Second item" in parsed.body
+    assert "Third item" in parsed.body
 
 
 def test_blocked_prefixes_match_case_insensitively() -> None:

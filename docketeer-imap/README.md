@@ -34,7 +34,8 @@ Each new email produces a signal with:
 
 - **signal_id** — IMAP UID (used for catch-up on reconnect)
 - **topic** — the mailbox name (e.g. `INBOX`)
-- **payload** — `{from, to, cc, subject, date, message_id, body, headers}`
+- **payload** — `{from, to, cc, subject, date, message_id, body, headers}` (HTML-only
+  emails are converted to markdown via `html2text`, preserving links and structure)
 - **summary** — `"From: sender — Subject: subject line"`
 
 The `headers` dict contains message headers with noisy infrastructure headers

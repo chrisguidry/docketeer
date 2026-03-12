@@ -2,12 +2,13 @@
 
 import email
 import os
-import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from email import policy
 from email.message import EmailMessage
 from email.utils import parsedate_to_datetime
+
+import html2text
 
 MAX_BODY_LENGTH = 10_000
 
@@ -95,30 +96,21 @@ def _extract_body(msg: EmailMessage) -> str:
         for part in msg.walk():
             content_type = part.get_content_type()
             if content_type == "text/html":
-                return _strip_html(str(part.get_content()))
+                return _html_to_markdown(str(part.get_content()))
 
         return ""
 
     content_type = msg.get_content_type()
     content = str(msg.get_content())
     if content_type == "text/html":
-        return _strip_html(content)
+        return _html_to_markdown(content)
     return content
 
 
-_TAG_RE = re.compile(r"<[^>]+>")
-_ENTITY_MAP = {
-    "&amp;": "&",
-    "&lt;": "<",
-    "&gt;": ">",
-    "&quot;": '"',
-    "&#39;": "'",
-    "&nbsp;": " ",
-}
-
-
-def _strip_html(html: str) -> str:
-    text = _TAG_RE.sub("", html)
-    for entity, char in _ENTITY_MAP.items():
-        text = text.replace(entity, char)
-    return text.strip()
+def _html_to_markdown(html: str) -> str:
+    converter = html2text.HTML2Text()
+    converter.body_width = 0
+    converter.unicode_snob = True
+    converter.ignore_images = True
+    converter.protect_links = True
+    return converter.handle(html).strip()
