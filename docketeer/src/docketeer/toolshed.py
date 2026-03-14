@@ -5,12 +5,16 @@ specs so the bubblewrap executor can expose them identically to both
 the agent's run/shell tools and MCP server launches.
 """
 
+import logging
 import os
 import shutil
+import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from docketeer.executor import Mount
+
+log = logging.getLogger(__name__)
 
 SYSTEM_PREFIXES = ("/usr/", "/bin/", "/lib/", "/lib64/")
 
@@ -23,11 +27,16 @@ class RuntimeSpec:
     probe_commands: list[str]
     cache_env_var: str
     global_prefix_env_var: str = ""
+    global_prefix_command: list[str] = field(default_factory=list)
 
 
 RUNTIMES: list[RuntimeSpec] = [
     RuntimeSpec(
-        "node", ["node", "npx", "npm"], "NPM_CONFIG_CACHE", "NPM_CONFIG_PREFIX"
+        "node",
+        ["node", "npx", "npm"],
+        "NPM_CONFIG_CACHE",
+        "NPM_CONFIG_PREFIX",
+        ["npm", "config", "get", "prefix"],
     ),
     RuntimeSpec("python", ["uvx", "uv"], "UV_CACHE_DIR"),
 ]
@@ -128,6 +137,33 @@ def _find_install_root(binary: Path) -> Path:
     return binary.parent
 
 
+def _resolve_global_prefix(spec: RuntimeSpec, seen_roots: set[Path]) -> Path | None:
+    """Check for a global package prefix via env var or command probe."""
+    prefix = (
+        os.environ.get(spec.global_prefix_env_var, "")
+        if spec.global_prefix_env_var
+        else ""
+    )
+    if not prefix and spec.global_prefix_command:
+        prefix = _run_prefix_command(spec.global_prefix_command)
+    if not prefix:
+        return None
+    prefix_path = Path(prefix).resolve()
+    if prefix_path.is_dir() and prefix_path not in seen_roots:
+        return prefix_path
+    return None
+
+
+def _run_prefix_command(command: list[str]) -> str:
+    """Run a command to discover a global prefix, returning empty on failure."""
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=5)
+        return result.stdout.strip() if result.returncode == 0 else ""
+    except (OSError, subprocess.TimeoutExpired):
+        log.debug("Failed to run %s", command)
+        return ""
+
+
 def discover(cache_root: Path) -> Toolshed:
     """Scan PATH for known runtimes and return a Toolshed.
 
@@ -155,13 +191,10 @@ def discover(cache_root: Path) -> Toolshed:
             seen_roots.add(root)
             runtime = DiscoveredRuntime(spec=spec, install_root=root)
 
-            if spec.global_prefix_env_var:
-                prefix = os.environ.get(spec.global_prefix_env_var, "")
-                if prefix:
-                    prefix_path = Path(prefix).resolve()
-                    if prefix_path.is_dir() and prefix_path not in seen_roots:
-                        runtime.extra_roots.append(prefix_path)
-                        seen_roots.add(prefix_path)
+            prefix_dir = _resolve_global_prefix(spec, seen_roots)
+            if prefix_dir:
+                runtime.extra_roots.append(prefix_dir)
+                seen_roots.add(prefix_dir)
 
             found.append(runtime)
             break

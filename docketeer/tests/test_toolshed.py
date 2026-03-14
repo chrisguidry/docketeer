@@ -1,4 +1,4 @@
-"""Tests for convention-based runtime discovery."""
+"""Toolshed tests: generic infrastructure (which, install_root, mounts, env, prefix)."""
 
 from pathlib import Path
 from unittest.mock import patch
@@ -8,6 +8,8 @@ from docketeer.toolshed import (
     RuntimeSpec,
     Toolshed,
     _find_install_root,
+    _resolve_global_prefix,
+    _run_prefix_command,
     _which_skipping_shims,
     discover,
 )
@@ -202,47 +204,71 @@ def test_env_multiple_runtimes(tmp_path: Path):
     assert env["UV_CACHE_DIR"] == "/cache/python"
 
 
-# --- discover() ---
+# --- _run_prefix_command / _resolve_global_prefix ---
 
 
-def test_discover_finds_node_in_nvm(tmp_path: Path):
-    node_root = tmp_path / "nvm" / "versions" / "node" / "v20"
-    node_bin = node_root / "bin" / "node"
-    node_bin.parent.mkdir(parents=True)
-    node_bin.touch()
-
-    def fake_which(cmd: str, **kwargs: object) -> str | None:
-        if cmd == "node":
-            return str(node_bin)
-        return None
-
-    with patch("docketeer.toolshed.shutil.which", side_effect=fake_which):
-        ts = discover(cache_root=tmp_path / "cache")
-
-    assert len(ts.runtimes) == 1
-    assert ts.runtimes[0].spec.name == "node"
-    assert ts.runtimes[0].install_root == node_root
+def test_run_prefix_command_returns_output(tmp_path: Path):
+    result = _run_prefix_command(["echo", str(tmp_path)])
+    assert result == str(tmp_path)
 
 
-def test_discover_finds_uv_in_local_bin(tmp_path: Path):
-    uv_bin = tmp_path / ".local" / "bin" / "uv"
-    uv_bin.parent.mkdir(parents=True)
-    uv_bin.touch()
+def test_run_prefix_command_returns_empty_on_failure():
+    assert _run_prefix_command(["false"]) == ""
 
-    def fake_which(cmd: str, **kwargs: object) -> str | None:
-        if cmd in ("uvx", "uv"):
-            return str(uv_bin)
-        return None
 
-    with (
-        patch("docketeer.toolshed.shutil.which", side_effect=fake_which),
-        patch("docketeer.toolshed.Path.home", return_value=tmp_path),
-    ):
-        ts = discover(cache_root=tmp_path / "cache")
+def test_run_prefix_command_returns_empty_on_missing_binary():
+    assert _run_prefix_command(["nonexistent_binary_xyz"]) == ""
 
-    assert len(ts.runtimes) == 1
-    assert ts.runtimes[0].spec.name == "python"
-    assert ts.runtimes[0].install_root == tmp_path / ".local" / "bin"
+
+def test_resolve_global_prefix_env_var(tmp_path: Path):
+    prefix = tmp_path / "npm-global"
+    prefix.mkdir()
+    spec = RuntimeSpec("node", ["node"], "NPM_CONFIG_CACHE", "NPM_CONFIG_PREFIX")
+    with patch.dict("os.environ", {"NPM_CONFIG_PREFIX": str(prefix)}):
+        result = _resolve_global_prefix(spec, set())
+    assert result == prefix
+
+
+def test_resolve_global_prefix_falls_back_to_command(tmp_path: Path):
+    prefix = tmp_path / "npm-global"
+    prefix.mkdir()
+    spec = RuntimeSpec(
+        "node",
+        ["node"],
+        "NPM_CONFIG_CACHE",
+        global_prefix_command=["echo", str(prefix)],
+    )
+    result = _resolve_global_prefix(spec, set())
+    assert result == prefix
+
+
+def test_resolve_global_prefix_env_var_takes_precedence(tmp_path: Path):
+    env_prefix = tmp_path / "env-prefix"
+    env_prefix.mkdir()
+    cmd_prefix = tmp_path / "cmd-prefix"
+    cmd_prefix.mkdir()
+    spec = RuntimeSpec(
+        "node",
+        ["node"],
+        "NPM_CONFIG_CACHE",
+        "NPM_CONFIG_PREFIX",
+        ["echo", str(cmd_prefix)],
+    )
+    with patch.dict("os.environ", {"NPM_CONFIG_PREFIX": str(env_prefix)}):
+        result = _resolve_global_prefix(spec, set())
+    assert result == env_prefix
+
+
+def test_resolve_global_prefix_skips_seen_roots(tmp_path: Path):
+    prefix = tmp_path / "npm-global"
+    prefix.mkdir()
+    spec = RuntimeSpec("node", ["node"], "NPM_CONFIG_CACHE", "NPM_CONFIG_PREFIX")
+    with patch.dict("os.environ", {"NPM_CONFIG_PREFIX": str(prefix)}):
+        result = _resolve_global_prefix(spec, {prefix})
+    assert result is None
+
+
+# --- discover() (cross-runtime) ---
 
 
 def test_discover_skips_system_commands():
@@ -262,52 +288,6 @@ def test_discover_skips_missing_commands():
         ts = discover(cache_root=Path("/tmp/cache"))
 
     assert len(ts.runtimes) == 0
-
-
-def test_discover_follows_symlinks(tmp_path: Path):
-    real_node = tmp_path / "nvm" / "versions" / "v20" / "bin" / "node"
-    real_node.parent.mkdir(parents=True)
-    real_node.touch()
-
-    link_dir = tmp_path / "links"
-    link_dir.mkdir()
-    link = link_dir / "node"
-    link.symlink_to(real_node)
-
-    def fake_which(cmd: str, **kwargs: object) -> str | None:
-        if cmd == "node":
-            return str(link)
-        return None
-
-    with patch("docketeer.toolshed.shutil.which", side_effect=fake_which):
-        ts = discover(cache_root=tmp_path / "cache")
-
-    assert len(ts.runtimes) == 1
-    assert ts.runtimes[0].install_root == tmp_path / "nvm" / "versions" / "v20"
-
-
-def test_discover_deduplicates_roots(tmp_path: Path):
-    uv_bin = tmp_path / ".local" / "bin" / "uv"
-    uvx_bin = tmp_path / ".local" / "bin" / "uvx"
-    uv_bin.parent.mkdir(parents=True)
-    uv_bin.touch()
-    uvx_bin.touch()
-
-    def fake_which(cmd: str, **kwargs: object) -> str | None:
-        if cmd == "uvx":
-            return str(uvx_bin)
-        if cmd == "uv":
-            return str(uv_bin)  # pragma: no cover - not checked by discover
-        return None  # pragma: no cover - defensive fallback
-
-    with (
-        patch("docketeer.toolshed.shutil.which", side_effect=fake_which),
-        patch("docketeer.toolshed.Path.home", return_value=tmp_path),
-    ):
-        ts = discover(cache_root=tmp_path / "cache")
-
-    assert len(ts.runtimes) == 1
-    assert ts.runtimes[0].spec.name == "python"
 
 
 def test_discover_finds_both_runtimes(tmp_path: Path):
@@ -358,133 +338,3 @@ def test_discover_skips_duplicate_roots_across_runtimes(tmp_path: Path):
 
     assert len(ts.runtimes) == 1
     assert ts.runtimes[0].spec.name == "node"
-
-
-def test_discover_picks_up_npm_global_prefix(tmp_path: Path):
-    node_root = tmp_path / "nvm" / "versions" / "node" / "v20"
-    node_bin = node_root / "bin" / "node"
-    node_bin.parent.mkdir(parents=True)
-    node_bin.touch()
-
-    npm_prefix = tmp_path / ".npm-global"
-    (npm_prefix / "bin").mkdir(parents=True)
-
-    def fake_which(cmd: str, **kwargs: object) -> str | None:
-        if cmd == "node":
-            return str(node_bin)
-        return None
-
-    with (
-        patch("docketeer.toolshed.shutil.which", side_effect=fake_which),
-        patch.dict("os.environ", {"NPM_CONFIG_PREFIX": str(npm_prefix)}),
-    ):
-        ts = discover(cache_root=tmp_path / "cache")
-
-    assert len(ts.runtimes) == 1
-    assert ts.runtimes[0].extra_roots == [npm_prefix]
-
-
-def test_discover_skips_npm_prefix_when_same_as_install_root(tmp_path: Path):
-    node_root = tmp_path / "nvm" / "versions" / "node" / "v20"
-    node_bin = node_root / "bin" / "node"
-    node_bin.parent.mkdir(parents=True)
-    node_bin.touch()
-
-    def fake_which(cmd: str, **kwargs: object) -> str | None:
-        if cmd == "node":
-            return str(node_bin)
-        return None
-
-    with (
-        patch("docketeer.toolshed.shutil.which", side_effect=fake_which),
-        patch.dict("os.environ", {"NPM_CONFIG_PREFIX": str(node_root)}),
-    ):
-        ts = discover(cache_root=tmp_path / "cache")
-
-    assert len(ts.runtimes) == 1
-    assert ts.runtimes[0].extra_roots == []
-
-
-def test_discover_skips_npm_prefix_when_not_a_dir(tmp_path: Path):
-    node_root = tmp_path / "nvm" / "versions" / "node" / "v20"
-    node_bin = node_root / "bin" / "node"
-    node_bin.parent.mkdir(parents=True)
-    node_bin.touch()
-
-    def fake_which(cmd: str, **kwargs: object) -> str | None:
-        if cmd == "node":
-            return str(node_bin)
-        return None
-
-    with (
-        patch("docketeer.toolshed.shutil.which", side_effect=fake_which),
-        patch.dict("os.environ", {"NPM_CONFIG_PREFIX": "/nonexistent/path"}),
-    ):
-        ts = discover(cache_root=tmp_path / "cache")
-
-    assert len(ts.runtimes) == 1
-    assert ts.runtimes[0].extra_roots == []
-
-
-def test_mounts_includes_extra_roots(tmp_path: Path):
-    npm_prefix = tmp_path / "npm-global"
-    npm_prefix.mkdir()
-    spec = RuntimeSpec("node", ["node"], "NPM_CONFIG_CACHE", "NPM_CONFIG_PREFIX")
-    rt = DiscoveredRuntime(
-        spec=spec,
-        install_root=tmp_path / "node-root",
-        extra_roots=[npm_prefix],
-    )
-    ts = Toolshed(runtimes=[rt], cache_root=tmp_path / "cache")
-
-    mounts = ts.mounts()
-    assert len(mounts) == 3
-    assert mounts[0].source == tmp_path / "node-root"
-    assert mounts[1].source == npm_prefix
-    assert mounts[1].writable is False
-    assert mounts[2].target == Path("/cache/node")
-
-
-def test_env_includes_extra_roots_in_path(tmp_path: Path):
-    node_root = tmp_path / "node"
-    (node_root / "bin").mkdir(parents=True)
-    npm_prefix = tmp_path / "npm-global"
-    (npm_prefix / "bin").mkdir(parents=True)
-
-    spec = RuntimeSpec("node", ["node"], "NPM_CONFIG_CACHE", "NPM_CONFIG_PREFIX")
-    rt = DiscoveredRuntime(
-        spec=spec,
-        install_root=node_root,
-        extra_roots=[npm_prefix],
-    )
-    ts = Toolshed(runtimes=[rt], cache_root=tmp_path / "cache")
-
-    env = ts.env()
-    path_parts = env["PATH"].split(":")
-    assert str(npm_prefix / "bin") == path_parts[0]
-    assert str(node_root / "bin") == path_parts[1]
-
-
-def test_discover_skips_pyenv_shims(tmp_path: Path):
-    shims_dir = tmp_path / ".pyenv" / "shims"
-    shims_dir.mkdir(parents=True)
-    shim = shims_dir / "uvx"
-    shim.write_text("#!/bin/sh\nexec pyenv exec uvx\n")
-    shim.chmod(0o755)
-
-    real_dir = tmp_path / ".local" / "bin"
-    real_dir.mkdir(parents=True)
-    real_uvx = real_dir / "uvx"
-    real_uvx.write_text("#!/bin/sh\n")
-    real_uvx.chmod(0o755)
-
-    path = f"{shims_dir}:{real_dir}"
-    with (
-        patch.dict("os.environ", {"PATH": path}),
-        patch("docketeer.toolshed.Path.home", return_value=tmp_path),
-    ):
-        ts = discover(cache_root=tmp_path / "cache")
-
-    assert len(ts.runtimes) == 1
-    assert ts.runtimes[0].spec.name == "python"
-    assert ts.runtimes[0].install_root == tmp_path / ".local" / "bin"
