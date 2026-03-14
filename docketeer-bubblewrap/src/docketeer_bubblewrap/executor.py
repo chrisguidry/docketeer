@@ -89,13 +89,16 @@ class BubblewrapExecutor(CommandExecutor):
         tmp_ctx = tempfile.TemporaryDirectory()
         tmp_dir = Path(tmp_ctx.name)
 
-        # Merge mounts: toolshed → HOME → caller
+        # Merge mounts: HOME → toolshed → caller
+        # HOME goes first so toolshed mounts under the home directory
+        # (e.g. ~/.npm-global) overlay on top of the HOME tmpfs.
         merged_mounts: list[Mount] = []
-        if self._toolshed:
-            merged_mounts.extend(self._toolshed.mounts())
 
         sandbox_home = Path(f"/home/{username}") if username else Path("/home/sandbox")
         merged_mounts.append(Mount(source=tmp_dir, target=sandbox_home, writable=True))
+
+        if self._toolshed:
+            merged_mounts.extend(self._toolshed.mounts())
 
         if mounts:
             merged_mounts.extend(mounts)
