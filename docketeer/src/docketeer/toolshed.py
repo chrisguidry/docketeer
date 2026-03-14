@@ -22,10 +22,13 @@ class RuntimeSpec:
     name: str
     probe_commands: list[str]
     cache_env_var: str
+    global_prefix_env_var: str = ""
 
 
 RUNTIMES: list[RuntimeSpec] = [
-    RuntimeSpec("node", ["node", "npx", "npm"], "NPM_CONFIG_CACHE"),
+    RuntimeSpec(
+        "node", ["node", "npx", "npm"], "NPM_CONFIG_CACHE", "NPM_CONFIG_PREFIX"
+    ),
     RuntimeSpec("python", ["uvx", "uv"], "UV_CACHE_DIR"),
 ]
 
@@ -36,6 +39,7 @@ class DiscoveredRuntime:
 
     spec: RuntimeSpec
     install_root: Path
+    extra_roots: list[Path] = field(default_factory=list)
 
 
 @dataclass
@@ -49,13 +53,16 @@ class Toolshed:
         """Produce mounts for all discovered runtimes.
 
         Each runtime gets a read-only bind of its install root (same path
-        inside the sandbox) and a writable cache directory at /cache/<name>.
+        inside the sandbox), plus any extra roots (e.g. npm global prefix),
+        and a writable cache directory at /cache/<name>.
         """
         result: list[Mount] = []
         for rt in self.runtimes:
             result.append(
                 Mount(source=rt.install_root, target=rt.install_root, writable=False)
             )
+            for extra in rt.extra_roots:
+                result.append(Mount(source=extra, target=extra, writable=False))
             cache_dir = self.cache_root / rt.spec.name
             cache_dir.mkdir(parents=True, exist_ok=True)
             result.append(
@@ -79,11 +86,11 @@ class Toolshed:
         path_dirs: list[str] = []
         env: dict[str, str] = {}
         for rt in self.runtimes:
+            for extra in rt.extra_roots:
+                extra_bin = extra / "bin"
+                path_dirs.append(str(extra_bin if extra_bin.is_dir() else extra))
             bin_dir = rt.install_root / "bin"
-            if bin_dir.is_dir():
-                path_dirs.append(str(bin_dir))
-            else:
-                path_dirs.append(str(rt.install_root))
+            path_dirs.append(str(bin_dir if bin_dir.is_dir() else rt.install_root))
             env[rt.spec.cache_env_var] = f"/cache/{rt.spec.name}"
 
         path_dirs.extend(["/usr/local/bin", "/usr/bin", "/bin"])
@@ -146,7 +153,17 @@ def discover(cache_root: Path) -> Toolshed:
                 break
 
             seen_roots.add(root)
-            found.append(DiscoveredRuntime(spec=spec, install_root=root))
+            runtime = DiscoveredRuntime(spec=spec, install_root=root)
+
+            if spec.global_prefix_env_var:
+                prefix = os.environ.get(spec.global_prefix_env_var, "")
+                if prefix:
+                    prefix_path = Path(prefix).resolve()
+                    if prefix_path.is_dir() and prefix_path not in seen_roots:
+                        runtime.extra_roots.append(prefix_path)
+                        seen_roots.add(prefix_path)
+
+            found.append(runtime)
             break
 
     return Toolshed(runtimes=found, cache_root=cache_root)
