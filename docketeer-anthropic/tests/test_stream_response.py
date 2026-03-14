@@ -267,6 +267,21 @@ async def test_stream_response_consecutive_text_only_turns_no_callbacks():
     assert text == "Second thought."
 
 
+async def test_stream_response_final_tool_turn_text_returned():
+    """Text from a tool_use turn is returned when it's the last turn."""
+    cb, calls = _callbacks()
+    stream = _make_stream(
+        [
+            _assistant_event("Got it, I'll save that.", tool_use=True),
+            _result_event("sess-final-tool"),
+        ]
+    )
+    text, session_id, _ = await stream_response(stream, cb)
+    assert text == "Got it, I'll save that."
+    assert session_id == "sess-final-tool"
+    assert calls["on_tool_start"] == ["search"]
+
+
 # -- stream_event handling --
 
 

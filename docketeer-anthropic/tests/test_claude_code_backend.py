@@ -93,6 +93,7 @@ def _mock_tool_context(
     ctx = AsyncMock()
     ctx.line = room_id
     ctx.workspace = workspace or Path("/data/workspace")
+    ctx.silent_wrap_up = False
     return ctx
 
 
@@ -210,6 +211,38 @@ async def test_no_image_files_created(backend: ClaudeCodeBackend):
     # No image files should be written to disk
     image_dir = backend.claude_dir / "images"
     assert not image_dir.exists()
+
+
+async def test_silent_wrap_up_suppresses_text(backend: ClaudeCodeBackend):
+    messages = [MessageParam(role="user", content="alert fired")]
+
+    ctx = _mock_tool_context()
+    ctx.silent_wrap_up = False
+
+    def _set_silent(
+        *args: object, **kwargs: object
+    ) -> tuple[str, str | None, dict | None]:
+        ctx.silent_wrap_up = True
+        return ("No response requested.", "sess-1", None)
+
+    with patch(
+        "docketeer_anthropic.claude_code_backend._invoke_claude",
+        new_callable=AsyncMock,
+        side_effect=_set_silent,
+    ):
+        result = await backend.run_agentic_loop(
+            TIER,
+            [],
+            messages,
+            [],
+            ctx,
+            Path("/tmp"),
+            Path("/tmp"),
+            None,
+        )
+
+    assert result == ""
+    assert ctx.silent_wrap_up is False
 
 
 async def test_text_only_prompt_is_stream_json(backend: ClaudeCodeBackend):

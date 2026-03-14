@@ -58,6 +58,7 @@ class ToolContext:
     executor: CommandExecutor = field(default_factory=NullExecutor)
     vault: Vault = field(default_factory=NullVault)
     search: SearchCatalog = field(default_factory=NullCatalog)
+    silent_wrap_up: bool = False
 
 
 class ToolRegistry:

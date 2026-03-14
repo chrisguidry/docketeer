@@ -51,6 +51,7 @@ async def test_wrap_up_silently_no_emoji(chat: MemoryChat, tool_context: ToolCon
     result = await registry.execute("wrap_up_silently", {}, tool_context)
     assert "no message" in result.lower()
     assert chat.reactions == []
+    assert tool_context.silent_wrap_up is True
 
 
 @pytest.mark.usefixtures("_register_tool")
@@ -66,6 +67,7 @@ async def test_wrap_up_silently_with_emoji_and_message_id(
     assert chat.reactions[0].message_id == "msg_42"
     assert chat.reactions[0].emoji == ":thumbsup:"
     assert chat.reactions[0].action == "react"
+    assert tool_context.silent_wrap_up is True
 
 
 @pytest.mark.usefixtures("_register_tool")

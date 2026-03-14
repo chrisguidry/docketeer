@@ -20,6 +20,18 @@ from .helpers import (
     make_usage,
 )
 
+
+def _wrap_up_usage() -> MagicMock:
+    u = MagicMock()
+    u.prompt_tokens, u.completion_tokens, u.prompt_tokens_details = 10, 5, None
+    return u
+
+
+async def _set_silent_flag(name: str, args: dict, ctx: ToolContext) -> str:
+    ctx.silent_wrap_up = True
+    return "Done — no message."
+
+
 # -- via real stream_message (integration-ish) --
 
 
@@ -352,13 +364,10 @@ async def test_wrap_up_silently_returns_empty(
     tool_call_mock = make_tool_call(
         call_id="call_1", name=WRAP_UP_TOOL_NAME, arguments="{}"
     )
-    mock_usage = MagicMock()
-    mock_usage.prompt_tokens = 10
-    mock_usage.completion_tokens = 5
-    mock_usage.prompt_tokens_details = None
-
     tool_response = make_response(
-        tool_calls=[tool_call_mock], finish_reason="tool_calls", usage=mock_usage
+        tool_calls=[tool_call_mock],
+        finish_reason="tool_calls",
+        usage=_wrap_up_usage(),
     )
 
     with (
@@ -367,7 +376,7 @@ async def test_wrap_up_silently_returns_empty(
         ) as mock_stream,
         patch("docketeer_deepinfra.loop.registry") as mock_registry,
     ):
-        mock_registry.execute = AsyncMock(return_value="Done — no message.")
+        mock_registry.execute = AsyncMock(side_effect=_set_silent_flag)
         mock_stream.return_value = tool_response
 
         result = await agentic_loop(
@@ -397,13 +406,10 @@ async def test_wrap_up_silently_preserves_history(
     tool_call_mock = make_tool_call(
         call_id="call_1", name=WRAP_UP_TOOL_NAME, arguments="{}"
     )
-    mock_usage = MagicMock()
-    mock_usage.prompt_tokens = 10
-    mock_usage.completion_tokens = 5
-    mock_usage.prompt_tokens_details = None
-
     tool_response = make_response(
-        tool_calls=[tool_call_mock], finish_reason="tool_calls", usage=mock_usage
+        tool_calls=[tool_call_mock],
+        finish_reason="tool_calls",
+        usage=_wrap_up_usage(),
     )
 
     messages: list[MessageParam] = []
@@ -413,7 +419,7 @@ async def test_wrap_up_silently_preserves_history(
         ) as mock_stream,
         patch("docketeer_deepinfra.loop.registry") as mock_registry,
     ):
-        mock_registry.execute = AsyncMock(return_value="Done — no message.")
+        mock_registry.execute = AsyncMock(side_effect=_set_silent_flag)
         mock_stream.return_value = tool_response
 
         await agentic_loop(
@@ -447,19 +453,18 @@ async def test_wrap_up_silently_with_other_tools(
     wrap_call = make_tool_call(
         index=1, call_id="call_2", name=WRAP_UP_TOOL_NAME, arguments="{}"
     )
-    mock_usage = MagicMock()
-    mock_usage.prompt_tokens = 10
-    mock_usage.completion_tokens = 5
-    mock_usage.prompt_tokens_details = None
-
     tool_response = make_response(
-        tool_calls=[read_call, wrap_call], finish_reason="tool_calls", usage=mock_usage
+        tool_calls=[read_call, wrap_call],
+        finish_reason="tool_calls",
+        usage=_wrap_up_usage(),
     )
 
     executed_tools: list[str] = []
 
     async def track_execute(name: str, args: dict, ctx: ToolContext) -> str:
         executed_tools.append(name)
+        if name == WRAP_UP_TOOL_NAME:
+            ctx.silent_wrap_up = True
         return "ok"
 
     with (

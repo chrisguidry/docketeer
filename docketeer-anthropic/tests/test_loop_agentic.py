@@ -272,8 +272,12 @@ async def test_wrap_up_silently_returns_empty(
     response = make_response([tool_block])
     mock_client.messages.stream.return_value = FakeStream(response)
 
+    async def _set_flag(name: str, args: dict, ctx: ToolContext) -> str:
+        ctx.silent_wrap_up = True
+        return "Done — no message."
+
     with patch("docketeer_anthropic.loop.registry") as mock_registry:
-        mock_registry.execute = AsyncMock(return_value="Done — no message.")
+        mock_registry.execute = AsyncMock(side_effect=_set_flag)
 
         result = await agentic_loop(
             client=mock_client,
@@ -302,9 +306,13 @@ async def test_wrap_up_silently_preserves_history(
     response = make_response([tool_block])
     mock_client.messages.stream.return_value = FakeStream(response)
 
+    async def _set_flag(name: str, args: dict, ctx: ToolContext) -> str:
+        ctx.silent_wrap_up = True
+        return "Done — no message."
+
     messages: list[MessageParam] = []
     with patch("docketeer_anthropic.loop.registry") as mock_registry:
-        mock_registry.execute = AsyncMock(return_value="Done — no message.")
+        mock_registry.execute = AsyncMock(side_effect=_set_flag)
 
         await agentic_loop(
             client=mock_client,
@@ -339,6 +347,8 @@ async def test_wrap_up_silently_with_other_tools(
 
     async def track_execute(name: str, args: dict, ctx: ToolContext) -> str:
         executed_tools.append(name)
+        if name == WRAP_UP_TOOL_NAME:
+            ctx.silent_wrap_up = True
         return "ok"
 
     with patch("docketeer_anthropic.loop.registry") as mock_registry:

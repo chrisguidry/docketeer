@@ -160,17 +160,18 @@ async def stream_response(
 ) -> tuple[str, str | None, dict | None]:
     """Read stream-json output line-by-line and fire callbacks as events arrive.
 
-    Returns (final_text, session_id, result_event).  Intermediate text (from
-    turns that also contain tool_use blocks) is dispatched via
-    ``callbacks.on_text`` as it streams; only the final text-only turn is
-    returned to the caller.
+    Returns (final_text, session_id, result_event).  Text from the last turn
+    that produced any text is returned, regardless of whether that turn also
+    contained tool_use blocks.  Intermediate callback dispatch still suppresses
+    narration text that precedes a tool round.
     """
     session_id: str | None = None
     result_event: dict | None = None
     first_text_fired = False
     in_tool_round = False
     stream_events_seen = False
-    pending_final: str | None = None
+    last_text_only_turn: str = ""
+    last_turn_text: str = ""
 
     while True:
         raw = await stdout.readline()
@@ -233,13 +234,13 @@ async def stream_response(
 
             turn_text = "".join(text_parts) if text_parts else None
 
-            # Dispatch any buffered text from a previous turn, unless
-            # this turn is a tool round (the buffered text is narration
+            # Dispatch the previous text-only turn as intermediate text,
+            # unless this turn is a tool round (that text was narration
             # like "Let me check..." that preceded the tool call).
-            if pending_final is not None:
+            if last_text_only_turn:
                 if not has_tool_use and callbacks and callbacks.on_text:
-                    await callbacks.on_text(pending_final)
-                pending_final = None
+                    await callbacks.on_text(last_text_only_turn)
+                last_text_only_turn = ""
 
             if not stream_events_seen and turn_text and not first_text_fired:
                 first_text_fired = True
@@ -265,14 +266,16 @@ async def stream_response(
                     await callbacks.on_tool_end()
                     in_tool_round = False
 
-            if turn_text is not None and not has_tool_use:
-                pending_final = turn_text
+            if turn_text is not None:
+                last_turn_text = turn_text
+                if not has_tool_use:
+                    last_text_only_turn = turn_text
 
         elif etype == "result":  # pragma: no branch
             result_event = event
             session_id = event.get("session_id", session_id)
 
-    return pending_final or "", session_id, result_event
+    return last_turn_text, session_id, result_event
 
 
 def check_error(stderr: str, returncode: int) -> None:

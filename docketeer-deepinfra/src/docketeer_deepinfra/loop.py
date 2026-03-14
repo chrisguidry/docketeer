@@ -16,7 +16,7 @@ from openai.types.chat import ChatCompletion, ChatCompletionMessageToolCall
 from docketeer.audit import audit_log, log_usage, record_usage
 from docketeer.brain.backend import Usage
 from docketeer.prompt import ImageBlockParam, MessageParam, SystemBlock, TextBlockParam
-from docketeer.tools import WRAP_UP_TOOL_NAME, ToolContext, ToolDefinition, registry
+from docketeer.tools import ToolContext, ToolDefinition, registry
 
 if TYPE_CHECKING:
     from docketeer.brain.core import InferenceModel
@@ -132,7 +132,8 @@ async def agentic_loop(
                     )
                 )
 
-            if any(tc.function.name == WRAP_UP_TOOL_NAME for tc in tool_calls):  # type: ignore[union-attr]
+            if tool_context.silent_wrap_up:
+                tool_context.silent_wrap_up = False
                 return ""
 
         elif response.choices[0].finish_reason == "length":

@@ -30,6 +30,7 @@ def _mock_tool_context(
     ctx = AsyncMock()
     ctx.line = room_id
     ctx.workspace = workspace or Path("/data/workspace")
+    ctx.silent_wrap_up = False
     return ctx
 
 

@@ -212,6 +212,7 @@ def _register_core_chat_tools(client: ChatClient) -> None:
 
         emoji: react with this emoji before going silent (e.g. :thumbsup:, :white_check_mark:)
         """
+        ctx.silent_wrap_up = True
         if emoji and ctx.message_id:
             await client.react(ctx.message_id, emoji)
             return f"Reacted with {emoji} — no message will be sent."

@@ -157,6 +157,10 @@ class ClaudeCodeBackend(InferenceBackend):
             callbacks=callbacks,
         )
 
+        if tool_context.silent_wrap_up:
+            tool_context.silent_wrap_up = False
+            text = ""
+
         effective_session_id = resume_session_id or session_id
         log.info(
             "Response: %d chars, session_id=%s",
