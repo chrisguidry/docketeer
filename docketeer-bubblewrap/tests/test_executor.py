@@ -24,7 +24,8 @@ requires_bwrap = pytest.mark.skipif(not has_bwrap, reason="bwrap not on PATH")
 
 @requires_bwrap
 def test_create_executor():
-    executor = create_executor()
+    with patch("docketeer.toolshed._run_prefix_command", return_value=""):
+        executor = create_executor()
     assert isinstance(executor, BubblewrapExecutor)
 
 
