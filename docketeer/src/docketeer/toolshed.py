@@ -181,7 +181,17 @@ def discover(cache_root: Path) -> Toolshed:
                 continue
 
             resolved = Path(which_result).resolve()
-            if any(str(resolved).startswith(p) for p in SYSTEM_PREFIXES):
+            is_system = any(str(resolved).startswith(p) for p in SYSTEM_PREFIXES)
+
+            if is_system:
+                # System-installed runtime — no mount needed for the runtime
+                # itself, but the user's global prefix (e.g. ~/.npm-global)
+                # still needs mounting.
+                prefix_dir = _resolve_global_prefix(spec, seen_roots)
+                if prefix_dir:
+                    runtime = DiscoveredRuntime(spec=spec, install_root=prefix_dir)
+                    seen_roots.add(prefix_dir)
+                    found.append(runtime)
                 break
 
             root = _find_install_root(resolved)

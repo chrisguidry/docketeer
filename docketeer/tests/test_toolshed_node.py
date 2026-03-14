@@ -22,12 +22,49 @@ def test_discover_finds_node_in_nvm(tmp_path: Path):
             return str(node_bin)
         return None
 
-    with patch("docketeer.toolshed.shutil.which", side_effect=fake_which):
+    with (
+        patch("docketeer.toolshed.shutil.which", side_effect=fake_which),
+        patch("docketeer.toolshed._run_prefix_command", return_value=""),
+    ):
         ts = discover(cache_root=tmp_path / "cache")
 
     assert len(ts.runtimes) == 1
     assert ts.runtimes[0].spec.name == "node"
     assert ts.runtimes[0].install_root == node_root
+
+
+def test_discover_system_node_still_picks_up_npm_prefix(tmp_path: Path):
+    npm_prefix = tmp_path / ".npm-global"
+    (npm_prefix / "bin").mkdir(parents=True)
+
+    def fake_which(cmd: str, **kwargs: object) -> str | None:
+        if cmd == "node":
+            return "/usr/bin/node"
+        return None
+
+    with (
+        patch("docketeer.toolshed.shutil.which", side_effect=fake_which),
+        patch.dict("os.environ", {"NPM_CONFIG_PREFIX": str(npm_prefix)}),
+    ):
+        ts = discover(cache_root=tmp_path / "cache")
+
+    assert len(ts.runtimes) == 1
+    assert ts.runtimes[0].install_root == npm_prefix
+
+
+def test_discover_system_node_no_prefix_skips_entirely():
+    def fake_which(cmd: str, **kwargs: object) -> str | None:
+        if cmd == "node":
+            return "/usr/bin/node"
+        return None
+
+    with (
+        patch("docketeer.toolshed.shutil.which", side_effect=fake_which),
+        patch("docketeer.toolshed._run_prefix_command", return_value=""),
+    ):
+        ts = discover(cache_root=Path("/tmp/cache"))
+
+    assert len(ts.runtimes) == 0
 
 
 def test_discover_follows_symlinks(tmp_path: Path):
@@ -45,7 +82,10 @@ def test_discover_follows_symlinks(tmp_path: Path):
             return str(link)
         return None
 
-    with patch("docketeer.toolshed.shutil.which", side_effect=fake_which):
+    with (
+        patch("docketeer.toolshed.shutil.which", side_effect=fake_which),
+        patch("docketeer.toolshed._run_prefix_command", return_value=""),
+    ):
         ts = discover(cache_root=tmp_path / "cache")
 
     assert len(ts.runtimes) == 1

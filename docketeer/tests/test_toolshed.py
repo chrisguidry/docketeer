@@ -271,13 +271,16 @@ def test_resolve_global_prefix_skips_seen_roots(tmp_path: Path):
 # --- discover() (cross-runtime) ---
 
 
-def test_discover_skips_system_commands():
+def test_discover_skips_system_commands_without_prefix():
     def fake_which(cmd: str, **kwargs: object) -> str | None:
         if cmd == "node":
             return "/usr/bin/node"
         return None
 
-    with patch("docketeer.toolshed.shutil.which", side_effect=fake_which):
+    with (
+        patch("docketeer.toolshed.shutil.which", side_effect=fake_which),
+        patch("docketeer.toolshed._run_prefix_command", return_value=""),
+    ):
         ts = discover(cache_root=Path("/tmp/cache"))
 
     assert len(ts.runtimes) == 0
@@ -309,6 +312,7 @@ def test_discover_finds_both_runtimes(tmp_path: Path):
     with (
         patch("docketeer.toolshed.shutil.which", side_effect=fake_which),
         patch("docketeer.toolshed.Path.home", return_value=tmp_path),
+        patch("docketeer.toolshed._run_prefix_command", return_value=""),
     ):
         ts = discover(cache_root=tmp_path / "cache")
 
@@ -333,6 +337,7 @@ def test_discover_skips_duplicate_roots_across_runtimes(tmp_path: Path):
     with (
         patch("docketeer.toolshed.shutil.which", side_effect=fake_which),
         patch("docketeer.toolshed.Path.home", return_value=tmp_path),
+        patch("docketeer.toolshed._run_prefix_command", return_value=""),
     ):
         ts = discover(cache_root=tmp_path / "cache")
 
