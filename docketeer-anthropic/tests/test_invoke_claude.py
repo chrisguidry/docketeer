@@ -279,8 +279,8 @@ def test_build_claude_args_with_resume_session_id():
     args = _build_claude_args("model", "sys", resume_session_id="sess-1")
     assert "--resume" in args
     assert args[args.index("--resume") + 1] == "sess-1"
-    assert "--system-prompt" not in args
-    assert "--model" not in args
+    assert "--system-prompt" in args
+    assert "--model" in args
 
 
 def test_build_claude_args_with_session_id():

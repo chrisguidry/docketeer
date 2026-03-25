@@ -286,7 +286,8 @@ def _build_claude_args(
     else:
         if session_id:
             args.extend(["--session-id", session_id])
-        args.extend(["--system-prompt", system_text, "--model", model])
+
+    args.extend(["--system-prompt", system_text, "--model", model])
 
     return args
 
